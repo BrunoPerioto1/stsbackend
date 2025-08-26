@@ -21,78 +21,273 @@
   <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
   [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
 
-## Description
+# Betting Tracker Backend
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+Backend NestJS para o sistema de rastreamento de apostas esportivas.
 
-## Project setup
+## 🚀 Funcionalidades
 
-```bash
-$ npm install
+- **API RESTful** para gestão de apostas
+- **Cálculo automático** de lucros baseado em resultados
+- **Suporte a 9 tipos** de resultados diferentes
+- **Validação de dados** com class-validator
+- **CORS habilitado** para integração com frontend
+- **Banco PostgreSQL** com TypeORM
+
+## 🛠️ Tecnologias
+
+- **Framework**: NestJS 11
+- **Database**: PostgreSQL + TypeORM
+- **Validation**: class-validator + class-transformer
+- **HTTP Client**: Axios
+- **Language**: TypeScript
+
+## 📋 Pré-requisitos
+
+- Node.js 18+
+- PostgreSQL 12+
+- npm ou yarn
+
+## ⚙️ Instalação
+
+1. **Clone o repositório**
+   ```bash
+   git clone <repository-url>
+   cd meu-bot-telegram-1
+   ```
+
+2. **Instale as dependências**
+   ```bash
+   npm install
+   ```
+
+3. **Configure as variáveis de ambiente**
+   ```bash
+   cp env.example .env
+   ```
+   
+   Edite o arquivo `.env` com suas configurações:
+   ```env
+   DB_USER=postgres
+   DB_HOST=localhost
+   DB_NAME=betting_tracker
+   DB_PASSWORD=sua_senha_aqui
+   DB_PORT=5432
+   PORT=3000
+   NODE_ENV=development
+   ```
+
+4. **Configure o banco de dados**
+   ```bash
+   # Conecte ao PostgreSQL
+   psql -U postgres
+   
+   # Crie o banco
+   CREATE DATABASE betting_tracker;
+   
+   # Execute o schema
+   \c betting_tracker
+   \i database/schema.sql
+   ```
+
+5. **Inicie o servidor**
+   ```bash
+   npm run start:dev
+   ```
+
+## 🗄️ Estrutura do Banco
+
+### Tabela `apostas`
+- `id`: ID único da aposta
+- `jogo`: Nome do jogo/evento
+- `stake`: Valor apostado
+- `odd`: Odd da aposta
+- `casa`: Casa de apostas
+- `mercado`: Tipo de mercado
+- `esporte`: Esporte da aposta
+- `data`: Data/hora da aposta
+
+### Tabela `aposta_results`
+- `id`: ID único do resultado
+- `aposta_id`: Referência à aposta
+- `result_id`: ID do resultado (enum)
+- `created_at`: Data de criação
+- `updated_at`: Data de atualização
+
+## 🔌 API Endpoints
+
+### Apostas
+
+#### `GET /apostas`
+Lista todas as apostas com lucros calculados.
+
+**Response:**
+```json
+[
+  {
+    "id": 1,
+    "jogo": "Flamengo x Vasco",
+    "stake": 100.00,
+    "odd": 2.50,
+    "casa": "Bet365",
+    "mercado": "Resultado Final",
+    "esporte": "Futebol",
+    "data": "2024-01-15T10:00:00Z",
+    "result_id": 9,
+    "lucro_calculado": 0.00
+  }
+]
 ```
 
-## Compile and run the project
+#### `GET /apostas/:id`
+Busca uma aposta específica por ID.
 
-```bash
-# development
-$ npm run start
+#### `POST /apostas`
+Cria uma nova aposta.
 
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+**Request Body:**
+```json
+{
+  "jogo": "Flamengo x Vasco",
+  "stake": 100.00,
+  "odd": 2.50,
+  "casa": "Bet365",
+  "mercado": "Resultado Final",
+  "esporte": "Futebol"
+}
 ```
 
-## Run tests
+#### `PUT /apostas/finalizar/:id`
+Finaliza uma aposta individual.
 
-```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+**Request Body:**
+```json
+{
+  "resultId": 1
+}
 ```
 
-## Deployment
+#### `PUT /apostas/finalizar-multiplas`
+Finaliza múltiplas apostas de uma vez.
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+**Request Body:**
+```json
+{
+  "apostaIds": [1, 2, 3],
+  "resultId": 1
+}
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## 📊 Tipos de Resultado
 
-## Resources
+| ID | Nome | Descrição | Cálculo do Lucro |
+|----|------|-----------|------------------|
+| 1 | GANHOU | Aposta ganhadora | `stake * (odd - 1)` |
+| 2 | PERDEU | Aposta perdedora | `-stake` |
+| 3 | EMPATE | Resultado empatado | `0` |
+| 4 | ANULADA | Aposta anulada | `0` |
+| 5 | MEIO_GANHO | Meio ganho | `(stake/2) * (odd-1) - stake/2` |
+| 6 | REEMBOLSADA | Aposta reembolsada | `0` |
+| 7 | MEIO_GANHO_2 | Meio ganho (tipo 2) | `(stake/2) * (odd-1) - stake/2` |
+| 8 | MEIO_PERDIDO | Meio perdido | `-stake/2` |
+| 9 | PENDENTE | Aguardando resultado | `0` |
 
-Check out a few resources that may come in handy when working with NestJS:
+## 🚨 Troubleshooting
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+### Erro de Conexão com Banco
+```bash
+# Verifique se o PostgreSQL está rodando
+sudo systemctl status postgresql
 
-## Support
+# Teste a conexão
+psql -U postgres -h localhost -d betting_tracker
+```
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+### Erro de CORS
+O CORS já está habilitado no `main.ts`. Se ainda houver problemas, verifique se o frontend está acessando a URL correta.
 
-## Stay in touch
+### Erro de Validação
+Verifique se todos os campos obrigatórios estão sendo enviados:
+- `jogo`: string não vazia
+- `stake`: número positivo
+- `odd`: número maior que 1
+- `casa`: string não vazia
+- `mercado`: string não vazia
+- `esporte`: string não vazia
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+## 📝 Scripts Disponíveis
 
-## License
+```bash
+npm run start          # Inicia o servidor
+npm run start:dev      # Servidor com hot reload
+npm run start:debug    # Servidor com debug
+npm run start:prod     # Servidor de produção
+npm run build          # Compila o projeto
+npm run test           # Executa os testes
+npm run test:e2e       # Testes end-to-end
+npm run lint           # Linting do código
+npm run format         # Formata o código
+```
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+## 🔧 Configuração de Desenvolvimento
+
+### Estrutura de Arquivos
+```
+src/
+├── aposta/           # Módulo de apostas
+│   ├── dto/         # Data Transfer Objects
+│   ├── aposta.controller.ts
+│   ├── aposta.service.ts
+│   ├── aposta.module.ts
+│   ├── db.ts        # Configuração do banco
+│   └── result-id.enum.ts
+├── telegram/         # Módulo do Telegram (futuro)
+├── app.module.ts     # Módulo principal
+└── main.ts          # Entry point
+```
+
+### Variáveis de Ambiente
+- `DB_USER`: Usuário do PostgreSQL
+- `DB_HOST`: Host do banco
+- `DB_NAME`: Nome do banco
+- `DB_PASSWORD`: Senha do banco
+- `DB_PORT`: Porta do banco
+- `PORT`: Porta da aplicação
+
+## 🚀 Deploy
+
+### Produção
+```bash
+npm run build
+npm run start:prod
+```
+
+### Docker (futuro)
+```dockerfile
+FROM node:18-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production
+COPY dist ./dist
+EXPOSE 3000
+CMD ["npm", "run", "start:prod"]
+```
+
+## 🤝 Contribuição
+
+1. Fork o projeto
+2. Crie uma branch para sua feature
+3. Commit suas mudanças
+4. Push para a branch
+5. Abra um Pull Request
+
+## 📄 Licença
+
+Este projeto está sob a licença MIT.
+
+## 🆘 Suporte
+
+Para suporte ou dúvidas:
+- Abra uma issue no GitHub
+- Verifique os logs da aplicação
+- Consulte a documentação da API

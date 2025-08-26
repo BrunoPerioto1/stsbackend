@@ -3,6 +3,7 @@ import { Telegraf } from 'telegraf';
 import * as dotenv from 'dotenv';
 import { GrokService } from './grok.service';
 import { ApostaService } from '../aposta/aposta.service';
+import { CreateApostaDto } from '../aposta/dto/create-aposta.dto';
 dotenv.config();
 
 @Injectable()
@@ -11,7 +12,7 @@ export class TelegramService implements OnModuleInit {
 
   constructor(
     private readonly grokService: GrokService,
-    private readonly apostaService: ApostaService
+    private readonly apostaService: ApostaService,
   ) {
     const token = process.env.TELEGRAM_BOT_TOKEN;
     if (!token) throw new Error('❌ TELEGRAM_BOT_TOKEN não definido no .env');
@@ -34,16 +35,28 @@ export class TelegramService implements OnModuleInit {
       try {
         const jsonResult = await this.grokService.parseBetMessage(userMessage);
 
+        // 🔥 Mapear campos corretamente antes de salvar no banco!
+        const apostaData: CreateApostaDto = {
+          jogo: jsonResult.jogo,
+          stake: jsonResult.stake,
+          odd: jsonResult.odd,
+          casa: jsonResult.casa, // Nome da casa para compatibilidade
+          casa_id: jsonResult.casa_id, // ID da casa para relacionamento
+          mercado: jsonResult.mercado,
+          esporte: jsonResult.esporte,
+          data_hora: jsonResult.data_hora || jsonResult.data || new Date().toISOString(),
+        };
+
         // 🔥 Aqui salva no banco!
-        const aposta = await this.apostaService.criarAposta(jsonResult);
+        const aposta = await this.apostaService.criarAposta(apostaData);
 
         await ctx.reply(
           `✅ Aposta salva no DB!\n\n📊 JSON:\n\`\`\`json\n${JSON.stringify(
             aposta,
             null,
-            2
+            2,
           )}\n\`\`\``,
-          { parse_mode: 'Markdown' }
+          { parse_mode: 'Markdown' },
         );
       } catch (err) {
         console.error('❌ Erro ao processar a mensagem:', err);
