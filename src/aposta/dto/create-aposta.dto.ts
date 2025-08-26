@@ -13,10 +13,6 @@ export class CreateApostaDto {
   @IsPositive()
   odd: number;
 
-  @IsString()
-  @IsNotEmpty()
-  casa: string;
-
   @IsOptional()
   @IsNumber()
   casa_id?: number;

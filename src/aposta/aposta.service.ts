@@ -41,20 +41,28 @@ export class ApostaService {
     try {
       await client.query('BEGIN');
 
+      // Validar casa_id contra o banco para evitar violação de FK
+      let casaIdFinal: number | null = apostaData.casa_id ?? null;
+      if (casaIdFinal !== null) {
+        const check = await client.query('SELECT 1 FROM casas_aposta WHERE id = $1', [casaIdFinal]);
+        if (check.rowCount === 0) {
+          console.warn(`casa_id ${casaIdFinal} não existe em casas_aposta; gravando NULL`);
+          casaIdFinal = null;
+        }
+      }
+
       const insertApostaQuery = `
-        INSERT INTO apostas (jogo, stake, odd, casa, casa_id, mercado, esporte, data_hora)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        INSERT INTO apostas (jogo, stake, odd, casa_id, mercado, esporte)
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING id
       `;
       const apostaResult = await client.query(insertApostaQuery, [
         apostaData.jogo,
         apostaData.stake,
         apostaData.odd,
-        apostaData.casa,
-        apostaData.casa_id || null,
+        casaIdFinal,
         apostaData.mercado,
         apostaData.esporte,
-        apostaData.data_hora || new Date().toISOString(),
       ]);
       const apostaId = apostaResult.rows[0].id;
 
@@ -67,7 +75,7 @@ export class ApostaService {
       ]);
 
       await client.query('COMMIT');
-      return { id: apostaId, ...apostaData };
+      return { id: apostaId, ...apostaData, casa_id: casaIdFinal ?? undefined };
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
@@ -113,14 +121,15 @@ export class ApostaService {
         updateValues.push(Number(updateData.odd));
       }
       
-      if (updateData.casa !== undefined && updateData.casa !== null && updateData.casa.trim() !== '') {
-        updateFields.push(`casa = $${paramIndex++}`);
-        updateValues.push(updateData.casa.trim());
-      }
-      
       if (updateData.casa_id !== undefined && updateData.casa_id !== null) {
-        updateFields.push(`casa_id = $${paramIndex++}`);
-        updateValues.push(Number(updateData.casa_id));
+        // validar existência do casa_id
+        const check = await client.query('SELECT 1 FROM casas_aposta WHERE id = $1', [Number(updateData.casa_id)]);
+        if (check.rowCount > 0) {
+          updateFields.push(`casa_id = $${paramIndex++}`);
+          updateValues.push(Number(updateData.casa_id));
+        } else {
+          updateFields.push(`casa_id = NULL`);
+        }
       }
       
       if (updateData.mercado !== undefined && updateData.mercado !== null && updateData.mercado.trim() !== '') {
@@ -256,6 +265,7 @@ export class ApostaService {
     return `
       SELECT 
         a.*,
+        c.nome AS casa_nome,
         ar.result_id,
         CASE
           WHEN ar.result_id = ${ResultIdEnum.GANHOU} THEN a.stake * (a.odd - 1)
@@ -266,6 +276,7 @@ export class ApostaService {
           ELSE 0
         END AS lucro_calculado
       FROM apostas a
+      LEFT JOIN casas_aposta c ON c.id = a.casa_id
       LEFT JOIN aposta_results ar ON a.id = ar.aposta_id
     `;
   }

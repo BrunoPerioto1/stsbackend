@@ -2,6 +2,7 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestj
 import { CasaService } from './casa.service';
 import { CreateCasaDto } from './create-casa.dto';
 import { UpdateCasaDto } from './update-casa.dto';
+import { CreateTransacaoDto } from './create-transacao.dto';
 
 @Controller('casa')
 export class CasaController {
@@ -45,5 +46,21 @@ export class CasaController {
   @Delete(':id')
   deletarCasa(@Param('id') id: string) {
     return this.casaService.deletarCasa(+id);
+  }
+
+  // Rotas para transações
+  @Post('transacao')
+  criarTransacao(@Body() createTransacaoDto: CreateTransacaoDto) {
+    return this.casaService.criarTransacao(createTransacaoDto);
+  }
+
+  @Get('transacoes')
+  listarTodasTransacoes() {
+    return this.casaService.listarTodasTransacoes();
+  }
+
+  @Get(':id/transacoes')
+  listarTransacoesPorCasa(@Param('id') id: string) {
+    return this.casaService.listarTransacoesPorCasa(+id);
   }
 }

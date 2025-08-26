@@ -12,6 +12,7 @@ DROP TABLE IF EXISTS aposta_results CASCADE;
 DROP TABLE IF EXISTS apostas CASCADE;
 DROP TABLE IF EXISTS saldos_casa CASCADE;
 DROP TABLE IF EXISTS casas_alias CASCADE;
+DROP TABLE IF EXISTS transacoes_casa CASCADE;
 DROP TABLE IF EXISTS casas_aposta CASCADE;
 
 -- Canonical betting houses table
@@ -73,6 +74,22 @@ CREATE INDEX IF NOT EXISTS idx_aposta_results_result_id ON aposta_results(result
 CREATE INDEX IF NOT EXISTS idx_casas_alias_casa_id ON casas_alias(casa_id);
 CREATE INDEX IF NOT EXISTS idx_saldos_casa_casa_id ON saldos_casa(casa_id);
 
+-- Create transacoes_casa table for deposit/withdrawal tracking
+CREATE TABLE IF NOT EXISTS transacoes_casa (
+    id SERIAL PRIMARY KEY,
+    casa_id INTEGER NOT NULL REFERENCES casas_aposta(id) ON DELETE CASCADE,
+    tipo VARCHAR(50) NOT NULL CHECK (tipo IN ('DEPOSITO', 'SAQUE', 'AJUSTE')),
+    valor NUMERIC(12,2) NOT NULL,
+    descricao TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create indexes for transacoes_casa
+CREATE INDEX IF NOT EXISTS idx_transacoes_casa_casa_id ON transacoes_casa(casa_id);
+CREATE INDEX IF NOT EXISTS idx_transacoes_casa_tipo ON transacoes_casa(tipo);
+CREATE INDEX IF NOT EXISTS idx_transacoes_casa_created_at ON transacoes_casa(created_at DESC);
+
 -- Insert sample data (optional)
 -- Seed some common houses
 INSERT INTO casas_aposta (nome, slug)
@@ -125,6 +142,12 @@ CREATE TRIGGER update_apostas_updated_at
 -- Create trigger to automatically update updated_at for aposta_results table
 CREATE TRIGGER update_aposta_results_updated_at 
     BEFORE UPDATE ON aposta_results 
+    FOR EACH ROW 
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- Create trigger to automatically update updated_at for transacoes_casa table
+CREATE TRIGGER update_transacoes_casa_updated_at 
+    BEFORE UPDATE ON transacoes_casa 
     FOR EACH ROW 
     EXECUTE FUNCTION update_updated_at_column();
 
