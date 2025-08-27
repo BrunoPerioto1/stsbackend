@@ -172,11 +172,12 @@ export class CasaService {
           COUNT(CASE WHEN ar.result_id = 1 THEN 1 END) as apostas_ganhas,
           COUNT(CASE WHEN ar.result_id = 2 THEN 1 END) as apostas_perdidas
         FROM casas_aposta c
-        LEFT JOIN apostas a ON c.id = a.casa_id
+        INNER JOIN apostas a ON c.id = a.casa_id
         LEFT JOIN aposta_results ar ON a.id = ar.aposta_id
         LEFT JOIN transacoes_casa t ON c.id = t.casa_id
         WHERE c.ativo = true
         GROUP BY c.id, c.nome, c.slug
+        HAVING COUNT(a.id) > 0
         ORDER BY c.nome ASC
       `;
     
@@ -271,6 +272,63 @@ export class CasaService {
       
       const result = await client.query(query);
       return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+
+  async buscarHistoricoCompletoCasa(casaId: number) {
+    const client = await pool.connect();
+    try {
+      // Buscar apostas da casa
+      const apostasQuery = `
+        SELECT 
+          a.id,
+          a.jogo,
+          a.stake,
+          a.odd,
+          a.mercado,
+          a.esporte,
+          a.lucro,
+          a.created_at,
+          ar.result_id,
+          'APOSTA' as tipo_movimento
+        FROM apostas a
+        LEFT JOIN aposta_results ar ON a.id = ar.aposta_id
+        WHERE a.casa_id = $1
+        ORDER BY a.created_at DESC
+      `;
+
+      // Buscar transações da casa
+      const transacoesQuery = `
+        SELECT 
+          t.id,
+          NULL as jogo,
+          NULL as stake,
+          NULL as odd,
+          NULL as mercado,
+          NULL as esporte,
+          t.valor as lucro,
+          t.created_at,
+          NULL as result_id,
+          t.tipo as tipo_movimento
+        FROM transacoes_casa t
+        WHERE t.casa_id = $1
+        ORDER BY t.created_at DESC
+      `;
+
+      const [apostasResult, transacoesResult] = await Promise.all([
+        client.query(apostasQuery, [casaId]),
+        client.query(transacoesQuery, [casaId])
+      ]);
+
+      // Combinar e ordenar por data
+      const historico = [
+        ...apostasResult.rows.map(row => ({ ...row, tipo_movimento: 'APOSTA' })),
+        ...transacoesResult.rows.map(row => ({ ...row, tipo_movimento: row.tipo_movimento }))
+      ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+      return historico;
     } finally {
       client.release();
     }

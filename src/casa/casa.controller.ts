@@ -63,4 +63,9 @@ export class CasaController {
   listarTransacoesPorCasa(@Param('id') id: string) {
     return this.casaService.listarTransacoesPorCasa(+id);
   }
+
+  @Get(':id/historico')
+  buscarHistoricoCompletoCasa(@Param('id') id: string) {
+    return this.casaService.buscarHistoricoCompletoCasa(+id);
+  }
 }
