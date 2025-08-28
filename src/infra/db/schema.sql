@@ -36,7 +36,6 @@ CREATE TABLE IF NOT EXISTS bets (
     game VARCHAR(255) NOT NULL,
     stake DECIMAL(10,2) NOT NULL CHECK (stake > 0),
     odd DECIMAL(5,2) NOT NULL CHECK (odd > 1),
-    house_name VARCHAR(100) NOT NULL,
     house_id INTEGER NULL REFERENCES betting_houses(id) ON DELETE SET NULL,
     market VARCHAR(255) NOT NULL,
     sport VARCHAR(50) NOT NULL,
