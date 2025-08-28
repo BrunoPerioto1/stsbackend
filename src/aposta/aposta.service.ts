@@ -318,4 +318,69 @@ export class ApostaService {
       client.release();
     }
   }
+
+  async deletarAposta(apostaId: number) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Verificar se a aposta existe
+      const existingAposta = await client.query(
+        'SELECT id FROM apostas WHERE id = $1',
+        [apostaId],
+      );
+      if (existingAposta.rowCount === 0) {
+        throw new NotFoundException(
+          `Aposta com ID ${apostaId} não encontrada.`,
+        );
+      }
+
+      // Deletar a aposta (aposta_results será deletada automaticamente por CASCADE)
+      await client.query('DELETE FROM apostas WHERE id = $1', [apostaId]);
+
+      await client.query('COMMIT');
+      return { success: true, message: `Aposta ${apostaId} deletada com sucesso` };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  async deletarMultiplas(apostaIds: number[]) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Verificar se todas as apostas existem
+      const existingApostas = await client.query(
+        'SELECT id FROM apostas WHERE id = ANY($1)',
+        [apostaIds],
+      );
+      
+      if (existingApostas.rowCount !== apostaIds.length) {
+        const foundIds = existingApostas.rows.map(row => row.id);
+        const missingIds = apostaIds.filter(id => !foundIds.includes(id));
+        throw new NotFoundException(
+          `Apostas não encontradas: ${missingIds.join(', ')}`,
+        );
+      }
+
+      // Deletar as apostas (aposta_results será deletada automaticamente por CASCADE)
+      await client.query('DELETE FROM apostas WHERE id = ANY($1)', [apostaIds]);
+
+      await client.query('COMMIT');
+      return { 
+        success: true, 
+        deletedCount: apostaIds.length,
+        message: `${apostaIds.length} apostas deletadas com sucesso` 
+      };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
 }

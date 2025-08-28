@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Put,
+  Delete,
   Body,
   Param,
   Get,
@@ -51,7 +52,10 @@ export class ApostaController {
   // Finalizar múltiplas apostas
   @Put('finalizar-multiplas')
   async finalizarMultiplas(@Body() body: FinalizarMultiplasDto) {
+    console.log('Controller - Dados recebidos para finalizar múltiplas:', body);
     const { apostaIds, resultId } = body;
+    console.log('Controller - apostaIds:', apostaIds);
+    console.log('Controller - resultId:', resultId);
     return this.apostaService.finalizarMultiplas(apostaIds, resultId);
   }
 
@@ -65,6 +69,18 @@ export class ApostaController {
   @Get(':id')
   async buscar(@Param('id', ParseIntPipe) id: number) {
     return this.apostaService.buscarApostaPorId(id);
+  }
+
+  // Deletar aposta
+  @Delete(':id')
+  async deletar(@Param('id', ParseIntPipe) id: number) {
+    return this.apostaService.deletarAposta(id);
+  }
+
+  // Deletar múltiplas apostas
+  @Delete('deletar-multiplas')
+  async deletarMultiplas(@Body() body: { apostaIds: number[] }) {
+    return this.apostaService.deletarMultiplas(body.apostaIds);
   }
 
   // Listar casas únicas para filtro
