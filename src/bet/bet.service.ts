@@ -59,8 +59,8 @@ export class ApostaService {
 
   async updateBet(betId: number, updateData: UpdateApostaDto) {
     // validar existência do casa_id se presente
-      if (updateData.casa_id !== undefined && updateData.casa_id !== null) {
-      const exists = await this.betRepository.houseExists(Number(updateData.casa_id));
+      if (updateData.house_id !== undefined && updateData.house_id !== null) {
+      const exists = await this.betRepository.houseExists(Number(updateData.house_id));
       if (!exists) {
         // se a casa não existir, gravar como NULL
         (updateData as any).casa_id = undefined;

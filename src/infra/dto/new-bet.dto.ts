@@ -27,5 +27,5 @@ export class CreateBetDto {
 
   @IsOptional()
   @IsString()
-  date_time?: string;
+  bet_time?: string;
 }

@@ -5,7 +5,7 @@ export class UpdateApostaDto {
   @IsOptional()
   @IsString()
   @IsNotEmpty()
-  jogo?: string;
+  game?: string;
 
   @IsOptional()
   @Transform(({ value }) => value === '' ? undefined : Number(value))
@@ -22,23 +22,23 @@ export class UpdateApostaDto {
   @IsOptional()
   @IsString()
   @IsNotEmpty()
-  casa?: string;
+  house?: string;
 
   @IsOptional()
   @IsNumber()
-  casa_id?: number;
+  house_id?: number;
 
   @IsOptional()
   @IsString()
   @IsNotEmpty()
-  mercado?: string;
+  market?: string;
 
   @IsOptional()
   @IsString()
   @IsNotEmpty()
-  esporte?: string;
+  sport?: string;
 
   @IsOptional()
   @IsString()
-  data_hora?: string;
+  bet_time?: string;
 }

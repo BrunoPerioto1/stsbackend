@@ -23,15 +23,6 @@ CREATE TABLE IF NOT EXISTS betting_houses (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Aliases for fuzzy/variant matching
-CREATE TABLE IF NOT EXISTS house_aliases (
-    id SERIAL PRIMARY KEY,
-    house_id INTEGER NOT NULL REFERENCES betting_houses(id) ON DELETE CASCADE,
-    alias VARCHAR(200) NOT NULL UNIQUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Balances per house
 CREATE TABLE IF NOT EXISTS house_balances (
     id SERIAL PRIMARY KEY,
     house_id INTEGER NOT NULL REFERENCES betting_houses(id) ON DELETE CASCADE,
