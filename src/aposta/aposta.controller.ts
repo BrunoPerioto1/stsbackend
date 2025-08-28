@@ -59,13 +59,12 @@ export class ApostaController {
     return this.apostaService.finalizarMultiplas(apostaIds, resultId);
   }
 
-  // Buscar todas as apostas (rota unificada)
   @Get()
   async listarTodas() {
     return this.apostaService.listarTodasApostas();
   }
 
-  // Buscar aposta individual (rota unificada)
+
   @Get(':id')
   async buscar(@Param('id', ParseIntPipe) id: number) {
     return this.apostaService.buscarApostaPorId(id);
