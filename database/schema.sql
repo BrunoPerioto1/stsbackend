@@ -1,128 +1,97 @@
--- Database schema for Betting Tracker
--- Run this script in your PostgreSQL database
-
--- Create database (if not exists)
--- CREATE DATABASE betting_tracker;
-
--- Connect to the database
--- \c betting_tracker;
-
 -- Drop existing tables if they exist (for clean migration)
-DROP TABLE IF EXISTS aposta_results CASCADE;
-DROP TABLE IF EXISTS apostas CASCADE;
-DROP TABLE IF EXISTS saldos_casa CASCADE;
-DROP TABLE IF EXISTS casas_alias CASCADE;
-DROP TABLE IF EXISTS transacoes_casa CASCADE;
-DROP TABLE IF EXISTS casas_aposta CASCADE;
+DROP TABLE IF EXISTS house_transactions CASCADE;
+DROP TABLE IF EXISTS transaction_types CASCADE;
+DROP TABLE IF EXISTS bet_results CASCADE;
+DROP TABLE IF EXISTS bets CASCADE;
+DROP TABLE IF EXISTS house_balances CASCADE;
+DROP TABLE IF EXISTS house_aliases CASCADE;
+DROP TABLE IF EXISTS betting_houses CASCADE;
+
+-- Create a table for transaction types
+-- This makes the schema more flexible and scalable
+CREATE TABLE IF NOT EXISTS transaction_types (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(50) NOT NULL UNIQUE
+);
 
 -- Canonical betting houses table
-CREATE TABLE IF NOT EXISTS casas_aposta (
+CREATE TABLE IF NOT EXISTS betting_houses (
     id SERIAL PRIMARY KEY,
-    nome VARCHAR(150) NOT NULL UNIQUE,
-    slug VARCHAR(150) NOT NULL UNIQUE,
-    ativo BOOLEAN NOT NULL DEFAULT TRUE,
+    name VARCHAR(150) NOT NULL UNIQUE,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Aliases for fuzzy/variant matching
-CREATE TABLE IF NOT EXISTS casas_alias (
+CREATE TABLE IF NOT EXISTS house_aliases (
     id SERIAL PRIMARY KEY,
-    casa_id INTEGER NOT NULL REFERENCES casas_aposta(id) ON DELETE CASCADE,
+    house_id INTEGER NOT NULL REFERENCES betting_houses(id) ON DELETE CASCADE,
     alias VARCHAR(200) NOT NULL UNIQUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Balances per house
-CREATE TABLE IF NOT EXISTS saldos_casa (
+CREATE TABLE IF NOT EXISTS house_balances (
     id SERIAL PRIMARY KEY,
-    casa_id INTEGER NOT NULL REFERENCES casas_aposta(id) ON DELETE CASCADE,
-    valor NUMERIC(12,2) NOT NULL DEFAULT 0,
+    house_id INTEGER NOT NULL REFERENCES betting_houses(id) ON DELETE CASCADE,
+    value NUMERIC(12,2) NOT NULL DEFAULT 0,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create apostas table with improved structure
-CREATE TABLE IF NOT EXISTS apostas (
+-- Create bets table with improved structure
+CREATE TABLE IF NOT EXISTS bets (
     id SERIAL PRIMARY KEY,
-    jogo VARCHAR(255) NOT NULL,
+    game VARCHAR(255) NOT NULL,
     stake DECIMAL(10,2) NOT NULL CHECK (stake > 0),
     odd DECIMAL(5,2) NOT NULL CHECK (odd > 1),
-    casa VARCHAR(100) NOT NULL,
-    casa_id INTEGER NULL REFERENCES casas_aposta(id) ON DELETE SET NULL,
-    mercado VARCHAR(255) NOT NULL,
-    esporte VARCHAR(50) NOT NULL,
-    lucro NUMERIC(12,2) NULL,
-    data_hora TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    house_name VARCHAR(100) NOT NULL,
+    house_id INTEGER NULL REFERENCES betting_houses(id) ON DELETE SET NULL,
+    market VARCHAR(255) NOT NULL,
+    sport VARCHAR(50) NOT NULL,
+    profit NUMERIC(12,2) NULL,
+    bet_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create aposta_results table
-CREATE TABLE IF NOT EXISTS aposta_results (
+-- Create bet_results table
+CREATE TABLE IF NOT EXISTS bet_results (
     id SERIAL PRIMARY KEY,
-    aposta_id INTEGER NOT NULL REFERENCES apostas(id) ON DELETE CASCADE,
-    result_id INTEGER NOT NULL DEFAULT 9, -- 9 = PENDENTE
+    bet_id INTEGER NOT NULL REFERENCES bets(id) ON DELETE CASCADE,
+    result_id INTEGER NOT NULL DEFAULT 9, -- 9 = PENDING
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create house_transactions table with a foreign key to transaction_types
+CREATE TABLE IF NOT EXISTS house_transactions (
+    id SERIAL PRIMARY KEY,
+    house_id INTEGER NOT NULL REFERENCES betting_houses(id) ON DELETE CASCADE,
+    transaction_type_id INTEGER NOT NULL REFERENCES transaction_types(id) ON DELETE RESTRICT,
+    value NUMERIC(12,2) NOT NULL,
+    description TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Create indexes for better performance
-CREATE INDEX IF NOT EXISTS idx_apostas_data_hora ON apostas(data_hora DESC);
-CREATE INDEX IF NOT EXISTS idx_apostas_casa ON apostas(casa);
-CREATE INDEX IF NOT EXISTS idx_apostas_casa_id ON apostas(casa_id);
-CREATE INDEX IF NOT EXISTS idx_aposta_results_aposta_id ON aposta_results(aposta_id);
-CREATE INDEX IF NOT EXISTS idx_aposta_results_result_id ON aposta_results(result_id);
-CREATE INDEX IF NOT EXISTS idx_casas_alias_casa_id ON casas_alias(casa_id);
-CREATE INDEX IF NOT EXISTS idx_saldos_casa_casa_id ON saldos_casa(casa_id);
+CREATE INDEX IF NOT EXISTS idx_bets_bet_time ON bets(bet_time DESC);
+CREATE INDEX IF NOT EXISTS idx_bets_house_name ON bets(house_name);
+CREATE INDEX IF NOT EXISTS idx_bets_house_id ON bets(house_id);
+CREATE INDEX IF NOT EXISTS idx_bet_results_bet_id ON bet_results(bet_id);
+CREATE INDEX IF NOT EXISTS idx_bet_results_result_id ON bet_results(result_id);
+CREATE INDEX IF NOT EXISTS idx_house_aliases_house_id ON house_aliases(house_id);
+CREATE INDEX IF NOT EXISTS idx_house_balances_house_id ON house_balances(house_id);
+CREATE INDEX IF NOT EXISTS idx_house_transactions_house_id ON house_transactions(house_id);
+CREATE INDEX IF NOT EXISTS idx_house_transactions_type_id ON house_transactions(transaction_type_id);
+CREATE INDEX IF NOT EXISTS idx_house_transactions_created_at ON house_transactions(created_at DESC);
 
--- Create transacoes_casa table for deposit/withdrawal tracking
-CREATE TABLE IF NOT EXISTS transacoes_casa (
-    id SERIAL PRIMARY KEY,
-    casa_id INTEGER NOT NULL REFERENCES casas_aposta(id) ON DELETE CASCADE,
-    tipo VARCHAR(50) NOT NULL CHECK (tipo IN ('DEPOSITO', 'SAQUE', 'AJUSTE')),
-    valor NUMERIC(12,2) NOT NULL,
-    descricao TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Create indexes for transacoes_casa
-CREATE INDEX IF NOT EXISTS idx_transacoes_casa_casa_id ON transacoes_casa(casa_id);
-CREATE INDEX IF NOT EXISTS idx_transacoes_casa_tipo ON transacoes_casa(tipo);
-CREATE INDEX IF NOT EXISTS idx_transacoes_casa_created_at ON transacoes_casa(created_at DESC);
-
--- Insert sample data (optional)
--- Seed some common houses
-INSERT INTO casas_aposta (nome, slug)
-VALUES
-('Bet365', 'bet365'),
-('Betano', 'betano'),
-('Betfair', 'betfair')
-ON CONFLICT DO NOTHING;
-
--- Default aliases
-INSERT INTO casas_alias (casa_id, alias)
-SELECT id, 'bet 365' FROM casas_aposta WHERE slug = 'bet365' ON CONFLICT DO NOTHING;
-INSERT INTO casas_alias (casa_id, alias)
-SELECT id, 'bet-365' FROM casas_aposta WHERE slug = 'bet365' ON CONFLICT DO NOTHING;
-INSERT INTO casas_alias (casa_id, alias)
-SELECT id, 'betano brasil' FROM casas_aposta WHERE slug = 'betano' ON CONFLICT DO NOTHING;
-
--- Sample balances
-INSERT INTO saldos_casa (casa_id, valor)
-SELECT id, 0 FROM casas_aposta ON CONFLICT DO NOTHING;
-
-INSERT INTO apostas (jogo, stake, odd, casa, mercado, esporte, data_hora) VALUES
-('Flamengo x Vasco', 100.00, 2.50, 'Bet365', 'Resultado Final', 'Futebol', NOW()),
-('Lakers x Warriors', 50.00, 1.85, 'William Hill', 'Over/Under', 'Basquete', NOW()),
-('Nadal x Djokovic', 75.00, 3.20, 'Betfair', 'Vencedor', 'Tênis', NOW())
-ON CONFLICT DO NOTHING;
-
--- Insert corresponding results
-INSERT INTO aposta_results (aposta_id, result_id) VALUES
-(1, 9), -- PENDENTE
-(2, 9), -- PENDENTE
-(3, 9)  -- PENDENTE
+-- Seed some initial transaction types
+INSERT INTO transaction_types (name) VALUES
+('DEPOSIT'),
+('WITHDRAWAL'),
+('ADJUSTMENT')
 ON CONFLICT DO NOTHING;
 
 -- Create function to update timestamp
@@ -134,21 +103,19 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
--- Create trigger to automatically update updated_at for apostas table
-CREATE TRIGGER update_apostas_updated_at 
-    BEFORE UPDATE ON apostas 
+-- Create triggers to automatically update updated_at
+CREATE TRIGGER update_bets_updated_at 
+    BEFORE UPDATE ON bets 
     FOR EACH ROW 
     EXECUTE FUNCTION update_updated_at_column();
 
--- Create trigger to automatically update updated_at for aposta_results table
-CREATE TRIGGER update_aposta_results_updated_at 
-    BEFORE UPDATE ON aposta_results 
+CREATE TRIGGER update_bet_results_updated_at 
+    BEFORE UPDATE ON bet_results 
     FOR EACH ROW 
     EXECUTE FUNCTION update_updated_at_column();
 
--- Create trigger to automatically update updated_at for transacoes_casa table
-CREATE TRIGGER update_transacoes_casa_updated_at 
-    BEFORE UPDATE ON transacoes_casa 
+CREATE TRIGGER update_house_transactions_updated_at 
+    BEFORE UPDATE ON house_transactions 
     FOR EACH ROW 
     EXECUTE FUNCTION update_updated_at_column();
 

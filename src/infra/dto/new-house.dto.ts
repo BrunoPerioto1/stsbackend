@@ -1,15 +1,11 @@
 import { IsString, IsNotEmpty, IsOptional, IsBoolean } from 'class-validator';
 
-export class CreateCasaDto {
+export class CreateHouseDto {
   @IsString()
   @IsNotEmpty()
-  nome: string;
-
-  @IsString()
-  @IsNotEmpty()
-  slug: string;
+  name: string;
 
   @IsOptional()
   @IsBoolean()
-  ativo?: boolean;
+  active?: boolean;
 }

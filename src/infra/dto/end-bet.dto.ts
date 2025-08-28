@@ -1,5 +1,5 @@
 import { IsEnum, IsArray, ArrayNotEmpty, IsNumber, IsNotEmpty } from 'class-validator';
-import { ResultIdEnum } from '../result-id.enum';
+import { ResultIdEnum } from './result-id.enum';
 
 export class FinalizarApostaDto {
   @IsEnum(ResultIdEnum)

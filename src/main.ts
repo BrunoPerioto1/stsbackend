@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -12,6 +13,19 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
+  // Configuração do Swagger
+  const config = new DocumentBuilder()
+    .setTitle('Bot Telegram - API de Apostas')
+    .setDescription('API para gerenciamento de apostas e casas de apostas')
+    .setVersion('1.0')
+    .build();
+
+  const document = SwaggerModule.createDocument(app as any, config);
+  SwaggerModule.setup('api', app as any, document);
+
   await app.listen(3000);
+  console.log('🚀 Application is running on: http://localhost:3000');
+  console.log('📚 Swagger documentation available at: http://localhost:3000/api');
 }
 bootstrap();

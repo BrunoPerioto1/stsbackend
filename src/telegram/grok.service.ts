@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import Groq from 'groq-sdk';
 import * as dotenv from 'dotenv';
-import { CreateApostaDto } from '../aposta/dto/create-aposta.dto';
+import { CreateBetDto } from '../infra/dto/new-bet.dto';
 dotenv.config();
 
 @Injectable()
@@ -48,21 +48,22 @@ NUNCA envolva o JSON em blocos de código (sem crases).
 
 Regras de parsing:
 
-"casa_id": OBRIGATÓRIO! Usar mapeamento fornecido (retorne o número do ID).
-
-"jogo": texto após 🆚
-"esporte": texto após ⚽️
-"mercado": texto após 📌
-"odd": número após 🏷
-"gratis": true/false dependendo do 🆓
+"house_id": OBRIGATÓRIO! Usar mapeamento fornecido (retorne o número do ID).
+"game": texto após 🆚.
+"sport": texto após ⚽️.
+"market": texto após 📌.
+"odd": número após 🏷.
+"free": true/false dependendo do 🆓.
 
 IMPORTANTE SOBRE STAKE:
-- NÃO calcule a stake.
-- Extraia apenas:
-  - "percent": o número (%) após 🛑 (ex.: 5 para 5%).
-  - "limite": o valor numérico após 🚦, se existir (ex.: 20).
-- O cálculo da stake será feito no servidor.
 
+NÃO calcule a stake.
+
+Extraia apenas:
+
+"percent": o número (%) após 🛑 (ex.: 5 para 5%).
+"limit": o valor numérico após 🚦, se existir (ex.: 20).
+O cálculo da stake será feito no servidor.
 Casas de aposta cadastradas (mapear nome/variações → ID):
 1. 1 PRA 1
 2. 1XBET

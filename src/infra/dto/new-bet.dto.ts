@@ -1,9 +1,9 @@
 import { IsNumber, IsString, IsPositive, IsNotEmpty, IsOptional } from 'class-validator';
 
-export class CreateApostaDto {
+export class CreateBetDto {
   @IsString()
   @IsNotEmpty()
-  jogo: string;
+  game: string;
 
   @IsNumber()
   @IsPositive()
@@ -15,17 +15,17 @@ export class CreateApostaDto {
 
   @IsOptional()
   @IsNumber()
-  casa_id?: number;
+  house_id?: number;
 
   @IsString()
   @IsNotEmpty()
-  mercado: string;
+  market: string;
 
   @IsString()
   @IsNotEmpty()
-  esporte: string;
+  sport: string;
 
   @IsOptional()
   @IsString()
-  data_hora?: string;
+  date_time?: string;
 }

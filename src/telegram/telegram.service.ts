@@ -2,11 +2,11 @@ import { Injectable, OnModuleInit } from '@nestjs/common';
 import { Telegraf } from 'telegraf';
 import * as dotenv from 'dotenv';
 import { GrokService } from './grok.service';
-import { ApostaService } from '../aposta/aposta.service';
-import { CreateApostaDto } from '../aposta/dto/create-aposta.dto';
+import { ApostaService } from '../bet/bet.service';
+import { CreateBetDto } from '../infra/dto/new-bet.dto';
 dotenv.config();
 
-const CASAS_BY_ID: Record<number, string> = {
+const HOUSE_BY_ID: Record<number, string> = {
   1: '1 PRA 1',
   2: '1XBET',
   3: '4PLAY',
@@ -244,11 +244,11 @@ export class TelegramService implements OnModuleInit {
         const jsonResult = await this.grokService.parseBetMessage(userMessage);
 
         // Normalização e validação
-        const casa_id = Number(jsonResult.casa_id);
+        const house_id = Number(jsonResult.house_id);
         const odd = Number(jsonResult.odd);
-        const jogo = String(jsonResult.jogo ?? '').trim();
-        const mercado = String(jsonResult.mercado ?? '').trim();
-        const esporte = String(jsonResult.esporte ?? '').trim();
+        const game = String(jsonResult.game ?? '').trim();
+        const market = String(jsonResult.market ?? '').trim();
+        const sport = String(jsonResult.sport ?? '').trim();
 
         // Calcular stake a partir do 🛑 % de uma banca fixa de 2000
         const percent = extractPercentAfterStopEmoji(userMessage);
@@ -263,7 +263,7 @@ export class TelegramService implements OnModuleInit {
         // Ignorar qualquer valor de 💰 para stake (não altera stake, apenas garantimos)
         // Se desejar, poderíamos logar se houver 💰 na mensagem
 
-        if (!Number.isFinite(casa_id) || !CASAS_BY_ID[casa_id]) {
+        if (!Number.isFinite(house_id) || !HOUSE_BY_ID[house_id]) {
           throw new Error('casa_id inválido ou não mapeado');
         }
         if (!Number.isFinite(stake) || stake <= 0) {
@@ -272,26 +272,26 @@ export class TelegramService implements OnModuleInit {
         if (!Number.isFinite(odd) || odd <= 1) {
           throw new Error('odd inválida');
         }
-        if (!jogo) {
-          throw new Error('jogo vazio');
+        if (!game) {
+          throw new Error('game is empty ');
         }
-        if (!mercado) {
+        if (!market) {
           throw new Error('mercado vazio');
         }
-        if (!esporte) {
+        if (!game) {
           throw new Error('esporte vazio');
         }
 
-        const apostaData: CreateApostaDto = {
-          jogo,
+        const apostaData: CreateBetDto = {
+          game,
           stake: Number(stake.toFixed(2)),
           odd,
-          casa_id,
-          mercado,
-          esporte,
+          house_id,
+          market,
+          sport,
         };
 
-        const aposta = await this.apostaService.criarAposta(apostaData);
+        const aposta = await this.apostaService.createBet(apostaData);
 
         await ctx.reply(
           `✅ Aposta salva no DB!\n\n📊 JSON:\n\`\`\`json\n${JSON.stringify(
