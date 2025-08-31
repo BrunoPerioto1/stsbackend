@@ -187,6 +187,8 @@ const HOUSE_BY_ID: Record<number, string> = {
   178: 'VUPI',
   179: 'WJCASINO',
   180: 'XBET CAIXA',
+  181: 'BETPIX365',
+  182: 'VAIDEBET',
 };
 
 function extractLimitFromText(text: string): number | null {

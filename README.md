@@ -291,3 +291,88 @@ Para suporte ou dúvidas:
 - Abra uma issue no GitHub
 - Verifique os logs da aplicação
 - Consulte a documentação da API
+
+# Meu Bot Telegram - Sistema de Apostas
+
+## Rotas do Dashboard
+
+### GET /dashboard/metrics
+Calcula métricas gerais do dashboard com filtro opcional por período.
+
+**Query Parameters:**
+- `startDate` (opcional): Data de início no formato ISO (ex: 2025-01-01T00:00:00.000Z)
+- `endDate` (opcional): Data de fim no formato ISO (ex: 2025-01-31T23:59:59.999Z)
+
+**Exemplo de uso:**
+```bash
+# Todas as métricas
+GET /dashboard/metrics
+
+# Métricas de um período específico
+GET /dashboard/metrics?startDate=2025-01-01T00:00:00.000Z&endDate=2025-01-31T23:59:59.999Z
+
+# Métricas a partir de uma data
+GET /dashboard/metrics?startDate=2025-01-01T00:00:00.000Z
+
+# Métricas até uma data
+GET /dashboard/metrics?endDate=2025-01-31T23:59:59.999Z
+```
+
+**Resposta:**
+```json
+{
+  "totalApostas": 10,
+  "apostasGanhas": 6,
+  "apostasPerdidas": 3,
+  "apostasPendentes": 1,
+  "apostasCanceladas": 0,
+  "totalInvestido": 500.00,
+  "totalRetorno": 750.00,
+  "lucroTotal": 250.00,
+  "roi": 50.00,
+  "taxaAcerto": 66.7
+}
+```
+
+### GET /dashboard/chart-data
+Retorna dados para o gráfico de performance financeira.
+
+**Query Parameters:** Mesmos do endpoint `/metrics`
+
+**Resposta:**
+```json
+[
+  { "date": "Investido", "value": 500.00 },
+  { "date": "Retorno", "value": 750.00 },
+  { "date": "Lucro", "value": 250.00 }
+]
+```
+
+### GET /dashboard/performance-summary
+Retorna um resumo completo da performance com tendência.
+
+**Query Parameters:** Mesmos do endpoint `/metrics`
+
+**Resposta:**
+```json
+{
+  "period": "01/01/2025 a 31/01/2025",
+  "metrics": { ... },
+  "trend": "positive"
+}
+```
+
+## Lógica de Cálculo
+
+- **Apostas Pendentes e Canceladas**: Não são contabilizadas no `totalInvestido` nem no `totalRetorno`
+- **Apostas Ganhas**: Contam no `totalInvestido` e `totalRetorno` (stake × odd)
+- **Apostas Perdidas**: Contam apenas no `totalInvestido`
+- **ROI**: (lucroTotal / totalInvestido) × 100
+- **Taxa de Acerto**: (apostasGanhas / apostasFinalizadas) × 100
+
+## Filtros de Data
+
+- As datas são opcionais
+- Formato esperado: ISO 8601
+- Se nenhuma data for fornecida, considera todo o período
+- O filtro é aplicado no campo `bet_time` da tabela `bets`

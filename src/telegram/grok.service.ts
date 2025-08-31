@@ -245,6 +245,8 @@ Casas de aposta cadastradas (mapear nome/variações → ID):
 178. VUPI
 179. WJCASINO
 180. XBET CAIXA
+181. BETPIX365
+182. VAIDEBET
 
 Mensagem:
 ${message}`;

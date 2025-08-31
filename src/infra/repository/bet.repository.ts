@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Pool } from 'pg';
+
 import { pool } from '../db/db'; 
 import { ResultIdEnum } from '../dto/result-id.enum';
 import { CreateBetDto } from '../dto/new-bet.dto';
