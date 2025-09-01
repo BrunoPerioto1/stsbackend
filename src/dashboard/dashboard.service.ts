@@ -1,6 +1,7 @@
 // src/dashboard/dashboard.service.ts
 import { Injectable } from '@nestjs/common';
 import { DashboardRepository } from '../infra/repository/dashboard.repository';
+import { DashboardQueryDto } from '../infra/dto/dashboard-query.dto';
 
 // As interfaces e DTOs podem ser mantidos aqui ou em um arquivo de tipos separado.
 export interface DashboardMetrics {
@@ -21,6 +22,19 @@ export interface ChartDataPoint {
   value: number;
 }
 
+export interface DailySummaryPoint {
+  date: string;
+  totalApostas: number;
+  apostasGanhas: number;
+  apostasPerdidas: number;
+  apostasPendentes: number;
+  totalInvestido: number;
+  totalRetorno: number;
+  lucroDia: number;
+  roi: number;
+  taxaAcerto: number;
+}
+
 export interface PerformanceSummary {
   period: string;
   metrics: DashboardMetrics;
@@ -32,8 +46,8 @@ export class DashboardService {
   
   constructor(private readonly dashboardRepository: DashboardRepository) {}
 
-  async calculateMetrics(startDate?: string, endDate?: string): Promise<DashboardMetrics> {
-    const bets = await this.dashboardRepository.findBetsWithResults(startDate, endDate);
+  async calculateMetrics(filters: DashboardQueryDto): Promise<DashboardMetrics> {
+    const bets = await this.dashboardRepository.findBetsWithResults(filters);
 
     let totalApostas = 0;
     let apostasGanhas = 0;
@@ -85,8 +99,8 @@ export class DashboardService {
   }
 
   // Os outros métodos de formatação e sumário também usam o repositório indiretamente.
-  async getChartData(startDate?: string, endDate?: string): Promise<ChartDataPoint[]> {
-    const metrics = await this.calculateMetrics(startDate, endDate);
+  async getChartData(filters: DashboardQueryDto): Promise<ChartDataPoint[]> {
+    const metrics = await this.calculateMetrics(filters);
     return [
       { date: 'Investido', value: metrics.totalInvestido },
       { date: 'Retorno', value: metrics.totalRetorno },
@@ -94,20 +108,47 @@ export class DashboardService {
     ];
   }
 
-  async getPerformanceSummary(startDate?: string, endDate?: string): Promise<PerformanceSummary> {
-    const metrics = await this.calculateMetrics(startDate, endDate);
+  async getPerformanceSummary(filters: DashboardQueryDto): Promise<PerformanceSummary> {
+    const metrics = await this.calculateMetrics(filters);
     let trend: 'positive' | 'negative' | 'neutral' = 'neutral';
     if (metrics.lucroTotal > 0) {
       trend = 'positive';
     } else if (metrics.lucroTotal < 0) {
       trend = 'negative';
     }
-    const period = this.formatPeriod(startDate, endDate);
+    const period = this.formatPeriod(filters.startDate, filters.endDate);
     return {
       period,
       metrics,
       trend
     };
+  }
+
+  async getDailySummary(filters: DashboardQueryDto): Promise<DailySummaryPoint[]> {
+    const dailyData = await this.dashboardRepository.findDailySummary(filters);
+    
+    return dailyData.map(day => {
+      const totalInvestido = parseFloat(day.total_investido) || 0;
+      const totalRetorno = parseFloat(day.total_retorno) || 0;
+      const lucroDia = parseFloat(day.lucro_dia) || 0;
+      const apostasFinalizadas = parseInt(day.apostas_ganhas) + parseInt(day.apostas_perdidas);
+      
+      const roi = totalInvestido > 0 ? (lucroDia / totalInvestido) * 100 : 0;
+      const taxaAcerto = apostasFinalizadas > 0 ? (parseInt(day.apostas_ganhas) / apostasFinalizadas) * 100 : 0;
+
+      return {
+        date: day.data,
+        totalApostas: parseInt(day.total_apostas),
+        apostasGanhas: parseInt(day.apostas_ganhas),
+        apostasPerdidas: parseInt(day.apostas_perdidas),
+        apostasPendentes: parseInt(day.apostas_pendentes),
+        totalInvestido: parseFloat(totalInvestido.toFixed(2)),
+        totalRetorno: parseFloat(totalRetorno.toFixed(2)),
+        lucroDia: parseFloat(lucroDia.toFixed(2)),
+        roi: parseFloat(roi.toFixed(2)),
+        taxaAcerto: parseFloat(taxaAcerto.toFixed(1))
+      };
+    });
   }
 
   private formatPeriod(startDate?: string, endDate?: string): string {

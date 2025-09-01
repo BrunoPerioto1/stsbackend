@@ -11,6 +11,7 @@ import { HouseService } from './house.service';
 import { CreateHouseDto } from '../infra/dto/new-house.dto';
 import { UpdateHouseDto } from '../infra/dto/update-house.dto';
 import { CreateTransacaoDto } from '../infra/dto/new-transation.dto';
+import { InsufficientBalanceErrorDto } from '../infra/dto/error-response.dto';
 
 @ApiTags('Casas de Aposta')
 @Controller('house')
@@ -43,13 +44,46 @@ export class HouseController {
   }
 
   @Get('balances')
-  @ApiOperation({ summary: 'Calcula saldos de todas as casas' })
+  @ApiOperation({ summary: 'Calcula saldos de casas com apostas registradas' })
   @ApiResponse({
     status: 200,
-    description: 'Saldos calculados com sucesso.',
+    description: 'Saldos calculados com sucesso. Retorna apenas casas que tiveram pelo menos uma aposta registrada. O house_balance é calculado como total_stake + total_bet_profit + total_transactions.',
   })
   calculateAllHousesBalance() {
     return this.houseService.calculateAllHousesBalance();
+  }
+
+
+
+  // Transaction routes
+  @Post('transaction')
+  @ApiOperation({ summary: 'Cria uma nova transação' })
+  @ApiResponse({
+    status: 201,
+    description: 'Transação criada com sucesso.',
+    type: CreateTransacaoDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Dados de entrada inválidos.',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Saldo insuficiente para saque.',
+    type: InsufficientBalanceErrorDto,
+  })
+  createTransaction(@Body() createTransactionDto: CreateTransacaoDto) {
+    return this.houseService.createTransaction(createTransactionDto);
+  }
+
+  @Get('transactions')
+  @ApiOperation({ summary: 'Lista todas as transações' })
+  @ApiResponse({
+    status: 200,
+    description: 'Lista de transações retornada com sucesso.',
+    type: [CreateTransacaoDto],
+  })
+  findAllTransactions() {
+    return this.houseService.findAllTransactions();
   }
 
   @Get('resolve')
@@ -121,32 +155,6 @@ export class HouseController {
   })
   deleteHouse(@Param('id') id: string) {
     return this.houseService.deleteHouse(+id);
-  }
-
-  // Transaction routes
-  @Post('transaction')
-  @ApiOperation({ summary: 'Cria uma nova transação' })
-  @ApiResponse({
-    status: 201,
-    description: 'Transação criada com sucesso.',
-    type: CreateTransacaoDto,
-  })
-  @ApiBadRequestResponse({
-    description: 'Dados de entrada inválidos.',
-  })
-  createTransaction(@Body() createTransactionDto: CreateTransacaoDto) {
-    return this.houseService.createTransaction(createTransactionDto);
-  }
-
-  @Get('transactions')
-  @ApiOperation({ summary: 'Lista todas as transações' })
-  @ApiResponse({
-    status: 200,
-    description: 'Lista de transações retornada com sucesso.',
-    type: [CreateTransacaoDto],
-  })
-  findAllTransactions() {
-    return this.houseService.findAllTransactions();
   }
 
   @Get(':id/transactions')

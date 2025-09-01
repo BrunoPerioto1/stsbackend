@@ -1,5 +1,4 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Pool } from 'pg';
 import { pool } from '../db/db'; 
 import { CreateHouseDto } from '../dto/new-house.dto';
 import { UpdateHouseDto } from '../dto/update-house.dto';
@@ -8,12 +7,12 @@ import { CreateTransacaoDto } from '../dto/new-transation.dto';
 export interface HouseBalance {
   house_id: number;
   house_name: string;
-  house_slug: string;
   total_bets: number;
   total_stake: number;
   total_bet_profit: number;
   total_transactions: number;
   house_balance: number;
+  real_house_balance: number;
   pending_bets: number;
   won_bets: number;
   lost_bets: number;
@@ -34,7 +33,7 @@ export class HouseRepository {
 
   async findAll(): Promise<any[]> {
     const query = `
-      SELECT id, name, is_active, created_at, updated_at
+      SELECT id, name, is_active
       FROM betting_houses
       ORDER BY name ASC
     `;
@@ -44,22 +43,11 @@ export class HouseRepository {
 
   async findById(id: number): Promise<any | null> {
     const query = `
-      SELECT id, name, is_active, created_at, updated_at
+      SELECT id, name, is_active
       FROM betting_houses
       WHERE id = $1
     `;
     const params = [id];
-    const result = await pool.query(query, params);
-    return result.rowCount > 0 ? result.rows[0] : null;
-  }
-
-  async findBySlug(slug: string): Promise<any | null> {
-    const query = `
-      SELECT id, name, is_active, created_at, updated_at
-      FROM betting_houses
-      WHERE LOWER(name) = $1
-    `;
-    const params = [slug.toLowerCase()];
     const result = await pool.query(query, params);
     return result.rowCount > 0 ? result.rows[0] : null;
   }
@@ -88,7 +76,7 @@ export class HouseRepository {
     return result.rowCount > 0;
   }
 
-  async findByNameOrSlug(text: string): Promise<any | null> {
+  async findByName(text: string): Promise<any | null> {
     const query = `
       SELECT id, name, is_active
       FROM betting_houses
@@ -100,78 +88,64 @@ export class HouseRepository {
     return result.rowCount > 0 ? result.rows[0] : null;
   }
 
-  async calculateHouseBalance(houseId: number): Promise<HouseBalance | null> {
-    const query = `
+  async getBetsData(houseId?: number): Promise<any[]> {
+    let query = `
       SELECT 
         h.id as house_id,
         h.name as house_name,
-        h.name as house_slug,
         COUNT(b.id) as total_bets,
         COALESCE(SUM(b.stake), 0) as total_stake,
         COALESCE(SUM(b.profit), 0) as total_bet_profit,
-        COALESCE(SUM(ht.value), 0) as total_transactions,
-        GREATEST(COALESCE(SUM(b.profit), 0) + COALESCE(SUM(ht.value), 0), 0) as house_balance,
         COUNT(CASE WHEN br.result_id = 9 THEN 1 END) as pending_bets,
         COUNT(CASE WHEN br.result_id = 1 THEN 1 END) as won_bets,
         COUNT(CASE WHEN br.result_id = 2 THEN 1 END) as lost_bets
       FROM betting_houses h
-      LEFT JOIN bets b ON h.id = b.house_id
+      INNER JOIN bets b ON h.id = b.house_id
       LEFT JOIN bet_results br ON b.id = br.bet_id
-      LEFT JOIN house_transactions ht ON h.id = ht.house_id
-      WHERE h.id = $1 AND h.is_active = true
-      GROUP BY h.id, h.name
+      WHERE h.is_active = true
     `;
-    const params = [houseId];
+    
+    const params: any[] = [];
+    if (houseId) {
+      query += ` AND h.id = $1`;
+      params.push(houseId);
+    }
+    
+    query += ` GROUP BY h.id, h.name ORDER BY h.name ASC`;
+    
     const result = await pool.query(query, params);
-    return result.rowCount > 0 ? result.rows[0] : null;
+    return result.rows;
   }
 
-  async calculateAllHousesBalance(): Promise<HouseBalance[]> {
-    const query = `
+  async getTransactionsData(houseId?: number): Promise<any[]> {
+    let query = `
       SELECT 
-        h.id as house_id,
-        h.name as house_name,
-        h.name as house_slug,
-        COUNT(b.id) as total_bets,
-        COALESCE(SUM(b.stake), 0) as total_stake,
-        COALESCE(SUM(b.profit), 0) as total_bet_profit,
-        COALESCE(SUM(ht.value), 0) as total_transactions,
-        GREATEST(COALESCE(SUM(b.profit), 0) + COALESCE(SUM(ht.value), 0), 0) as house_balance,
-        COUNT(CASE WHEN br.result_id = 9 THEN 1 END) as pending_bets,
-        COUNT(CASE WHEN br.result_id = 1 THEN 1 END) as won_bets,
-        COUNT(CASE WHEN br.result_id = 2 THEN 1 END) as lost_bets
-      FROM betting_houses h
-      LEFT JOIN bets b ON h.id = b.house_id
-      LEFT JOIN bet_results br ON b.id = br.bet_id
-      LEFT JOIN house_transactions ht ON h.id = ht.house_id
-      WHERE h.is_active = true
-      GROUP BY h.id, h.name
-      ORDER BY h.name ASC
+        house_id,
+        COALESCE(SUM(value), 0) as total_transactions
+      FROM house_transactions
     `;
-    const result = await pool.query(query);
+    
+    const params: any[] = [];
+    if (houseId) {
+      query += ` WHERE house_id = $1`;
+      params.push(houseId);
+    }
+    
+    query += ` GROUP BY house_id`;
+    
+    const result = await pool.query(query, params);
     return result.rows;
   }
 
   async createTransaction(transactionData: CreateTransacaoDto): Promise<any> {
-    const typeQuery = `
-      SELECT id FROM transaction_types WHERE name = $1
-    `;
-    const typeResult = await pool.query(typeQuery, [transactionData.tipo]);
-
-    if (typeResult.rowCount === 0) {
-      throw new NotFoundException(`Transaction type '${transactionData.tipo}' not found`);
-    }
-
-    const transactionTypeId = typeResult.rows[0].id;
-
     const query = `
       INSERT INTO house_transactions (house_id, transaction_type_id, value, description)
       VALUES ($1, $2, $3, $4)
       RETURNING *
     `;
     const params = [
-      transactionData.casa_id,
-      transactionTypeId,
+      transactionData.house_id,
+      transactionData.transaction_type_id,
       transactionData.valor,
       transactionData.descricao
     ];
@@ -204,8 +178,8 @@ export class HouseRepository {
       SELECT 
         ht.id, 
         ht.house_id, 
-        h.name as house_name,
-        tt.name as transaction_type,
+        COALESCE(h.name, 'Casa não encontrada') as house_name,
+        COALESCE(tt.name, 'Tipo não encontrado') as transaction_type,
         ht.value, 
         ht.description, 
         ht.created_at, 
@@ -219,8 +193,8 @@ export class HouseRepository {
     return result.rows;
   }
 
-  async findHouseHistory(houseId: number): Promise<any[]> {
-    const betsQuery = `
+  async findHouseBets(houseId: number): Promise<any[]> {
+    const query = `
       SELECT 
         b.id,
         b.game,
@@ -237,33 +211,24 @@ export class HouseRepository {
       WHERE b.house_id = $1
     `;
 
-    const transactionsQuery = `
+    const result = await pool.query(query, [houseId]);
+    return result.rows;
+  }
+
+  async findHouseTransactions(houseId: number): Promise<any[]> {
+    const query = `
       SELECT 
         ht.id,
-        NULL as game,
-        NULL as stake,
-        NULL as odd,
-        NULL as market,
-        NULL as sport,
         ht.value as profit,
         ht.created_at,
-        NULL as result_id,
         tt.name as movement_type
       FROM house_transactions ht
       LEFT JOIN transaction_types tt ON ht.transaction_type_id = tt.id
       WHERE ht.house_id = $1
     `;
 
-    const [betsResult, transactionsResult] = await Promise.all([
-      pool.query(betsQuery, [houseId]),
-      pool.query(transactionsQuery, [houseId])
-    ]);
-
-    const history = [
-      ...betsResult.rows.map(row => ({ ...row, movement_type: 'BET' })),
-      ...transactionsResult.rows.map(row => ({ ...row, movement_type: row.movement_type }))
-    ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-
-    return history;
+    const result = await pool.query(query, [houseId]);
+    return result.rows;
   }
+
 }
