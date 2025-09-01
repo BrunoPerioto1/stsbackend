@@ -67,11 +67,9 @@ CREATE TABLE IF NOT EXISTS house_transactions (
 
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_bets_bet_time ON bets(bet_time DESC);
-CREATE INDEX IF NOT EXISTS idx_bets_house_name ON bets(house_name);
 CREATE INDEX IF NOT EXISTS idx_bets_house_id ON bets(house_id);
 CREATE INDEX IF NOT EXISTS idx_bet_results_bet_id ON bet_results(bet_id);
 CREATE INDEX IF NOT EXISTS idx_bet_results_result_id ON bet_results(result_id);
-CREATE INDEX IF NOT EXISTS idx_house_aliases_house_id ON house_aliases(house_id);
 CREATE INDEX IF NOT EXISTS idx_house_balances_house_id ON house_balances(house_id);
 CREATE INDEX IF NOT EXISTS idx_house_transactions_house_id ON house_transactions(house_id);
 CREATE INDEX IF NOT EXISTS idx_house_transactions_type_id ON house_transactions(transaction_type_id);
