@@ -128,6 +128,30 @@ export class BetRepository {
     return resultado.rowCount;
   }
 
+  async updateMultipleProfits(betProfits: { betId: number; profit: number }[]): Promise<number> {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      
+      let totalUpdated = 0;
+      for (const { betId, profit } of betProfits) {
+        const resultado = await client.query(
+          'UPDATE bets SET profit = $1, updated_at = NOW() WHERE id = $2',
+          [profit, betId]
+        );
+        totalUpdated += resultado.rowCount;
+      }
+      
+      await client.query('COMMIT');
+      return totalUpdated;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
   async findAll(): Promise<any[]> {
     const query = `${this.baseQuery} ORDER BY a.bet_time DESC`;
     const resultado = await pool.query(query);

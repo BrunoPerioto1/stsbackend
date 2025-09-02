@@ -99,7 +99,16 @@ export class ApostaService {
         idToBet[row.id] = { stake: row.stake, odd: row.odd };
       }
 
+    // Calcular lucros para todas as apostas
+    const betProfits = betIds.map((id) => {
+      const bet = idToBet[id];
+      const lucro = bet ? this.calcularLucro(resultId, bet.stake, bet.odd) : 0;
+      return { betId: id, profit: lucro };
+    });
+
+    // Atualizar resultados e lucros no banco
     await this.betRepository.updateMultipleResults(betIds, resultId);
+    await this.betRepository.updateMultipleProfits(betProfits);
 
     const results = betIds.map((id) => {
         const bet = idToBet[id];
