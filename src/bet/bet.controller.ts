@@ -9,6 +9,7 @@ import {
   ParseIntPipe,
   HttpCode,
   HttpStatus,
+  Query,
 } from '@nestjs/common';
 import {
   ApiOperation,
@@ -46,26 +47,44 @@ export class ApostaController {
     return this.apostaService.createBet(apostaData);
   }
 
-  @Put(':id')
-  @ApiOperation({ summary: 'Atualiza uma aposta existente' })
+  @Get()
+  @ApiOperation({ summary: 'Lista todas as apostas' })
   @ApiResponse({
     status: HttpStatus.OK,
-    description: 'Aposta atualizada com sucesso.',
-    type: UpdateApostaDto,
+    description: 'Lista de apostas retornada com sucesso.',
+    type: [CreateBetDto],
+  })
+  async listarTodas() {
+    return this.apostaService.findAllBets();
+  }
+
+  @Get('houses/list')
+  @ApiOperation({ summary: 'Lista casas únicas para filtro' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Lista de casas retornada com sucesso.',
+    type: [String],
+  })
+  async listarCasas() {
+    return this.apostaService.findUniqueHouses();
+  }
+
+  @Put('finalize-multiple')
+  @ApiOperation({ summary: 'Finaliza múltiplas apostas' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Apostas finalizadas com sucesso.',
+    type: FinalizarMultiplasDto,
   })
   @ApiBadRequestResponse({
-    description: 'Dados de entrada inválidos ou ID da aposta não é válido.',
+    description: 'Dados de entrada inválidos.',
   })
-  @ApiNotFoundResponse({
-    description: 'Aposta não encontrada.',
-  })
-  async editar(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() updateData: UpdateApostaDto,
-  ) {
-    console.log('Controller - Dados recebidos para edição:', updateData);
-    console.log('Controller - ID da aposta:', id);
-    return this.apostaService.updateBet(id, updateData);
+  async finalizarMultiplas(@Body() body: FinalizarMultiplasDto) {
+    console.log('Controller - Dados recebidos para finalizar múltiplas:', body);
+    const { betIds, resultId } = body;
+    console.log('Controller - betIds:', betIds);
+    console.log('Controller - resultId:', resultId);
+    return this.apostaService.finalizeMany(betIds, resultId);
   }
 
   @Put('finalize/:id')
@@ -88,33 +107,17 @@ export class ApostaController {
     return this.apostaService.finalizeBet(id, body.resultId);
   }
 
-  @Put('finalize-multiple')
-  @ApiOperation({ summary: 'Finaliza múltiplas apostas' })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'Apostas finalizadas com sucesso.',
-    type: FinalizarMultiplasDto,
+  @Delete('delete-multiple')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Remove múltiplas apostas' })
+  @ApiNoContentResponse({
+    description: 'Apostas removidas com sucesso.',
   })
   @ApiBadRequestResponse({
     description: 'Dados de entrada inválidos.',
   })
-  async finalizarMultiplas(@Body() body: FinalizarMultiplasDto) {
-    console.log('Controller - Dados recebidos para finalizar múltiplas:', body);
-    const { apostaIds, resultId } = body;
-    console.log('Controller - apostaIds:', apostaIds);
-    console.log('Controller - resultId:', resultId);
-    return this.apostaService.finalizeMany(apostaIds, resultId);
-  }
-
-  @Get()
-  @ApiOperation({ summary: 'Lista todas as apostas' })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'Lista de apostas retornada com sucesso.',
-    type: [CreateBetDto],
-  })
-  async listarTodas() {
-    return this.apostaService.findAllBets();
+  async deletarMultiplas(@Body() body: { apostaIds: number[] }) {
+    return this.apostaService.deleteManyBets(body.apostaIds);
   }
 
   @Get(':id')
@@ -131,6 +134,28 @@ export class ApostaController {
     return this.apostaService.findBetById(id);
   }
 
+  @Put(':id')
+  @ApiOperation({ summary: 'Atualiza uma aposta existente' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Aposta atualizada com sucesso.',
+    type: UpdateApostaDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Dados de entrada inválidos ou ID da aposta não é válido.',
+  })
+  @ApiNotFoundResponse({
+    description: 'Aposta não encontrada.',
+  })
+  async editar(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateData: UpdateApostaDto,
+  ) {
+    console.log('Controller - Dados recebidos para edição:', updateData);
+    console.log('Controller - ID da aposta:', id);
+    return this.apostaService.updateBet(id, updateData);
+  }
+
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Remove uma aposta' })
@@ -144,27 +169,6 @@ export class ApostaController {
     return this.apostaService.deleteBet(id);
   }
 
-  @Delete('delete-multiple')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Remove múltiplas apostas' })
-  @ApiNoContentResponse({
-    description: 'Apostas removidas com sucesso.',
-  })
-  @ApiBadRequestResponse({
-    description: 'Dados de entrada inválidos.',
-  })
-  async deletarMultiplas(@Body() body: { apostaIds: number[] }) {
-    return this.apostaService.deleteManyBets(body.apostaIds);
-  }
 
-  @Get('houses/list')
-  @ApiOperation({ summary: 'Lista casas únicas para filtro' })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'Lista de casas retornada com sucesso.',
-    type: [String],
-  })
-  async listarCasas() {
-    return this.apostaService.findUniqueHouses();
-  }
+
 }

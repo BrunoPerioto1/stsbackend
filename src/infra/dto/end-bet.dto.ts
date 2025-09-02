@@ -1,4 +1,5 @@
-import { IsEnum, IsArray, ArrayNotEmpty, IsNumber, IsNotEmpty } from 'class-validator';
+import { IsEnum, IsArray, ArrayNotEmpty, IsNumber } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { ResultIdEnum } from './result-id.enum';
 
@@ -10,7 +11,6 @@ export class FinalizarApostaDto {
     required: true
   })
   @IsEnum(ResultIdEnum)
-  @IsNotEmpty()
   resultId: ResultIdEnum;
 }
 
@@ -24,8 +24,8 @@ export class FinalizarMultiplasDto {
   @IsArray()
   @ArrayNotEmpty()
   @IsNumber({}, { each: true })
-  @IsNotEmpty()
-  apostaIds: number[];
+  @Transform(({ value }) => Array.isArray(value) ? value.map(id => Number(id)) : value)
+  betIds: number[];
 
   @ApiProperty({
     description: 'ID do resultado das apostas',
@@ -34,6 +34,6 @@ export class FinalizarMultiplasDto {
     required: true
   })
   @IsEnum(ResultIdEnum)
-  @IsNotEmpty()
+  @Transform(({ value }) => Number(value))
   resultId: ResultIdEnum;
 }
