@@ -3,6 +3,8 @@ import { pool } from '../db/db';
 import { CreateHouseDto } from '../dto/new-house.dto';
 import { UpdateHouseDto } from '../dto/update-house.dto';
 import { CreateTransacaoDto } from '../dto/new-transation.dto';
+import { HouseMetricsDto } from '../dto/house-metrics.dto';
+import { HouseBalanceDto } from '../dto/house-balance.dto';
 
 export interface HouseBalance {
   house_id: number;
@@ -230,5 +232,123 @@ export class HouseRepository {
     const result = await pool.query(query, [houseId]);
     return result.rows;
   }
+ async findHouseMetrics(): Promise<HouseMetricsDto> {
+  const query = `
+    WITH house_metrics AS (
+      SELECT 
+        -- Total investido (soma de todas as stakes)
+        COALESCE(SUM(b.stake), 0) as total_invested,
+        
+        -- Total de apostas
+        COUNT(b.id) as total_bets,
+        
+        -- Lucro total das apostas
+        COALESCE(SUM(b.profit), 0) as total_bet_profit,
+        
+        -- Saldo das transações (depósitos - saques + ajustes)
+        COALESCE(SUM(
+          CASE 
+            WHEN tt.name = 'DEPOSIT' THEN ht.value
+            WHEN tt.name = 'WITHDRAWAL' THEN -ht.value
+            WHEN tt.name = 'ADJUSTMENT' THEN ht.value
+            ELSE 0
+          END
+        ), 0) as transaction_balance
+        
+      FROM betting_houses bh
+      LEFT JOIN bets b ON bh.id = b.house_id
+      LEFT JOIN house_transactions ht ON bh.id = ht.house_id
+      LEFT JOIN transaction_types tt ON ht.transaction_type_id = tt.id
+      WHERE bh.is_active = true
+    ),
+    total_houses AS (
+      SELECT COUNT(DISTINCT bh.id) as total_houses_used
+      FROM betting_houses bh
+      INNER JOIN bets b ON bh.id = b.house_id
+      WHERE bh.is_active = true
+    )
+    SELECT 
+      hm.total_invested as "totalInvested",
+      (hm.total_invested + hm.transaction_balance + hm.total_bet_profit) as "currentBalance",
+      hm.total_bet_profit as "totalProfit",
+      hm.total_bets as "totalBets",
+      th.total_houses_used as "totalHousesUsed"
+    FROM house_metrics hm, total_houses th
+  `;
 
+  const result = await pool.query(query);
+  
+  return result.rows[0];
+}
+
+async getAllHousesBalanceWithCalculations(houseId?: number): Promise<HouseBalanceDto[]> {
+  let query = `
+    WITH house_bets AS (
+      SELECT 
+        h.id as house_id,
+        h.name as house_name,
+        COUNT(b.id) as total_bets,
+        COALESCE(SUM(b.stake), 0) as total_stake,
+        COALESCE(SUM(b.profit), 0) as total_bet_profit,
+        COUNT(CASE WHEN br.result_id = 9 THEN 1 END) as pending_bets,
+        COUNT(CASE WHEN br.result_id = 1 THEN 1 END) as won_bets,
+        COUNT(CASE WHEN br.result_id = 2 THEN 1 END) as lost_bets
+      FROM betting_houses h
+      INNER JOIN bets b ON h.id = b.house_id
+      LEFT JOIN bet_results br ON b.id = br.bet_id
+      WHERE h.is_active = true
+  `;
+
+  const params: any[] = [];
+  
+  if (houseId) {
+    query += ` AND h.id = $1`;
+    params.push(houseId);
+  }
+
+  query += `
+      GROUP BY h.id, h.name
+    ),
+    house_transactions AS (
+      SELECT 
+        house_id,
+        COALESCE(SUM(
+          CASE 
+            WHEN tt.name = 'DEPOSIT' THEN ht.value
+            WHEN tt.name = 'WITHDRAWAL' THEN -ht.value
+            WHEN tt.name = 'ADJUSTMENT' THEN ht.value
+            ELSE 0
+          END
+        ), 0) as total_transactions
+      FROM house_transactions ht
+      LEFT JOIN transaction_types tt ON ht.transaction_type_id = tt.id
+  `;
+
+  if (houseId) {
+    query += ` WHERE ht.house_id = $1`;
+  }
+
+  query += `
+      GROUP BY house_id
+    )
+    SELECT 
+      hb.house_id as "houseId",
+      hb.house_name as "houseName",
+      hb.total_bets as "totalBets",
+      hb.total_stake as "totalStake",
+      hb.total_bet_profit as "totalBetProfit",
+      COALESCE(ht.total_transactions, 0) as "totalTransactions",
+      (hb.total_stake + hb.total_bet_profit + COALESCE(ht.total_transactions, 0)) as "realHouseBalance",
+      GREATEST(0, (hb.total_stake + hb.total_bet_profit + COALESCE(ht.total_transactions, 0))) as "houseBalance",
+      hb.pending_bets as "pendingBets",
+      hb.won_bets as "wonBets",
+      hb.lost_bets as "lostBets"
+    FROM house_bets hb
+    LEFT JOIN house_transactions ht ON hb.house_id = ht.house_id
+    ORDER BY hb.house_name ASC
+  `;
+
+  const result = await pool.query(query, params);
+  return result.rows;
+}
 }

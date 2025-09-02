@@ -52,6 +52,16 @@ export class HouseController {
   calculateAllHousesBalance() {
     return this.houseService.calculateAllHousesBalance();
   }
+  
+  @Get('metrics')
+  @ApiOperation({ summary: 'Obtém métricas de todas as casas de aposta' })
+  @ApiResponse({
+    status: 200,
+    description: 'Métricas retornadas com sucesso.',
+  })
+  getHouseMetrics() {
+    return this.houseService.getHouseMetrics();
+  }
 
 
 

@@ -3,6 +3,7 @@ import { CreateHouseDto } from '../infra/dto/new-house.dto';
 import { UpdateHouseDto } from '../infra/dto/update-house.dto';
 import { CreateTransacaoDto } from '../infra/dto/new-transation.dto';
 import { HouseRepository, HouseBalance } from '../infra/repository/house.repository';
+import { HouseMetricsDto } from 'src/infra/dto/house-metrics.dto';
 
 @Injectable()
 export class HouseService {
@@ -10,6 +11,9 @@ export class HouseService {
 
   async createHouse(createHouseDto: CreateHouseDto) {
     return this.houseRepository.create(createHouseDto);
+  }
+  async getHouseMetrics(): Promise<HouseMetricsDto> {
+    return this.houseRepository.findHouseMetrics();
   }
 
   async findAllHouses() {
