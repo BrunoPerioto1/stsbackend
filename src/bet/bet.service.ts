@@ -8,38 +8,14 @@ import { ResultIdEnum } from './dto/result-id.enum';
 import { CreateBetDto } from './dto/new-bet.dto';
 import { UpdateApostaDto } from './dto/update-bet.dto';
 import { BetRepository } from '../infra/repository/bet.repository';
+import { calculateProfit } from '../common/utils/bet.utils';
 
 @Injectable()
 export class ApostaService {
   constructor(private readonly betRepository: BetRepository) {}
-  // Esta função continua igual, pois é útil para o cálculo em memória
-  private calcularLucro(
-    resultId: ResultIdEnum,
-    stake: number,
-    odd: number,
-  ): number {
-    switch (resultId) {
-      case ResultIdEnum.GANHOU:
-        return stake * (odd - 1);
-      case ResultIdEnum.PERDEU:
-        return -stake;
-      case ResultIdEnum.EMPATE:
-      case ResultIdEnum.ANULADA:
-      case ResultIdEnum.REEMBOLSADA:
-      case ResultIdEnum.PENDENTE:
-        return 0;
-      case ResultIdEnum.MEIO_GANHO:
-      case ResultIdEnum.MEIO_GANHO_2:
-        return (stake / 2) * (odd - 1) - stake / 2;
-      case ResultIdEnum.MEIO_PERDIDO:
-        return -(stake / 2);
-      default:
-        throw new BadRequestException('Result ID inválido');
-    }
-  }
+
 
   async createBet(betData: CreateBetDto) {
-      // Validar casa_id contra o banco para evitar violação de FK
     let finalHouseId: number | null = betData.house_id ?? null;
     if (finalHouseId !== null) {
       const exists = await this.betRepository.houseExists(Number(finalHouseId));
@@ -58,11 +34,9 @@ export class ApostaService {
   }
 
   async updateBet(betId: number, updateData: UpdateApostaDto) {
-    // validar existência do casa_id se presente
       if (updateData.house_id !== undefined && updateData.house_id !== null) {
       const exists = await this.betRepository.houseExists(Number(updateData.house_id));
       if (!exists) {
-        // se a casa não existir, gravar como NULL
         (updateData as any).casa_id = undefined;
       }
     }
@@ -80,29 +54,24 @@ export class ApostaService {
       throw new Error('Aposta não encontrada');
     }
   
-    // Calcular lucro baseado no resultado
-    let lucro = 0;
-    if (resultId === 1) { // GANHOU
-      lucro = (Number(aposta.stake) * Number(aposta.odd)) - Number(aposta.stake);
-    } else if (resultId === 2) { // PERDEU
-      lucro = -Number(aposta.stake);
-    }
+    const resultIdEnum = resultId as ResultIdEnum;
+    
+    const lucro = calculateProfit(resultIdEnum, Number(aposta.stake), Number(aposta.odd));
+    
     await this.betRepository.updateProfit(betId, lucro);
-    const result = await this.betRepository.updateResult(betId, resultId as ResultIdEnum);
+    const result = await this.betRepository.updateResult(betId, resultIdEnum);
     return result;
   }
   async finalizeMany(betIds: number[], resultId: ResultIdEnum) {
-      // Buscar stakes/odds para calcular lucros em memória
     const rows = await this.betRepository.findByIds(betIds);
       const idToBet: Record<number, { stake: number; odd: number }> = {};
     for (const row of rows) {
         idToBet[row.id] = { stake: row.stake, odd: row.odd };
       }
 
-    // Calcular lucros para todas as apostas
     const betProfits = betIds.map((id) => {
       const bet = idToBet[id];
-      const lucro = bet ? this.calcularLucro(resultId, bet.stake, bet.odd) : 0;
+      const lucro = bet ? calculateProfit(resultId, bet.stake, bet.odd) : 0;
       return { betId: id, profit: lucro };
     });
 
@@ -112,33 +81,13 @@ export class ApostaService {
 
     const results = betIds.map((id) => {
         const bet = idToBet[id];
-      const lucro = bet ? this.calcularLucro(resultId, bet.stake, bet.odd) : 0;
+      const lucro = bet ? calculateProfit(resultId, bet.stake, bet.odd) : 0;
         return { apostaId: id, resultId, lucro };
       });
 
       return { success: true, updatedCount: results.length, results };
   }
 
-  // Esta query está PERFEITA para o seu requisito, pois calcula o lucro na hora da consulta
-  private get baseQuery() {
-    return `
-      SELECT 
-        a.*,
-        c.nome AS casa_nome,
-        ar.result_id,
-        CASE
-          WHEN ar.result_id = ${ResultIdEnum.GANHOU} THEN a.stake * (a.odd - 1)
-          WHEN ar.result_id = ${ResultIdEnum.PERDEU} THEN -a.stake
-          WHEN ar.result_id IN (${ResultIdEnum.EMPATE}, ${ResultIdEnum.ANULADA}, ${ResultIdEnum.REEMBOLSADA}) THEN 0
-          WHEN ar.result_id IN (${ResultIdEnum.MEIO_GANHO}, ${ResultIdEnum.MEIO_GANHO_2}) THEN (a.stake / 2) * (a.odd - 1) - (a.stake / 2)
-          WHEN ar.result_id = ${ResultIdEnum.MEIO_PERDIDO} THEN -(a.stake / 2)
-          ELSE 0
-        END AS lucro_calculado
-      FROM apostas a
-      LEFT JOIN casas_aposta c ON c.id = a.casa_id
-      LEFT JOIN aposta_results ar ON a.id = ar.aposta_id
-    `;
-  }
 
   async findAllBets() {
     return this.betRepository.findAll();

@@ -4,29 +4,10 @@ import { pool } from '../db/db';
 import { ResultIdEnum } from '../../bet/dto/result-id.enum';
 import { CreateBetDto } from '../../bet/dto/new-bet.dto';
 import { UpdateApostaDto } from '../../bet/dto/update-bet.dto';
+import { BetFilterDto } from '../../bet/dto/bet-filter.dto';
 
 @Injectable()
 export class BetRepository {
-
-  private get baseQuery(): string {
-    return `
-      SELECT 
-        a.*,
-        c.name AS casa_nome,
-        ar.result_id,
-        CASE
-          WHEN ar.result_id = ${ResultIdEnum.GANHOU} THEN a.stake * (a.odd - 1)
-          WHEN ar.result_id = ${ResultIdEnum.PERDEU} THEN -a.stake
-          WHEN ar.result_id IN (${ResultIdEnum.EMPATE}, ${ResultIdEnum.ANULADA}, ${ResultIdEnum.REEMBOLSADA}, ${ResultIdEnum.PENDENTE}) THEN 0
-          WHEN ar.result_id IN (${ResultIdEnum.MEIO_GANHO}, ${ResultIdEnum.MEIO_GANHO_2}) THEN (a.stake / 2) * (a.odd - 1) + (a.stake / 2)
-          WHEN ar.result_id = ${ResultIdEnum.MEIO_PERDIDO} THEN -(a.stake / 2)
-          ELSE 0
-        END AS lucro_calculado
-      FROM bets a
-      LEFT JOIN betting_houses c ON c.id = a.house_id
-      LEFT JOIN bet_results ar ON a.id = ar.bet_id
-    `;
-  }
 
   async create(betData: CreateBetDto): Promise<{ id: number }> {
     const client = await pool.connect();
@@ -48,12 +29,19 @@ export class BetRepository {
       ]);
       const apostaId = resultadoAposta.rows[0].id;
 
+      // Consulta o ID do status PENDING da tabela de status
+      const statusQuery = `
+        SELECT id FROM bet_status WHERE name = 'PENDING'
+      `;
+      const statusResult = await client.query(statusQuery);
+      const pendingStatusId = statusResult.rows[0]?.id || ResultIdEnum.PENDING; // Fallback para o enum caso não encontre
+      
       const queryInserirResultado = `
         INSERT INTO bet_results (bet_id, result_id) VALUES ($1, $2)
       `;
       await client.query(queryInserirResultado, [
         apostaId,
-        ResultIdEnum.PENDENTE,
+        pendingStatusId,
       ]);
 
       await client.query('COMMIT');
@@ -152,17 +140,76 @@ export class BetRepository {
     }
   }
 
-  async findAll(): Promise<any[]> {
-    const query = `${this.baseQuery} ORDER BY a.bet_time DESC`;
-    const resultado = await pool.query(query);
+  async findBets(filters: BetFilterDto = {}): Promise<any[] | any | null> {
+    const queryConditions: string[] = [];
+    const queryParams: any[] = [];
+    let paramIndex = 1;
+
+    if (filters.betId !== undefined) {
+      queryConditions.push(`b.id = $${paramIndex++}`);
+      queryParams.push(filters.betId);
+    }
+    
+    if (filters.startDate !== undefined) {
+      queryConditions.push(`b.bet_time >= $${paramIndex++}`);
+      queryParams.push(filters.startDate);
+    }
+    
+    if (filters.endDate !== undefined) {
+      queryConditions.push(`b.bet_time <= $${paramIndex++}`);
+      queryParams.push(filters.endDate);
+    }
+    
+    if (filters.resultId !== undefined) {
+      queryConditions.push(`br.result_id = $${paramIndex++}`);
+      queryParams.push(filters.resultId);
+    }
+    
+    const whereClause = queryConditions.length > 0
+      ? `WHERE ${queryConditions.join(' AND ')}`
+      : '';
+    
+ 
+    const query = `
+      SELECT
+        b.id,
+        b.game,
+        b.stake,
+        b.odd,
+        b.house_id,
+        b.market,
+        b.sport,
+        b.profit,
+        b.bet_time,
+        br.result_id,
+        r.name AS result_name
+      FROM
+        bets b
+      LEFT JOIN
+        bet_results br ON br.bet_id = b.id
+      LEFT JOIN 
+        results r ON br.result_id = r.id
+      ${whereClause}
+      ORDER BY
+        b.bet_time DESC
+    `;
+    
+    const resultado = await pool.query(query, queryParams);
+    
+    if (filters.betId !== undefined) {
+      return resultado.rowCount > 0 ? resultado.rows[0] : null;
+    }
+    
     return resultado.rows;
+  }
+  
+  // Updated helper methods using the new dynamic filter method
+  async findAll(filters: BetFilterDto = {}): Promise<any[]> {
+    return this.findBets(filters) as Promise<any[]>;
   }
 
   async findById(betId: number): Promise<any | null> {
-    const query = `${this.baseQuery} WHERE a.id = $1`;
-    const params = [betId];
-    const resultado = await pool.query(query, params);
-    return resultado.rowCount > 0 ? resultado.rows[0] : null;
+    return this.findBets({ betId });
   }
 
   async findByIds(betIds: number[]): Promise<any[]> {
