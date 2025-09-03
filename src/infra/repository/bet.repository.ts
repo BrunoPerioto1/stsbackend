@@ -252,29 +252,4 @@ export class BetRepository {
     return resultado.rowCount;
   }
 
-
-  async getTransactionTypeId(typeName: string): Promise<number> {
-    const resultado = await pool.query(
-      'SELECT id FROM transaction_types WHERE name = $1',
-      [typeName]
-    );
-    if (resultado.rowCount === 0) {
-      throw new NotFoundException(`Transaction type '${typeName}' not found.`);
-    }
-    return resultado.rows[0].id;
-  }
-
-  async addTransaction(transactionData: { houseId: number; typeId: number; value: number; description: string }) {
-    await pool.query(
-      'INSERT INTO house_transactions (house_id, transaction_type_id, value, description) VALUES ($1, $2, $3, $4)',
-      [transactionData.houseId, transactionData.typeId, transactionData.value, transactionData.description]
-    );
-  }
-
-  async updateHouseBalance(houseId: number, value: number) {
-    await pool.query(
-      `UPDATE house_balances SET value = value + $1 WHERE house_id = $2`,
-      [value, houseId]
-    );
-  }
 }

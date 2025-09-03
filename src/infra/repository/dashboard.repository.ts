@@ -2,6 +2,8 @@
 import { Injectable } from '@nestjs/common';
 import { pool } from '../db/db';
 import { DashboardQueryDto } from '../../dashboard/dto/dashboard-query.dto';
+import camelcaseKeys from 'camelcase-keys';
+import { DailySummaryPoint, DashboardMetrics } from '../../dashboard/dto/dashboard-metrics.dto';            
 
 @Injectable()
 export class DashboardRepository {
@@ -32,48 +34,66 @@ export class DashboardRepository {
     return { whereClause, params };
   }
 
-  async findBetsWithResults(filters: DashboardQueryDto): Promise<any[]> {
+  async findDailySummary(
+    filters: DashboardQueryDto,
+  ): Promise<DailySummaryPoint[]> {
     const { whereClause, params } = this.buildFilters(filters);
-    
+
     const query = `
       SELECT 
-        b.id,
-        b.stake,
-        b.odd,
-        br.result_id,
-        bh.name as casa_nome
+        DATE(b.bet_time) AS "date",
+        COUNT(b.id) AS "total_bets",
+        COALESCE(SUM(b.profit), 0) AS "profit_day"
       FROM bets b
       LEFT JOIN bet_results br ON b.id = br.bet_id
-      LEFT JOIN betting_houses bh ON b.house_id = bh.id
-      WHERE 1=1 ${whereClause}
-    `;
-
-    const resultado = await pool.query(query, params);
-    return resultado.rows; 
-  }
-
-  async findDailySummary(filters: DashboardQueryDto): Promise<any[]> {
-    const { whereClause, params } = this.buildFilters(filters);
-    
-    const query = `
-      SELECT 
-        DATE(b.bet_time) as data,
-        COUNT(b.id) as total_apostas,
-        COUNT(CASE WHEN br.result_id = 1 THEN 1 END) as apostas_ganhas,
-        COUNT(CASE WHEN br.result_id = 2 THEN 1 END) as apostas_perdidas,
-        COUNT(CASE WHEN br.result_id = 9 THEN 1 END) as apostas_pendentes,
-        COALESCE(SUM(CASE WHEN br.result_id IN (1, 2) THEN b.stake END), 0) as total_investido,
-        COALESCE(SUM(CASE WHEN br.result_id = 1 THEN b.stake * b.odd END), 0) as total_retorno,
-        COALESCE(SUM(CASE WHEN br.result_id = 1 THEN (b.stake * b.odd) - b.stake END), 0) as lucro_dia
-      FROM bets b
-      LEFT JOIN bet_results br ON b.id = br.bet_id
-      LEFT JOIN betting_houses bh ON b.house_id = bh.id
       WHERE 1=1 ${whereClause}
       GROUP BY DATE(b.bet_time)
       ORDER BY DATE(b.bet_time) ASC
     `;
 
     const resultado = await pool.query(query, params);
-    return resultado.rows;
+    return camelcaseKeys(resultado.rows);
+  }
+
+  async findDashboardMetrics(filters: DashboardQueryDto): Promise<DashboardMetrics | null> {
+    const { whereClause, params } = this.buildFilters(filters);
+
+    const query = `
+      WITH bet_stats AS (
+        SELECT 
+          COUNT(b.id) as total_bets,
+          COUNT(CASE WHEN br.result_id = 1 THEN 1 END) as won_bets,
+          COUNT(CASE WHEN br.result_id = 2 THEN 1 END) as lost_bets,
+          COUNT(CASE WHEN br.result_id = 9 THEN 1 END) as pending_bets,
+          COUNT(CASE WHEN br.result_id = 3 THEN 1 END) as canceled_bets,
+          COALESCE(AVG(b.stake), 0) as average_stake,
+          COALESCE(AVG(b.odd), 0) as average_odd,
+          COALESCE(SUM(b.stake), 0) as total_staked,
+          COALESCE(SUM(b.profit), 0) as total_profit
+        FROM bets b
+        LEFT JOIN bet_results br ON b.id = br.bet_id
+        WHERE 1=1 ${whereClause}
+      )
+      SELECT
+        total_bets as "totalBets",
+        won_bets as "wonBets",
+        lost_bets as "lostBets",
+        pending_bets as "pendingBets",
+        average_stake as "averageStake",
+        average_odd as "averageOdd",
+        canceled_bets as "canceledBets",
+        total_staked as "totalStaked",
+        total_profit as "totalProfit",
+        CASE WHEN total_staked > 0 
+             THEN ROUND((total_profit / total_staked) * 100, 2)
+             ELSE 0 END as "roi",
+        CASE WHEN (won_bets + lost_bets) > 0
+             THEN ROUND((won_bets::numeric / (won_bets + lost_bets)) * 100, 2)
+             ELSE 0 END as "hitRate"
+      FROM bet_stats;
+    `;
+
+    const result = await pool.query(query, params);
+    return result.rows.length ? camelcaseKeys(result.rows[0]) as DashboardMetrics : null;
   }
 }
