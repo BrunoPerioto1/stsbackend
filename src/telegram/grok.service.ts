@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import Groq from 'groq-sdk';
 import * as dotenv from 'dotenv';
-import { CreateBetDto } from '../bet/dto/new-bet.dto';
+import { CreateBetDto } from '../bet/dto/bet.dto';
 dotenv.config();
 
 @Injectable()
@@ -48,7 +48,7 @@ NUNCA envolva o JSON em blocos de código (sem crases).
 
 Regras de parsing:
 
-"house_id": OBRIGATÓRIO! Usar mapeamento fornecido (retorne o número do ID).
+"houseId": OBRIGATÓRIO! Usar mapeamento fornecido (retorne o número do ID).
 "game": texto após 🆚.
 "sport": texto após ⚽️.
 "market": texto após 📌.

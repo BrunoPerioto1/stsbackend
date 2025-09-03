@@ -1,4 +1,4 @@
-import { IsOptional, IsNumber, IsDate } from 'class-validator';
+import { IsOptional, IsNumber, IsDate, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class BetFilterDto {
@@ -19,4 +19,8 @@ export class BetFilterDto {
   @IsOptional()
   @IsNumber()
   resultId?: number;
+ 
+  @IsOptional()
+  @IsString()
+  market?: string;
 }

@@ -15,17 +15,20 @@ import {
   ApiOperation,
   ApiResponse,
   ApiTags,
+  ApiQuery,
   ApiBadRequestResponse,
   ApiNotFoundResponse,
   ApiNoContentResponse,
 } from '@nestjs/swagger';
 import { ApostaService } from './bet.service';
-import { CreateBetDto } from './dto/new-bet.dto';
-import { UpdateApostaDto } from './dto/update-bet.dto';
+import { CreateBetDto } from './dto/bet.dto';
+import { UpdateApostaDto } from '../bet/dto/bet.dto';
 import {
   FinalizarApostaDto,
   FinalizarMultiplasDto,
-} from './dto/end-bet.dto';
+  BetItem
+} from './dto/bet.dto';
+import { BetFilterDto } from './dto/bet-filter.dto';
 
 @ApiTags('Apostas')
 @Controller('bets')
@@ -48,42 +51,36 @@ export class ApostaController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Lista todas as apostas' })
+  @ApiOperation({ summary: 'Lista e filtra as apostas' })
+  @ApiQuery({ name: 'betId', required: false, type: Number, description: 'Filtra por ID da aposta.' })
+  @ApiQuery({ name: 'startDate', required: false, type: String, description: 'Filtra por data inicial (ex: 2025-09-03).' })
+  @ApiQuery({ name: 'endDate', required: false, type: String, description: 'Filtra por data final (ex: 2025-09-04).' })
+  @ApiQuery({ name: 'resultId', required: false, type: Number, description: 'Filtra por ID do resultado.' })
+  @ApiQuery({ name: 'market', required: false, type: String, description: 'Filtra por nome do mercado (busca parcial).' })
   @ApiResponse({
     status: HttpStatus.OK,
     description: 'Lista de apostas retornada com sucesso.',
-    type: [CreateBetDto],
+    type: [BetItem],
   })
-  async listarTodas() {
-    return this.apostaService.findAllBets();
-  }
-
-  @Get('houses/list')
-  @ApiOperation({ summary: 'Lista casas únicas para filtro' })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'Lista de casas retornada com sucesso.',
-    type: [String],
-  })
-  async listarCasas() {
-    return this.apostaService.findUniqueHouses();
+  async findBets(@Query() filters: BetFilterDto) {
+    return this.apostaService.findBets(filters);
   }
 
   @Put('finalize-multiple')
   @ApiOperation({ summary: 'Finaliza múltiplas apostas' })
-  @ApiResponse({
+ @ApiResponse({
     status: HttpStatus.OK,
-    description: 'Apostas finalizadas com sucesso.',
-    type: FinalizarMultiplasDto,
+    description: 'Aposta finalizada com sucesso.',
   })
   @ApiBadRequestResponse({
-    description: 'Dados de entrada inválidos.',
+    description: 'Dados de entrada inválidos ou ID da aposta não é válido.',
   })
+  @ApiNotFoundResponse({
+    description: 'Aposta não encontrada.',
+  })
+  
   async finalizarMultiplas(@Body() body: FinalizarMultiplasDto) {
-    console.log('Controller - Dados recebidos para finalizar múltiplas:', body);
     const { betIds, resultId } = body;
-    console.log('Controller - betIds:', betIds);
-    console.log('Controller - resultId:', resultId);
     return this.apostaService.finalizeMany(betIds, resultId);
   }
 
@@ -92,7 +89,6 @@ export class ApostaController {
   @ApiResponse({
     status: HttpStatus.OK,
     description: 'Aposta finalizada com sucesso.',
-    type: FinalizarApostaDto,
   })
   @ApiBadRequestResponse({
     description: 'Dados de entrada inválidos ou ID da aposta não é válido.',
@@ -100,6 +96,7 @@ export class ApostaController {
   @ApiNotFoundResponse({
     description: 'Aposta não encontrada.',
   })
+  
   async finalizar(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: FinalizarApostaDto,
@@ -120,19 +117,19 @@ export class ApostaController {
     return this.apostaService.deleteManyBets(body.apostaIds);
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Busca uma aposta por ID' })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'Aposta encontrada com sucesso.',
-    type: CreateBetDto,
-  })
-  @ApiNotFoundResponse({
-    description: 'Aposta não encontrada.',
-  })
-  async buscar(@Param('id', ParseIntPipe) id: number) {
-    return this.apostaService.findBetById(id);
-  }
+  // @Get(':id')
+  // @ApiOperation({ summary: 'Busca uma aposta por ID' })
+  // @ApiResponse({
+  //   status: HttpStatus.OK,
+  //   description: 'Aposta encontrada com sucesso.',
+  //   type: CreateBetDto,
+  // })
+  // @ApiNotFoundResponse({
+  //   description: 'Aposta não encontrada.',
+  // })
+  // async buscar(@Param('id', ParseIntPipe) id: number) {
+  //   return this.apostaService.findBetById(id);
+  // }
 
   @Put(':id')
   @ApiOperation({ summary: 'Atualiza uma aposta existente' })

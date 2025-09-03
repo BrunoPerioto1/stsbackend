@@ -1,9 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-
+import camelcaseKeys from 'camelcase-keys';
 import { pool } from '../db/db'; 
 import { ResultIdEnum } from '../../bet/dto/result-id.enum';
-import { CreateBetDto } from '../../bet/dto/new-bet.dto';
-import { UpdateApostaDto } from '../../bet/dto/update-bet.dto';
+import { CreateBetDto, BetItem } from '../../bet/dto/bet.dto';
+import { UpdateApostaDto } from '../../bet/dto/bet.dto';
 import { BetFilterDto } from '../../bet/dto/bet-filter.dto';
 
 @Injectable()
@@ -14,38 +14,29 @@ export class BetRepository {
     try {
       await client.query('BEGIN');
 
+      // Insere a aposta
       const queryInserirAposta = `
-        INSERT INTO bets (game, stake, odd, house_id, market, sport)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO bets (game, stake, odd, house_id, market, sport, profit)
+        VALUES ($1, $2, $3, $4, $5, $6, 0)
         RETURNING id
       `;
       const resultadoAposta = await client.query(queryInserirAposta, [
         betData.game,
         betData.stake,
         betData.odd,
-        betData.house_id,
+        betData.houseId,
         betData.market,
         betData.sport,
       ]);
       const apostaId = resultadoAposta.rows[0].id;
 
-      // Consulta o ID do status PENDING da tabela de status
-      const statusQuery = `
-        SELECT id FROM bet_status WHERE name = 'PENDING'
-      `;
-      const statusResult = await client.query(statusQuery);
-      const pendingStatusId = statusResult.rows[0]?.id || ResultIdEnum.PENDING; // Fallback para o enum caso não encontre
-      
       const queryInserirResultado = `
-        INSERT INTO bet_results (bet_id, result_id) VALUES ($1, $2)
+        INSERT INTO bet_results (bet_id) VALUES ($1)
       `;
-      await client.query(queryInserirResultado, [
-        apostaId,
-        pendingStatusId,
-      ]);
+      await client.query(queryInserirResultado, [apostaId]);
 
       await client.query('COMMIT');
-      return { id: apostaId };
+      return camelcaseKeys({ id: apostaId });
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
@@ -61,7 +52,8 @@ export class BetRepository {
 
     for (const chave in updateData) {
       if ((updateData as any)[chave] !== undefined) {
-        camposAtualizar.push(`${chave} = $${indiceParametro++}`);
+        const snakeKey = chave.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+        camposAtualizar.push(`${snakeKey} = $${indiceParametro++}`);
         valoresAtualizar.push((updateData as any)[chave]);
       }
     }
@@ -81,57 +73,36 @@ export class BetRepository {
     `;
 
     const resultado = await pool.query(queryAtualizar, valoresAtualizar);
-    return resultado.rows[0];
+    return camelcaseKeys(resultado.rows[0]);
   }
 
-  async updateResult(betId: number, resultId: ResultIdEnum): Promise<any> {
-    const queryResultado = `
-      UPDATE bet_results 
-      SET result_id = $1, updated_at = NOW()
-      WHERE bet_id = $2
-      RETURNING *
-    `;
-    const params = [resultId, betId];
-    const resultado = await pool.query(queryResultado, params);
-    return resultado.rows[0];
-  }
-
-  async updateProfit(betId: number, profit: number): Promise<any> {
-    const queryAtualizar = `
-      UPDATE bets 
-      SET profit = $1, updated_at = NOW()
-      WHERE id = $2
-      RETURNING *
-    `;
-    const params = [profit, betId];
-    const resultado = await pool.query(queryAtualizar, params);
-    return resultado.rows[0];
-  }
-
-  async updateMultipleResults(betIds: number[], resultId: ResultIdEnum): Promise<number> {
-    const resultado = await pool.query(
-      'UPDATE bet_results SET result_id = $1 WHERE bet_id = ANY($2)',
-      [resultId, betIds],
-    );
-    return resultado.rowCount;
-  }
-
-  async updateMultipleProfits(betProfits: { betId: number; profit: number }[]): Promise<number> {
+  async finalizeBetUpdate(betId: number, resultId: ResultIdEnum, profit: number): Promise<any> {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      
-      let totalUpdated = 0;
-      for (const { betId, profit } of betProfits) {
-        const resultado = await client.query(
-          'UPDATE bets SET profit = $1, updated_at = NOW() WHERE id = $2',
-          [profit, betId]
-        );
-        totalUpdated += resultado.rowCount;
-      }
-      
+
+      const queryResult = `
+        UPDATE bet_results
+        SET result_id = $1, updated_at = NOW()
+        WHERE bet_id = $2
+        RETURNING *;
+      `;
+      const resResult = await client.query(queryResult, [resultId, betId]);
+
+      const queryProfit = `
+        UPDATE bets
+        SET profit = $1, updated_at = NOW()
+        WHERE id = $2
+        RETURNING *;
+      `;
+      const resProfit = await client.query(queryProfit, [profit, betId]);
+
       await client.query('COMMIT');
-      return totalUpdated;
+
+      return {
+        result: camelcaseKeys(resResult.rows[0]),
+        bet: camelcaseKeys(resProfit.rows[0]),
+      };
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
@@ -140,7 +111,51 @@ export class BetRepository {
     }
   }
 
-  async findBets(filters: BetFilterDto = {}): Promise<any[] | any | null> {
+  
+  async finalizeMultipleBets(betProfits: { betId: number; resultId: ResultIdEnum; profit: number }[]): Promise<any> {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      
+      const results: Array<{betId: number; result: any; bet: any}> = [];
+      
+      for (const { betId, resultId, profit } of betProfits) {
+        const resultQuery = `
+          UPDATE bet_results
+          SET result_id = $1, updated_at = NOW()
+          WHERE bet_id = $2
+          RETURNING *;
+        `;
+        const resultRes = await client.query(resultQuery, [resultId, betId]);
+        
+        const profitQuery = `
+          UPDATE bets
+          SET profit = $1, updated_at = NOW()
+          WHERE id = $2
+          RETURNING *;
+        `;
+        const profitRes = await client.query(profitQuery, [profit, betId]);
+        
+        results.push({
+          betId,
+          result: resultRes.rows[0],
+          bet: profitRes.rows[0]
+        });
+      }
+      
+      await client.query('COMMIT');
+      
+      return camelcaseKeys(results, { deep: true });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+  
+
+  async findBets(filters: BetFilterDto = {}): Promise<BetItem[] | BetItem | null> {
     const queryConditions: string[] = [];
     const queryParams: any[] = [];
     let paramIndex = 1;
@@ -164,12 +179,15 @@ export class BetRepository {
       queryConditions.push(`br.result_id = $${paramIndex++}`);
       queryParams.push(filters.resultId);
     }
-    
+    if (filters.market !== undefined) {
+      queryConditions.push(`b.market ILIKE $${paramIndex++}`);
+      queryParams.push(`%${filters.market}%`);
+    }
+
     const whereClause = queryConditions.length > 0
       ? `WHERE ${queryConditions.join(' AND ')}`
       : '';
     
- 
     const query = `
       SELECT
         b.id,
@@ -179,6 +197,7 @@ export class BetRepository {
         b.house_id,
         b.market,
         b.sport,
+        bh.name as house_name,
         b.profit,
         b.bet_time,
         br.result_id,
@@ -187,29 +206,29 @@ export class BetRepository {
         bets b
       LEFT JOIN
         bet_results br ON br.bet_id = b.id
-      LEFT JOIN 
+      LEFT JOIN
+        betting_houses bh ON bh.id = b.house_id
+      LEFT JOIN
         results r ON br.result_id = r.id
       ${whereClause}
       ORDER BY
         b.bet_time DESC
     `;
-    
-    const resultado = await pool.query(query, queryParams);
-    
+
+    const result = await pool.query(query, queryParams);
+
     if (filters.betId !== undefined) {
-      return resultado.rowCount > 0 ? resultado.rows[0] : null;
+      return result.rowCount > 0 ? camelcaseKeys(result.rows[0]) : null;
     }
-    
-    return resultado.rows;
+
+    return camelcaseKeys(result.rows);
   }
   
-  // Updated helper methods using the new dynamic filter method
-  async findAll(filters: BetFilterDto = {}): Promise<any[]> {
-    return this.findBets(filters) as Promise<any[]>;
-  }
 
-  async findById(betId: number): Promise<any | null> {
-    return this.findBets({ betId });
+
+  async findById(betId: number): Promise<any> {
+    const result = await pool.query('SELECT id, stake , odd FROM bets WHERE id = $1', [betId]);
+    return result.rowCount > 0 ? camelcaseKeys(result.rows[0]) : null;
   }
 
   async findByIds(betIds: number[]): Promise<any[]> {
@@ -217,7 +236,7 @@ export class BetRepository {
       'SELECT id, stake, odd FROM bets WHERE id = ANY($1)',
       [betIds],
     );
-    return resultado.rows;
+    return camelcaseKeys(resultado.rows);
   }
 
   async delete(betId: number): Promise<boolean> {
@@ -233,10 +252,6 @@ export class BetRepository {
     return resultado.rowCount;
   }
 
-  async houseExists(houseId: number): Promise<boolean> {
-    const checagem = await pool.query('SELECT 1 FROM betting_houses WHERE id = $1', [houseId]);
-    return checagem.rowCount > 0;
-  }
 
   async getTransactionTypeId(typeName: string): Promise<number> {
     const resultado = await pool.query(

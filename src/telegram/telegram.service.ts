@@ -3,7 +3,7 @@ import { Telegraf } from 'telegraf';
 import * as dotenv from 'dotenv';
 import { GrokService } from './grok.service';
 import { ApostaService } from '../bet/bet.service';
-import { CreateBetDto } from '../bet/dto/new-bet.dto';
+import { CreateBetDto } from '../bet/dto/bet.dto';
 dotenv.config();
 
 const HOUSE_BY_ID: Record<number, string> = {
@@ -246,7 +246,7 @@ export class TelegramService implements OnModuleInit {
         const jsonResult = await this.grokService.parseBetMessage(userMessage);
 
         // Normalização e validação
-        const house_id = Number(jsonResult.house_id);
+        const houseId = Number(jsonResult.houseId);
         const odd = Number(jsonResult.odd);
         const game = String(jsonResult.game ?? '').trim();
         const market = String(jsonResult.market ?? '').trim();
@@ -265,8 +265,8 @@ export class TelegramService implements OnModuleInit {
         // Ignorar qualquer valor de 💰 para stake (não altera stake, apenas garantimos)
         // Se desejar, poderíamos logar se houver 💰 na mensagem
 
-        if (!Number.isFinite(house_id) || !HOUSE_BY_ID[house_id]) {
-          throw new Error('casa_id inválido ou não mapeado');
+        if (!Number.isFinite(houseId) || !HOUSE_BY_ID[houseId]) {
+          throw new Error('houseId inválido ou não mapeado');
         }
         if (!Number.isFinite(stake) || stake <= 0) {
           throw new Error('stake inválida');
@@ -288,7 +288,7 @@ export class TelegramService implements OnModuleInit {
           game,
           stake: Number(stake.toFixed(2)),
           odd,
-          house_id,
+          houseId,
           market,
           sport,
         };
