@@ -1,24 +1,18 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { CreateHouseDto } from './dto/new-house.dto';
-import { UpdateHouseDto } from './dto/update-house.dto';
-import { CreateTransacaoDto } from '../infra/dto/new-transation.dto';
+import { CreateHouseDto } from './dto/house.dto';
+import { UpdateHouseDto } from './dto/house.dto';
 import { HouseRepository, HouseBalance } from '../infra/repository/house.repository';
-import { HouseMetricsDto } from 'src/house/dto/house-metrics.dto';
+import { HouseDto } from 'src/house/dto/house.dto';
 
 @Injectable()
 export class HouseService {
   constructor(private readonly houseRepository: HouseRepository) {}
 
-  async createHouse(createHouseDto: CreateHouseDto) {
-    return this.houseRepository.create(createHouseDto);
-  }
-  async getHouseMetrics(): Promise<HouseMetricsDto> {
+  
+  async getHouseMetrics(): Promise<HouseDto> {
     return this.houseRepository.findHouseMetrics();
   }
 
-  async findAllHouses() {
-    return this.houseRepository.findAll();
-  }
 
   async findHouseById(id: number) {
     const house = await this.houseRepository.findById(id);
@@ -28,26 +22,8 @@ export class HouseService {
     return house;
   }
 
-  async updateHouse(id: number, updateHouseDto: UpdateHouseDto) {
-    const updated = await this.houseRepository.update(id, updateHouseDto);
-    if (!updated) {
-      throw new NotFoundException(`House with ID ${id} not found`);
-    }
-    return updated;
-  }
 
-  async deleteHouse(id: number) {
-    const deleted = await this.houseRepository.delete(id);
-    if (!deleted) {
-      throw new NotFoundException(`House with ID ${id} not found`);
-    }
-    return { success: true, message: `House ${id} deleted successfully` };
-  }
 
-  async resolveHouseByText(text: string): Promise<number | null> {
-    const fuzzyHouse = await this.houseRepository.findByName(text);
-    return fuzzyHouse?.id || null;
-  }
 
   async calculateHouseBalance(houseId: number): Promise<HouseBalance> {
     const [betsResult, transactionsResult] = await Promise.all([
@@ -87,7 +63,6 @@ export class HouseService {
       this.houseRepository.getTransactionsData()
     ]);
 
-    // Criar um mapa de transações por house_id
     const transactionsMap = new Map();
     transactionsResult.forEach(row => {
       transactionsMap.set(row.house_id, row.total_transactions);
@@ -117,27 +92,6 @@ export class HouseService {
     });
   }
 
-  async createTransaction(createTransactionDto: CreateTransacaoDto) {
-    // Validate if house exists
-    const house = await this.houseRepository.findById(createTransactionDto.house_id);
-    if (!house) {
-      throw new NotFoundException(`House with ID ${createTransactionDto.house_id} not found`);
-    }
-
-    // Validate withdrawal amount if it's a withdrawal transaction (type_id = 2)
-    if (createTransactionDto.transaction_type_id === 2) {
-      const currentBalance = await this.calculateHouseBalance(createTransactionDto.house_id);
-      const withdrawalAmount = Math.abs(createTransactionDto.valor); // Saques são negativos
-      
-      if (currentBalance.house_balance < withdrawalAmount) {
-        throw new NotFoundException(
-          `Saldo insuficiente para saque. Saldo atual: R$ ${currentBalance.house_balance.toFixed(2)}, Valor solicitado: R$ ${withdrawalAmount.toFixed(2)}`
-        );
-      }
-    }
-
-    return this.houseRepository.createTransaction(createTransactionDto);
-  }
 
   async findTransactionsByHouse(houseId: number) {
     const house = await this.houseRepository.findById(houseId);
@@ -148,9 +102,6 @@ export class HouseService {
     return this.houseRepository.findTransactionsByHouse(houseId);
   }
 
-  async findAllTransactions() {
-    return this.houseRepository.findAllTransactions();
-  }
 
   async findHouseHistory(houseId: number) {
     const house = await this.houseRepository.findById(houseId);

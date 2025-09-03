@@ -1,8 +1,7 @@
 import { IsNumber, IsString, IsOptional, IsBoolean } from "class-validator";
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty, OmitType, PickType } from "@nestjs/swagger";
 import { PartialType } from '@nestjs/mapped-types';
 
-// DTO principal unificado para House
 export class HouseDto {
   @ApiProperty({ description: "ID da casa de apostas", example: 1 })
   @IsNumber()
@@ -70,7 +69,6 @@ export class HouseDto {
   totalHousesUsed: number;
 }
 
-// DTO para criação
 export class CreateHouseDto {
   @ApiProperty({ description: "Nome da casa de apostas", example: "Bet365", required: true })
   @IsString()
@@ -83,5 +81,7 @@ export class CreateHouseDto {
   active?: boolean;
 }
 
-// DTO para atualização
 export class UpdateHouseDto extends PartialType(CreateHouseDto) {}
+
+export class FindByIdDto extends PickType(HouseDto, ['houseId', 'houseName', 'active']) {}
+

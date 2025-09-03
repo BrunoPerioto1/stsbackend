@@ -291,6 +291,18 @@ INSERT INTO betting_houses (id, name) VALUES
 (181, 'BETPIX365'),
 (182, 'VAIDEBET');
 
+criar tabela de results que nao tem ainda
+CREATE TABLE IF NOT EXISTS results (
+  id SERIAL PRIMARY KEY,
+ name VARCHAR(50) NOT NULL UNIQUE
+);
+
+insert into results (name) values
+('WON'),
+('LOST'),
+('PENDING'),
+('CANCELADAED'),
+
 
 -- Grant permissions (adjust as needed)
 -- GRANT ALL PRIVILEGES ON DATABASE betting_tracker TO your_user;
