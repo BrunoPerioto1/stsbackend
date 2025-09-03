@@ -31,9 +31,6 @@ export class HouseController {
     return this.houseService.getHouseMetrics();
   }
 
-
-
-
   @Get(':id')
   @ApiOperation({ summary: 'Busca uma casa por ID' })
   @ApiResponse({ status: 200, description: 'Casa encontrada com sucesso.' })
@@ -50,12 +47,4 @@ export class HouseController {
     return this.houseService.calculateHouseBalance(+id);
   }
 
-
-  @Get(':id/history')
-  @ApiOperation({ summary: 'Busca histórico completo de uma casa' })
-  @ApiResponse({ status: 200, description: 'Histórico retornado com sucesso.' })
-  @ApiNotFoundResponse({ description: 'Casa não encontrada.' })
-  findHouseHistory(@Param('id') id: string) {
-    return this.houseService.findHouseHistory(+id);
-  }
 }
