@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import Groq from 'groq-sdk';
 import * as dotenv from 'dotenv';
-import { CreateBetDto } from '../infra/dto/new-bet.dto';
+import { CreateBetDto } from '../bet/dto/new-bet.dto';
 dotenv.config();
 
 @Injectable()

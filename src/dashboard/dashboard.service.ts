@@ -1,7 +1,7 @@
 // src/dashboard/dashboard.service.ts
 import { Injectable } from '@nestjs/common';
 import { DashboardRepository } from '../infra/repository/dashboard.repository';
-import { DashboardQueryDto } from '../infra/dto/dashboard-query.dto';
+import { DashboardQueryDto } from './dto/dashboard-query.dto';
 
 // As interfaces e DTOs podem ser mantidos aqui ou em um arquivo de tipos separado.
 export interface DashboardMetrics {

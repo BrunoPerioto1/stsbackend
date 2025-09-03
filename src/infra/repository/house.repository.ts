@@ -1,10 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { pool } from '../db/db'; 
-import { CreateHouseDto } from '../dto/new-house.dto';
-import { UpdateHouseDto } from '../dto/update-house.dto';
+import { CreateHouseDto } from '../../house/dto/new-house.dto';
+import { UpdateHouseDto } from '../../house/dto/update-house.dto';
 import { CreateTransacaoDto } from '../dto/new-transation.dto';
-import { HouseMetricsDto } from '../dto/house-metrics.dto';
-import { HouseBalanceDto } from '../dto/house-balance.dto';
+import { HouseMetricsDto } from '../../house/dto/house-metrics.dto';
+import { HouseBalanceDto } from '../../house/dto/house-balance.dto';
 
 export interface HouseBalance {
   house_id: number;
@@ -98,6 +98,16 @@ export class HouseRepository {
         COUNT(b.id) as total_bets,
         COALESCE(SUM(b.stake), 0) as total_stake,
         COALESCE(SUM(b.profit), 0) as total_bet_profit,
+        -- 🔑 cálculo do retorno real das apostas
+        COALESCE(SUM(
+          CASE 
+            WHEN br.result_id = 1 THEN b.stake + b.profit   
+            WHEN br.result_id = 2 THEN b.profit             
+            WHEN br.result_id = 9 THEN b.stake              
+            WHEN br.result_id = 4 THEN b.stake              
+            ELSE 0                                          
+          END
+        ), 0) as total_return,
         COUNT(CASE WHEN br.result_id = 9 THEN 1 END) as pending_bets,
         COUNT(CASE WHEN br.result_id = 1 THEN 1 END) as won_bets,
         COUNT(CASE WHEN br.result_id = 2 THEN 1 END) as lost_bets
@@ -232,20 +242,26 @@ export class HouseRepository {
     const result = await pool.query(query, [houseId]);
     return result.rows;
   }
- async findHouseMetrics(): Promise<HouseMetricsDto> {
+   async findHouseMetrics(): Promise<HouseMetricsDto> {
   const query = `
     WITH house_metrics AS (
       SELECT 
-        -- Total investido (soma de todas as stakes)
         COALESCE(SUM(b.stake), 0) as total_invested,
         
-        -- Total de apostas
         COUNT(b.id) as total_bets,
         
-        -- Lucro total das apostas
         COALESCE(SUM(b.profit), 0) as total_bet_profit,
         
-        -- Saldo das transações (depósitos - saques + ajustes)
+        COALESCE(SUM(
+          CASE 
+            WHEN br.result_id = 1 THEN b.stake + b.profit   
+            WHEN br.result_id = 2 THEN b.profit             
+            WHEN br.result_id = 9 THEN b.stake              
+            WHEN br.result_id = 4 THEN b.stake              
+            ELSE 0                                          
+          END
+        ), 0) as total_return,
+        
         COALESCE(SUM(
           CASE 
             WHEN tt.name = 'DEPOSIT' THEN ht.value
@@ -257,6 +273,7 @@ export class HouseRepository {
         
       FROM betting_houses bh
       LEFT JOIN bets b ON bh.id = b.house_id
+      LEFT JOIN bet_results br ON b.id = br.bet_id
       LEFT JOIN house_transactions ht ON bh.id = ht.house_id
       LEFT JOIN transaction_types tt ON ht.transaction_type_id = tt.id
       WHERE bh.is_active = true
@@ -269,7 +286,7 @@ export class HouseRepository {
     )
     SELECT 
       hm.total_invested as "totalInvested",
-      (hm.total_invested + hm.transaction_balance + hm.total_bet_profit) as "currentBalance",
+      (hm.total_return + hm.transaction_balance) as "currentBalance",
       hm.total_bet_profit as "totalProfit",
       hm.total_bets as "totalBets",
       th.total_houses_used as "totalHousesUsed"
@@ -290,6 +307,15 @@ async getAllHousesBalanceWithCalculations(houseId?: number): Promise<HouseBalanc
         COUNT(b.id) as total_bets,
         COALESCE(SUM(b.stake), 0) as total_stake,
         COALESCE(SUM(b.profit), 0) as total_bet_profit,
+        COALESCE(SUM(
+          CASE 
+            WHEN br.result_id = 1 THEN b.stake + b.profit   
+            WHEN br.result_id = 2 THEN b.profit             
+            WHEN br.result_id = 9 THEN b.stake
+            WHEN br.result_id = 4 THEN b.stake
+            ELSE 0                                          
+          END
+        ), 0) as total_return,
         COUNT(CASE WHEN br.result_id = 9 THEN 1 END) as pending_bets,
         COUNT(CASE WHEN br.result_id = 1 THEN 1 END) as won_bets,
         COUNT(CASE WHEN br.result_id = 2 THEN 1 END) as lost_bets
@@ -338,8 +364,8 @@ async getAllHousesBalanceWithCalculations(houseId?: number): Promise<HouseBalanc
       hb.total_stake as "totalStake",
       hb.total_bet_profit as "totalBetProfit",
       COALESCE(ht.total_transactions, 0) as "totalTransactions",
-      (hb.total_stake + hb.total_bet_profit + COALESCE(ht.total_transactions, 0)) as "realHouseBalance",
-      GREATEST(0, (hb.total_stake + hb.total_bet_profit + COALESCE(ht.total_transactions, 0))) as "houseBalance",
+      (hb.total_return + COALESCE(ht.total_transactions, 0)) as "realHouseBalance",
+      GREATEST(0, (hb.total_return + COALESCE(ht.total_transactions, 0))) as "houseBalance",
       hb.pending_bets as "pendingBets",
       hb.won_bets as "wonBets",
       hb.lost_bets as "lostBets"

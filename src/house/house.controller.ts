@@ -8,8 +8,8 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { HouseService } from './house.service';
-import { CreateHouseDto } from '../infra/dto/new-house.dto';
-import { UpdateHouseDto } from '../infra/dto/update-house.dto';
+import { CreateHouseDto } from './dto/new-house.dto';
+import { UpdateHouseDto } from './dto/update-house.dto';
 import { CreateTransacaoDto } from '../infra/dto/new-transation.dto';
 import { InsufficientBalanceErrorDto } from '../infra/dto/error-response.dto';
 
@@ -47,7 +47,7 @@ export class HouseController {
   @ApiOperation({ summary: 'Calcula saldos de casas com apostas registradas' })
   @ApiResponse({
     status: 200,
-    description: 'Saldos calculados com sucesso. Retorna apenas casas que tiveram pelo menos uma aposta registrada. O house_balance é calculado como total_stake + total_bet_profit + total_transactions.',
+    description: 'Saldos calculados com sucesso. Retorna apenas casas que tiveram pelo menos uma aposta registrada. O house_balance é calculado como total_return (retorno real das apostas) + total_transactions.',
   })
   calculateAllHousesBalance() {
     return this.houseService.calculateAllHousesBalance();

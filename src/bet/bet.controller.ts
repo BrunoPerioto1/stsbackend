@@ -20,12 +20,12 @@ import {
   ApiNoContentResponse,
 } from '@nestjs/swagger';
 import { ApostaService } from './bet.service';
-import { CreateBetDto } from '../infra/dto/new-bet.dto';
-import { UpdateApostaDto } from '../infra/dto/update-bet.dto';
+import { CreateBetDto } from './dto/new-bet.dto';
+import { UpdateApostaDto } from './dto/update-bet.dto';
 import {
   FinalizarApostaDto,
   FinalizarMultiplasDto,
-} from '../infra/dto/end-bet.dto';
+} from './dto/end-bet.dto';
 
 @ApiTags('Apostas')
 @Controller('bets')

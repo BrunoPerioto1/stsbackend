@@ -1,9 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { CreateHouseDto } from '../infra/dto/new-house.dto';
-import { UpdateHouseDto } from '../infra/dto/update-house.dto';
+import { CreateHouseDto } from './dto/new-house.dto';
+import { UpdateHouseDto } from './dto/update-house.dto';
 import { CreateTransacaoDto } from '../infra/dto/new-transation.dto';
 import { HouseRepository, HouseBalance } from '../infra/repository/house.repository';
-import { HouseMetricsDto } from 'src/infra/dto/house-metrics.dto';
+import { HouseMetricsDto } from 'src/house/dto/house-metrics.dto';
 
 @Injectable()
 export class HouseService {
@@ -61,7 +61,7 @@ export class HouseService {
 
     const betsData = betsResult[0];
     const totalTransactions = transactionsResult.length > 0 ? transactionsResult[0].total_transactions : 0;
-    const realHouseBalance = Number(betsData.total_stake) + Number(betsData.total_bet_profit) + Number(totalTransactions);
+    const realHouseBalance = Number(betsData.total_return) + Number(totalTransactions);
     
     // house_balance nunca pode ser negativo, mostra 0 se for negativo
     const houseBalance = Math.max(0, realHouseBalance);
@@ -96,7 +96,7 @@ export class HouseService {
     // Combinar os resultados
     return betsResult.map(betsData => {
       const totalTransactions = transactionsMap.get(betsData.house_id) || 0;
-      const realHouseBalance = Number(betsData.total_stake) + Number(betsData.total_bet_profit) + Number(totalTransactions);
+      const realHouseBalance = Number(betsData.total_return) + Number(totalTransactions);
       
       // house_balance nunca pode ser negativo, mostra 0 se for negativo
       const houseBalance = Math.max(0, realHouseBalance);

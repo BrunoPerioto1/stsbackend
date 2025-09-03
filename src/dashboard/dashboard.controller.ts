@@ -1,7 +1,7 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { DashboardService } from './dashboard.service';
-import { DashboardQueryDto } from '../infra/dto/dashboard-query.dto';
+import { DashboardQueryDto } from './dto/dashboard-query.dto';
 
 @ApiTags('Dashboard')
 @Controller('dashboard')

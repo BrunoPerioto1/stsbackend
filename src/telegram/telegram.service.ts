@@ -3,7 +3,7 @@ import { Telegraf } from 'telegraf';
 import * as dotenv from 'dotenv';
 import { GrokService } from './grok.service';
 import { ApostaService } from '../bet/bet.service';
-import { CreateBetDto } from '../infra/dto/new-bet.dto';
+import { CreateBetDto } from '../bet/dto/new-bet.dto';
 dotenv.config();
 
 const HOUSE_BY_ID: Record<number, string> = {

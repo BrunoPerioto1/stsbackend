@@ -1,9 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 
 import { pool } from '../db/db'; 
-import { ResultIdEnum } from '../dto/result-id.enum';
-import { CreateBetDto } from '../dto/new-bet.dto';
-import { UpdateApostaDto } from '../dto/update-bet.dto';
+import { ResultIdEnum } from '../../bet/dto/result-id.enum';
+import { CreateBetDto } from '../../bet/dto/new-bet.dto';
+import { UpdateApostaDto } from '../../bet/dto/update-bet.dto';
 
 @Injectable()
 export class BetRepository {

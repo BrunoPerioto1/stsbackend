@@ -1,7 +1,7 @@
 // src/dashboard/dashboard.repository.ts
 import { Injectable } from '@nestjs/common';
 import { pool } from '../db/db';
-import { DashboardQueryDto } from '../dto/dashboard-query.dto';
+import { DashboardQueryDto } from '../../dashboard/dto/dashboard-query.dto';
 
 @Injectable()
 export class DashboardRepository {

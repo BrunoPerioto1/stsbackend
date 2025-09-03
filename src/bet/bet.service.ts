@@ -4,9 +4,9 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { pool } from '../infra/db/db';
-import { ResultIdEnum } from '../infra/dto/result-id.enum';
-import { CreateBetDto } from '../infra/dto/new-bet.dto';
-import { UpdateApostaDto } from '../infra/dto/update-bet.dto';
+import { ResultIdEnum } from './dto/result-id.enum';
+import { CreateBetDto } from './dto/new-bet.dto';
+import { UpdateApostaDto } from './dto/update-bet.dto';
 import { BetRepository } from '../infra/repository/bet.repository';
 
 @Injectable()
