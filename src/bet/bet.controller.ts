@@ -166,6 +166,16 @@ export class ApostaController {
     return this.apostaService.deleteBet(id);
   }
 
+  @Get('result-types')
+  @ApiOperation({ summary: 'Lista todos os tipos de resultados' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Lista de tipos de resultados retornada com sucesso.',
+    type: [Object],
+  })
+  async getResultTypes() {
+    return this.apostaService.getResultTypes();
+  }
 
 
 }

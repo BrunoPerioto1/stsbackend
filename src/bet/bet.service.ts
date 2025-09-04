@@ -105,4 +105,8 @@ async finalizeMany(betIds: number[], resultId: ResultIdEnum) {
       message: `${count} apostas deletadas com sucesso`,
     };
   }
+
+  async getResultTypes(): Promise<{ id: number; name: string }[]> {
+    return this.betRepository.resultTypes();
+}
 }

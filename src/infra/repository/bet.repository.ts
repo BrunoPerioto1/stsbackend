@@ -252,4 +252,10 @@ export class BetRepository {
     return resultado.rowCount;
   }
 
-}
+  async resultTypes (): Promise<{ id: number; name: string }[]> {
+    const resultado = await pool.query(
+      'SELECT id, name FROM results ORDER BY name'
+    );
+    return resultado.rows;
+
+} }
