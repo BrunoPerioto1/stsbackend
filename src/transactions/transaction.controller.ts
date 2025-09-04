@@ -38,7 +38,12 @@ export class TransactionController {
   findAllTransactions(@Query() filter: TransactionFilterDto) {
     return this.transactionService.findAllTransactions(filter);
   }
-
+@Get('types')
+  @ApiOperation({ summary: 'Lista todos os tipos de transações' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Lista de tipos de transações retornada com sucesso.' })
+  findAllTypeTransactions() {
+    return this.transactionService.findAllTypeTransactions();
+  }
 
 
 //   @Get(':id/transactions')

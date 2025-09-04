@@ -28,7 +28,15 @@ export class HouseDto {
   @IsNumber()
   totalBetProfit: number;
 
-  @ApiProperty({ description: "Total de transações (depósitos - saques + ajustes)", example: 500.00 })
+  @ApiProperty({ description: "Total de depósitos", example: 500.00 })
+  @IsNumber()
+  totalDeposit: number;
+
+  @ApiProperty({ description: "Total de saques", example: 200.00 })
+  @IsNumber()
+  totalWithdrawal: number;
+
+  @ApiProperty({ description: "Total de transações (depósitos + saques + ajustes)", example: 700.00 })
   @IsNumber()
   totalTransactions: number;
 
@@ -84,4 +92,6 @@ export class CreateHouseDto {
 export class UpdateHouseDto extends PartialType(CreateHouseDto) {}
 
 export class FindByIdDto extends PickType(HouseDto, ['houseId', 'houseName', 'active']) {}
+
+export class FindAllHousesDTO extends PickType(HouseDto, ['houseId', 'houseName', 'active']) {}
 

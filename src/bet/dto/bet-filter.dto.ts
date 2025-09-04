@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 
 export class BetFilterDto {
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   betId?: number;
 
@@ -17,6 +18,7 @@ export class BetFilterDto {
   endDate?: Date;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   resultId?: number;
  

@@ -18,4 +18,8 @@ export class TransactionService {
   async findAllTransactions(filter?: TransactionFilterDto) {
     return this.transactionRepository.findAllTransactions(filter);
   }
+
+  async findAllTypeTransactions() {
+    return this.transactionRepository.findAllTypeTransactions();
+  }
 }

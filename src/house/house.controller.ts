@@ -1,13 +1,15 @@
-import { Controller, Get, Post, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query } from '@nestjs/common';
 import {
   ApiOperation,
   ApiResponse,
   ApiTags,
   ApiBadRequestResponse,
   ApiNotFoundResponse,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { HouseService } from './house.service';
 import { InsufficientBalanceErrorDto } from '../infra/dto/error-response.dto';
+import { HouseFilterDto } from './dto/house.filter.dto';
 
 @ApiTags('Casas de Aposta')
 @Controller('house')
@@ -16,12 +18,14 @@ export class HouseController {
 
   @Get('balances')
   @ApiOperation({ summary: 'Calcula saldos de casas com apostas registradas' })
+  @ApiQuery({ name: 'houseId', required: false, type: Number, description: 'Filtra por ID da casa de apostas' })
+  @ApiQuery({ name: 'houseName', required: false, type: String, description: 'Filtra por nome da casa de apostas (busca parcial)' })
   @ApiResponse({
     status: 200,
     description: 'Saldos calculados com sucesso.',
   })
-  calculateAllHousesBalance() {
-    return this.houseService.calculateAllHousesBalance();
+  calculateAllHousesBalance(@Query() filter: HouseFilterDto) {
+    return this.houseService.getAllHousesBalanceWithFilter(filter);
   }
 
   @Get('metrics')
@@ -38,13 +42,18 @@ export class HouseController {
   findHouseById(@Param('id') id: string) {
     return this.houseService.findHouseById(+id);
   }
-
-  @Get(':id/balance')
-  @ApiOperation({ summary: 'Calcula saldo de uma casa específica' })
-  @ApiResponse({ status: 200, description: 'Saldo calculado com sucesso.' })
-  @ApiNotFoundResponse({ description: 'Casa não encontrada.' })
-  calculateHouseBalance(@Param('id') id: string) {
-    return this.houseService.calculateHouseBalance(+id);
+ @Get()
+  @ApiOperation({ summary: 'Lista todas as casas de apostas' })
+  @ApiResponse({ status: 200, description: 'Lista de casas retornada com sucesso.' })
+  getAllHouses() {
+    return this.houseService.getAllHouses();
   }
+  // @Get(':id/balance')
+  // @ApiOperation({ summary: 'Calcula saldo de uma casa específica' })
+  // @ApiResponse({ status: 200, description: 'Saldo calculado com sucesso.' })
+  // @ApiNotFoundResponse({ description: 'Casa não encontrada.' })
+  // calculateHouseBalance(@Param('id') id: string) {
+  //   return this.houseService.calculateHouseBalance(+id);
+  // }
 
 }

@@ -60,5 +60,13 @@ async findAllTransactions(filter?: TransactionFilterDto): Promise<TransactionDto
     return result.rows;
   }
 
+  async findAllTypeTransactions(): Promise<{ id: number, name: string }[]> {
+    const query = `
+      SELECT id, name
+      FROM transaction_types
+      ORDER BY name
+    `;
+    const result = await pool.query(query);
+    return result.rows;
+  }
 }
-  
