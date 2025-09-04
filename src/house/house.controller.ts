@@ -48,12 +48,5 @@ export class HouseController {
   getAllHouses() {
     return this.houseService.getAllHouses();
   }
-  // @Get(':id/balance')
-  // @ApiOperation({ summary: 'Calcula saldo de uma casa específica' })
-  // @ApiResponse({ status: 200, description: 'Saldo calculado com sucesso.' })
-  // @ApiNotFoundResponse({ description: 'Casa não encontrada.' })
-  // calculateHouseBalance(@Param('id') id: string) {
-  //   return this.houseService.calculateHouseBalance(+id);
-  // }
-
+ 
 }
