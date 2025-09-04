@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import camelcaseKeys from 'camelcase-keys';
+// import camelcaseKeys from 'camelcase-keys';
 import { pool } from '../db/db'; 
 import { ResultIdEnum } from '../../bet/dto/result-id.enum';
 import { CreateBetDto, BetItem } from '../../bet/dto/bet.dto';
@@ -35,8 +35,9 @@ export class BetRepository {
       `;
       await client.query(queryInserirResultado, [apostaId]);
 
-      await client.query('COMMIT');
-      return camelcaseKeys({ id: apostaId });
+  await client.query('COMMIT');
+  const camelcaseKeys = (await import('camelcase-keys')).default;
+  return camelcaseKeys({ id: apostaId });
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
@@ -72,8 +73,9 @@ export class BetRepository {
       RETURNING *
     `;
 
-    const resultado = await pool.query(queryAtualizar, valoresAtualizar);
-    return camelcaseKeys(resultado.rows[0]);
+  const resultado = await pool.query(queryAtualizar, valoresAtualizar);
+  const camelcaseKeys = (await import('camelcase-keys')).default;
+  return camelcaseKeys(resultado.rows[0]);
   }
 
   async finalizeBetUpdate(betId: number, resultId: ResultIdEnum, profit: number): Promise<any> {
@@ -99,6 +101,7 @@ export class BetRepository {
 
       await client.query('COMMIT');
 
+      const camelcaseKeys = (await import('camelcase-keys')).default;
       return {
         result: camelcaseKeys(resResult.rows[0]),
         bet: camelcaseKeys(resProfit.rows[0]),
@@ -145,7 +148,8 @@ export class BetRepository {
       
       await client.query('COMMIT');
       
-      return camelcaseKeys(results, { deep: true });
+  const camelcaseKeys = (await import('camelcase-keys')).default;
+  return camelcaseKeys(results, { deep: true });
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
@@ -217,18 +221,19 @@ export class BetRepository {
 
     const result = await pool.query(query, queryParams);
 
+    const camelcaseKeys = (await import('camelcase-keys')).default;
     if (filters.betId !== undefined) {
       return result.rowCount > 0 ? camelcaseKeys(result.rows[0]) : null;
     }
-
     return camelcaseKeys(result.rows);
   }
   
 
 
   async findById(betId: number): Promise<any> {
-    const result = await pool.query('SELECT id, stake , odd FROM bets WHERE id = $1', [betId]);
-    return result.rowCount > 0 ? camelcaseKeys(result.rows[0]) : null;
+  const result = await pool.query('SELECT id, stake , odd FROM bets WHERE id = $1', [betId]);
+  const camelcaseKeys = (await import('camelcase-keys')).default;
+  return result.rowCount > 0 ? camelcaseKeys(result.rows[0]) : null;
   }
 
   async findByIds(betIds: number[]): Promise<any[]> {
@@ -236,6 +241,7 @@ export class BetRepository {
       'SELECT id, stake, odd FROM bets WHERE id = ANY($1)',
       [betIds],
     );
+    const camelcaseKeys = (await import('camelcase-keys')).default;
     return camelcaseKeys(resultado.rows);
   }
 
