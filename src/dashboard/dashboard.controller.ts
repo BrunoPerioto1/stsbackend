@@ -28,15 +28,7 @@ export class DashboardController {
   //   return this.dashboardService.getChartData(query);
   // }
 
-  // @Get('performance-summary')
-  // @ApiOperation({ summary: 'Obtém resumo de performance' })
-  // @ApiResponse({
-  //   status: 200,
-  //   description: 'Resumo de performance retornado com sucesso.',
-  // })
-  // async getPerformanceSummary(@Query() query: DashboardQueryDto) {
-  //   return this.dashboardService.getPerformanceSummary(query);
-  // }
+ 
 
   @Get('daily-summary')
   @ApiOperation({ summary: 'Obtém resumo diário para gráficos' })
