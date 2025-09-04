@@ -6,17 +6,8 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   
-  // AQUI É ONDE VOCÊ MEXE.
-  // -------------------------------------------------------------
-  // Opção 1 (Recomendada): Permite requisições de uma origem específica
-  // Substitua 'https://SEU-FRONTEND.vercel.app' pela URL do seu front-end.
-  app.enableCors({
-    origin: 'https://sts-liart-alpha.vercel.app', 
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-    preflightContinue: false,
-    optionsSuccessStatus: 204,
-  });
-  
+  app.enableCors();
+
 
   app.useGlobalPipes(
     new ValidationPipe({
