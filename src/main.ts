@@ -17,10 +17,6 @@ async function bootstrap() {
     optionsSuccessStatus: 204,
   });
   
-  // Opção 2 (Temporária, para testes): Permite requisições de qualquer origem
-  // Essa abordagem é menos segura, mas resolve rapidamente o problema de CORS.
-  // app.enableCors();
-  // -------------------------------------------------------------
 
   app.useGlobalPipes(
     new ValidationPipe({
