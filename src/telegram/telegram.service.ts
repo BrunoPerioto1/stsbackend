@@ -243,7 +243,8 @@ export class TelegramService implements OnModuleInit {
       }
 
       try {
-        const jsonResult = await this.grokService.parseBetMessage(userMessage);
+        const resolvedHouseId = await this.grokService.resolveHouseId(userMessage);
+        const jsonResult = await this.grokService.parseBetMessage(userMessage, resolvedHouseId);
 
         // Normalização e validação
         const houseId = Number(jsonResult.houseId);
