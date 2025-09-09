@@ -34,6 +34,13 @@ export class HouseController {
   getHouseMetrics() {
     return this.houseService.getHouseMetrics();
   }
+@Get('all')
+  @ApiOperation({ summary: 'Lista todas as casas de apostas' })
+  @ApiResponse({ status: 200, description: 'Lista de casas retornada com sucesso.' })
+  getAllHouses() {
+    return this.houseService.getAllHouses();
+  }
+
 
   @Get(':id')
   @ApiOperation({ summary: 'Busca uma casa por ID' })
@@ -42,12 +49,7 @@ export class HouseController {
   findHouseById(@Param('id') id: string) {
     return this.houseService.findHouseById(+id);
   }
- @Get()
-  @ApiOperation({ summary: 'Lista todas as casas de apostas' })
-  @ApiResponse({ status: 200, description: 'Lista de casas retornada com sucesso.' })
-  getAllHouses() {
-    return this.houseService.getAllHouses();
-  }
+ 
   // @Get(':id/balance')
   // @ApiOperation({ summary: 'Calcula saldo de uma casa específica' })
   // @ApiResponse({ status: 200, description: 'Saldo calculado com sucesso.' })
