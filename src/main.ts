@@ -22,6 +22,7 @@ async function bootstrap() {
     .setTitle('Bot Telegram - API de Apostas')
     .setDescription('API para gerenciamento de apostas e casas de apostas')
     .setVersion('1.0')
+    .addBearerAuth() 
     .build();
 
   const document = SwaggerModule.createDocument(app as any, config);

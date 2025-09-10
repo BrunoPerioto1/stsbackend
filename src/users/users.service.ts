@@ -1,6 +1,8 @@
+
 import { BadRequestException, Injectable } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
-import { UsersRepository, UserRecord } from './users.repository';
+import { UsersRepository } from '../infra/repository/users.repository';
+import { UserDto } from './dto/user.dto';
 import { CreateUserRequestDTO, UpdateUserRequestDTO } from './dto/request.dto';
 import { CreateUserResponseDTO } from './dto/response.dto';
 
@@ -8,7 +10,7 @@ import { CreateUserResponseDTO } from './dto/response.dto';
 export class UsersService {
     constructor(private readonly usersRepository: UsersRepository) {}
 
-    async findByEmail(email: string): Promise<UserRecord | null> {
+    async findByEmail(email: string): Promise<UserDto | null> {
         return this.usersRepository.findByEmail(email);
     }
 
@@ -36,7 +38,7 @@ export class UsersService {
         return safe as CreateUserResponseDTO;
     }
 
-    async getMe(userId: number): Promise<Omit<UserRecord, 'password_hash'>> {
+    async getMe(userId: number): Promise<Omit<UserDto, 'password_hash'>> {
         const user = await this.usersRepository.findById(userId);
         if (!user) throw new BadRequestException('Usuário não encontrado.');
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -44,7 +46,7 @@ export class UsersService {
         return safe;
     }
 
-    async updateMe(userId: number, params: UpdateUserRequestDTO): Promise<Omit<UserRecord, 'password_hash'>> {
+    async updateMe(userId: number, params: UpdateUserRequestDTO): Promise<Omit<UserDto, 'password_hash'>> {
         const fields: any = {};
         if (params.username) fields.username = params.username;
         if (params.email) fields.email = params.email;
@@ -57,6 +59,9 @@ export class UsersService {
         // eslint-disable-next-line @typescript-eslint/no-unused_vars
         const { password_hash, ...safe } = updated as any;
         return safe;
+    }
+      async vincularTelegram(userId: number, telegramUserId: number) {
+        await this.usersRepository.vincularTelegram(userId, telegramUserId);
     }
 }
 

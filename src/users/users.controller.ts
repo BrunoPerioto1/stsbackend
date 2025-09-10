@@ -17,6 +17,7 @@ export class UsersController {
     return this.usersService.createUser(dto);
   }
 
+
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth('jwt')
   @Get('me')
@@ -24,6 +25,7 @@ export class UsersController {
   async me(@Req() req: any) {
     return this.usersService.getMe(req.user.userId);
   }
+
 
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth('jwt')
