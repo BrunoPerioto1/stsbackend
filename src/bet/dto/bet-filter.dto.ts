@@ -2,6 +2,7 @@ import { IsOptional, IsNumber, IsDate, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class BetFilterDto {
+
   @IsOptional()
   @Type(() => Number)
   @IsNumber()

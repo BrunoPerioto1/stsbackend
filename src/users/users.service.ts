@@ -63,6 +63,22 @@ export class UsersService {
       async vincularTelegram(userId: number, telegramUserId: number) {
         await this.usersRepository.vincularTelegram(userId, telegramUserId);
     }
+
+    async findByTelegramUserId(telegramUserId: number): Promise<UserDto | null> {
+        return this.usersRepository.findByTelegramUserId(telegramUserId);
+    }
+
+    async updateUserStake(userId: number, stake: number): Promise<boolean> {
+        if (!Number.isFinite(stake) || stake <= 0) {
+            throw new Error('Valor da stake deve ser maior que zero');
+        }
+        return this.usersRepository.updateUserStake(userId, stake);
+    }
+
+    async getUserStake(userId: number): Promise<number> {
+        const stake = await this.usersRepository.getUserStake(userId);
+        return stake ?? 2000; // Retorna 2000 como valor padrão se não encontrar
+    }
 }
 
 

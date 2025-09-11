@@ -5,9 +5,18 @@ import { HouseModule } from './module/house.module';
 import { DashboardModule } from './module/dashboard.module';
 import { TransactionModule } from './module/transaction.module';
 import { AuthModule } from './module/auth.module';
+import { TelegramLinkModule } from './module/telegram-link.module';
 
 @Module({
-  imports: [ApostaModule, TelegramModule, HouseModule, DashboardModule, TransactionModule, AuthModule],
+  imports: [
+    ApostaModule, 
+    TelegramModule, 
+    HouseModule, 
+    DashboardModule, 
+    TransactionModule, 
+    AuthModule,
+    TelegramLinkModule
+  ],
   controllers: [],
   providers: [],
 })

@@ -16,9 +16,10 @@ export class BetRepository {
 
       // Insere a aposta
       const queryInserirAposta = `
-        INSERT INTO bets (game, stake, odd, house_id, market, sport, profit)
-        VALUES ($1, $2, $3, $4, $5, $6, 0)
-        RETURNING id
+        INSERT INTO bets (game, stake, odd, house_id, market, sport, profit, user_id)
+        VALUES ($1, $2, $3, $4, $5, $6, 0, $7)
+        RETURNING *,
+        (SELECT name FROM betting_houses WHERE id = $4) as house_name
       `;
       const resultadoAposta = await client.query(queryInserirAposta, [
         betData.game,
@@ -27,16 +28,17 @@ export class BetRepository {
         betData.houseId,
         betData.market,
         betData.sport,
+        betData.userId,
       ]);
-      const apostaId = resultadoAposta.rows[0].id;
+      const aposta = resultadoAposta.rows[0];
 
       const queryInserirResultado = `
         INSERT INTO bet_results (bet_id) VALUES ($1)
       `;
-      await client.query(queryInserirResultado, [apostaId]);
+      await client.query(queryInserirResultado, [aposta.id]);
 
       await client.query('COMMIT');
-      return camelcaseKeys({ id: apostaId });
+      return camelcaseKeys(aposta);
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
@@ -111,7 +113,6 @@ export class BetRepository {
     }
   }
 
-  
   async finalizeMultipleBets(betProfits: { betId: number; resultId: ResultIdEnum; profit: number }[]): Promise<any> {
     const client = await pool.connect();
     try {
@@ -153,7 +154,6 @@ export class BetRepository {
       client.release();
     }
   }
-  
 
   async findBets(filters: BetFilterDto = {}): Promise<BetItem[] | BetItem | null> {
     const queryConditions: string[] = [];
@@ -179,6 +179,7 @@ export class BetRepository {
       queryConditions.push(`br.result_id = $${paramIndex++}`);
       queryParams.push(filters.resultId);
     }
+
     if (filters.market !== undefined) {
       queryConditions.push(`b.market ILIKE $${paramIndex++}`);
       queryParams.push(`%${filters.market}%`);
@@ -223,8 +224,6 @@ export class BetRepository {
 
     return camelcaseKeys(result.rows);
   }
-  
-
 
   async findById(betId: number): Promise<any> {
     const result = await pool.query('SELECT id, stake , odd FROM bets WHERE id = $1', [betId]);
@@ -257,5 +256,5 @@ export class BetRepository {
       'SELECT id, name FROM results ORDER BY name'
     );
     return resultado.rows;
-
-} }
+  }
+}

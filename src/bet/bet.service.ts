@@ -31,10 +31,6 @@ export class ApostaService {
   }
 
   async updateBet(betId: number, updateData: UpdateApostaDto) {
-      if (updateData.houseId !== undefined && updateData.houseId !== null) {
-      
-    }
-
     const updated = await this.betRepository.update(betId, updateData);
     if (!updated) {
       throw new NotFoundException(`Aposta com ID ${betId} não encontrada.`);

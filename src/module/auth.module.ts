@@ -3,7 +3,7 @@ import { JwtModule } from "@nestjs/jwt";
 import { JwtStrategy } from "../auth/jwt/jwt.strategy";
 import { AuthService } from "../auth/AuthService";
 import { AuthController } from "../auth/auth.controller";
-import { TelegramLinkController } from "../users/telegram-link.controller";
+import { TelegramLinkController } from "../telegram/telegram-link.controller";
 import { UsersModule } from "../users/users.module";
 import * as dotenv from 'dotenv';
 

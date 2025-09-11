@@ -4,6 +4,7 @@ import { Transform } from 'class-transformer';
 import { ResultIdEnum } from './result-id.enum';
 
 export class CreateBetDto {
+  
   @ApiProperty({
     description: 'Nome do jogo ou evento esportivo',
     example: 'Flamengo vs Palmeiras',
@@ -66,6 +67,15 @@ export class CreateBetDto {
   @IsOptional()
   @IsString()
   betTime?: string;
+
+  @ApiProperty({
+    description: 'ID do usuário que fez a aposta (opcional)',
+    example: 1,
+    required: false
+  })
+  @IsOptional()
+  @IsNumber()
+  userId?: number;
 }
 
 export class UpdateApostaDto {

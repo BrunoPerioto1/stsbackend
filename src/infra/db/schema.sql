@@ -303,6 +303,24 @@ insert into results (name) values
 ('PENDING'),
 ('CANCELADAED'),
 
+create table public.users (
+  id serial not null,
+  username character varying(50) not null,
+  email character varying(100) not null,
+  password_hash character varying(255) not null,
+  full_name character varying(100) null,
+  is_active boolean null default true,
+  role_id integer not null,
+  created_at timestamp without time zone null default CURRENT_TIMESTAMP,
+  updated_at timestamp without time zone null default CURRENT_TIMESTAMP,
+  last_login timestamp without time zone null,
+  constraint users_pkey primary key (id),
+  constraint users_email_key unique (email),
+  constraint users_username_key unique (username),
+  constraint users_role_id_fkey foreign KEY (role_id) references roles (id)
+) TABLESPACE pg_default;
+
+
 
 -- Grant permissions (adjust as needed)
 -- GRANT ALL PRIVILEGES ON DATABASE betting_tracker TO your_user;

@@ -10,7 +10,10 @@ import {
   HttpCode,
   HttpStatus,
   Query,
+  UseGuards,
 } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { User } from '../common/decorators/user.decorator';
 import {
   ApiOperation,
   ApiResponse,
@@ -67,8 +70,8 @@ export class ApostaController {
   }
 
   @Put('finalize-multiple')
-  @ApiOperation({ summary: 'Finaliza múltiplas apostas' })
- @ApiResponse({
+  @ApiOperation({ summary: 'Finaliza múltiplas apostas (apenas admin)' })
+  @ApiResponse({
     status: HttpStatus.OK,
     description: 'Aposta finalizada com sucesso.',
   })
@@ -85,7 +88,7 @@ export class ApostaController {
   }
 
   @Put('finalize/:id')
-  @ApiOperation({ summary: 'Finaliza uma aposta individual' })
+  @ApiOperation({ summary: 'Finaliza uma aposta individual (apenas admin)' })
   @ApiResponse({
     status: HttpStatus.OK,
     description: 'Aposta finalizada com sucesso.',
@@ -106,7 +109,7 @@ export class ApostaController {
 
   @Delete('delete-multiple')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Remove múltiplas apostas' })
+  @ApiOperation({ summary: 'Remove múltiplas apostas (apenas admin)' })
   @ApiNoContentResponse({
     description: 'Apostas removidas com sucesso.',
   })
@@ -155,7 +158,7 @@ export class ApostaController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Remove uma aposta' })
+  @ApiOperation({ summary: 'Remove uma aposta do usuário' })
   @ApiNoContentResponse({
     description: 'Aposta removida com sucesso.',
   })

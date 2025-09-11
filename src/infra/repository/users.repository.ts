@@ -25,11 +25,27 @@ export class UsersRepository {
     return result.rows[0] ?? null;
   }
 
-    async vincularTelegram(userId: number, telegramUserId: number): Promise<void> {
-    await this.pool.query(
-      'UPDATE public.users SET telegram_user_id = $1 WHERE id = $2',
-      [telegramUserId, userId]
-    );
+    async vincularTelegram(userId: number, telegramUserId: number): Promise<boolean> {
+    try {
+      console.log('🔄 Tentando vincular usuário:', { userId, telegramUserId });
+      
+      const result = await this.pool.query(
+        'UPDATE public.users SET telegram_user_id = $1 WHERE id = $2 RETURNING id',
+        [telegramUserId, userId]
+      );
+
+      const success = result.rowCount > 0;
+      console.log('✅ Vinculação do Telegram:', success ? 'sucesso' : 'falha');
+      
+      if (!success) {
+        console.log('❌ Usuário não encontrado:', { userId });
+      }
+
+      return success;
+    } catch (error) {
+      console.error('❌ Erro ao vincular Telegram:', error);
+      throw new Error(`Erro ao vincular Telegram: ${(error as Error).message}`);
+    }
   }
 
 
@@ -89,5 +105,39 @@ export class UsersRepository {
   async setLastLogin(id: number): Promise<void> {
     const query = `UPDATE public.users SET last_login = NOW() WHERE id = $1`;
     await this.pool.query(query, [id]);
+  }
+
+  async findByTelegramUserId(telegramUserId: number): Promise<UserDto | null> {
+    const result = await this.pool.query<UserDto>(
+      'SELECT * FROM public.users WHERE telegram_user_id = $1 LIMIT 1',
+      [telegramUserId]
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async updateUserStake(userId: number, stake: number): Promise<boolean> {
+    try {
+      const result = await this.pool.query(
+        'UPDATE public.users SET stake = $1 WHERE id = $2 RETURNING id',
+        [stake, userId]
+      );
+      return result.rowCount > 0;
+    } catch (error) {
+      console.error('❌ Erro ao atualizar stake:', error);
+      throw new Error(`Erro ao atualizar stake: ${(error as Error).message}`);
+    }
+  }
+
+  async getUserStake(userId: number): Promise<number | null> {
+    try {
+      const result = await this.pool.query<{ stake: number }>(
+        'SELECT stake FROM public.users WHERE id = $1',
+        [userId]
+      );
+      return result.rows[0]?.stake ?? null;
+    } catch (error) {
+      console.error('❌ Erro ao buscar stake:', error);
+      throw new Error(`Erro ao buscar stake: ${(error as Error).message}`);
+    }
   }
 }

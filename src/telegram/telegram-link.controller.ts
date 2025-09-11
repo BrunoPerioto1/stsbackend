@@ -1,7 +1,7 @@
 import { Body, Controller, Post, Req, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { v4 as uuidv4 } from 'uuid';
-import { UsersService } from './users.service';
+import { UsersService } from '../users/users.service';
 
 // Simples in-memory store para exemplo (substitua por cache/DB em produção)
 const telegramLinkCodes: Record<string, number> = {};
