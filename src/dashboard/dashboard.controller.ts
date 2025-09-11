@@ -1,7 +1,9 @@
-import { Controller, Get, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import { DashboardService } from './dashboard.service';
 import { DashboardQueryDto } from './dto/dashboard-query.dto';
+import { AuthGuard } from '@nestjs/passport';
+import { User } from '../common/decorators/user.decorator';
 
 @ApiTags('Dashboard')
 @Controller('dashboard')
@@ -14,8 +16,10 @@ export class DashboardController {
     status: 200,
     description: 'Métricas retornadas com sucesso.',
   })
-  async getMetrics(@Query() query: DashboardQueryDto) {
-    return this.dashboardService.calculateMetrics(query);
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  async getMetrics(@Query() query: DashboardQueryDto, @User('userId') userId: number) {
+    return this.dashboardService.calculateMetrics({ ...query, userId } as any);
   }
 
   // @Get('chart-data')
@@ -44,7 +48,9 @@ export class DashboardController {
     status: 200,
     description: 'Resumo diário retornado com sucesso.',
   })
-  async getDailySummary(@Query() query: DashboardQueryDto) {
-    return this.dashboardService.getDailySummary(query);
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  async getDailySummary(@Query() query: DashboardQueryDto, @User('userId') userId: number) {
+    return this.dashboardService.getDailySummary({ ...query, userId } as any);
   }
 }

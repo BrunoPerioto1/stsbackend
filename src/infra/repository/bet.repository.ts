@@ -47,7 +47,7 @@ export class BetRepository {
     }
   }
 
-  async update(betId: number, updateData: UpdateApostaDto): Promise<any> {
+  async update(betId: number, updateData: UpdateApostaDto, userId: number): Promise<any> {
     const camposAtualizar: string[] = [];
     const valoresAtualizar: any[] = [];
     let indiceParametro = 1;
@@ -66,41 +66,48 @@ export class BetRepository {
 
     camposAtualizar.push(`updated_at = NOW()`);
     valoresAtualizar.push(betId);
+    valoresAtualizar.push(userId);
 
     const queryAtualizar = `
       UPDATE bets 
       SET ${camposAtualizar.join(', ')}
-      WHERE id = $${indiceParametro}
+      WHERE id = $${indiceParametro} AND user_id = $${indiceParametro + 1}
       RETURNING *
     `;
 
     const resultado = await pool.query(queryAtualizar, valoresAtualizar);
-    return camelcaseKeys(resultado.rows[0]);
+    return resultado.rowCount > 0 ? camelcaseKeys(resultado.rows[0]) : null;
   }
 
-  async finalizeBetUpdate(betId: number, resultId: ResultIdEnum, profit: number): Promise<any> {
+  async finalizeBetUpdate(betId: number, resultId: ResultIdEnum, profit: number, userId: number): Promise<any> {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
       const queryResult = `
-        UPDATE bet_results
+        UPDATE bet_results br
         SET result_id = $1, updated_at = NOW()
-        WHERE bet_id = $2
-        RETURNING *;
+        FROM bets b
+        WHERE br.bet_id = $2
+          AND b.id = br.bet_id
+          AND b.user_id = $3
+        RETURNING br.*;
       `;
-      const resResult = await client.query(queryResult, [resultId, betId]);
+      const resResult = await client.query(queryResult, [resultId, betId, userId]);
 
       const queryProfit = `
         UPDATE bets
         SET profit = $1, updated_at = NOW()
-        WHERE id = $2
+        WHERE id = $2 AND user_id = $3
         RETURNING *;
       `;
-      const resProfit = await client.query(queryProfit, [profit, betId]);
+      const resProfit = await client.query(queryProfit, [profit, betId, userId]);
 
       await client.query('COMMIT');
 
+      if (resProfit.rowCount === 0 || resResult.rowCount === 0) {
+        return null;
+      }
       return {
         result: camelcaseKeys(resResult.rows[0]),
         bet: camelcaseKeys(resProfit.rows[0]),
@@ -113,7 +120,7 @@ export class BetRepository {
     }
   }
 
-  async finalizeMultipleBets(betProfits: { betId: number; resultId: ResultIdEnum; profit: number }[]): Promise<any> {
+  async finalizeMultipleBets(betProfits: { betId: number; resultId: ResultIdEnum; profit: number }[], userId: number): Promise<any> {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -122,26 +129,31 @@ export class BetRepository {
       
       for (const { betId, resultId, profit } of betProfits) {
         const resultQuery = `
-          UPDATE bet_results
+          UPDATE bet_results br
           SET result_id = $1, updated_at = NOW()
-          WHERE bet_id = $2
-          RETURNING *;
+          FROM bets b
+          WHERE br.bet_id = $2
+            AND b.id = br.bet_id
+            AND b.user_id = $3
+          RETURNING br.*;
         `;
-        const resultRes = await client.query(resultQuery, [resultId, betId]);
+        const resultRes = await client.query(resultQuery, [resultId, betId, userId]);
         
         const profitQuery = `
           UPDATE bets
           SET profit = $1, updated_at = NOW()
-          WHERE id = $2
+          WHERE id = $2 AND user_id = $3
           RETURNING *;
         `;
-        const profitRes = await client.query(profitQuery, [profit, betId]);
+        const profitRes = await client.query(profitQuery, [profit, betId, userId]);
         
-        results.push({
-          betId,
-          result: resultRes.rows[0],
-          bet: profitRes.rows[0]
-        });
+        if (resultRes.rowCount > 0 && profitRes.rowCount > 0) {
+          results.push({
+            betId,
+            result: resultRes.rows[0],
+            bet: profitRes.rows[0]
+          });
+        }
       }
       
       await client.query('COMMIT');
@@ -163,6 +175,11 @@ export class BetRepository {
     if (filters.betId !== undefined) {
       queryConditions.push(`b.id = $${paramIndex++}`);
       queryParams.push(filters.betId);
+    }
+    
+    if (filters.userId !== undefined) {
+      queryConditions.push(`b.user_id = $${paramIndex++}`);
+      queryParams.push(filters.userId);
     }
     
     if (filters.startDate !== undefined) {
@@ -230,23 +247,25 @@ export class BetRepository {
     return result.rowCount > 0 ? camelcaseKeys(result.rows[0]) : null;
   }
 
-  async findByIds(betIds: number[]): Promise<any[]> {
+  async findByIds(betIds: number[], userId?: number): Promise<any[]> {
     const resultado = await pool.query(
-      'SELECT id, stake, odd FROM bets WHERE id = ANY($1)',
-      [betIds],
+      userId !== undefined
+        ? 'SELECT id, stake, odd FROM bets WHERE id = ANY($1) AND user_id = $2'
+        : 'SELECT id, stake, odd FROM bets WHERE id = ANY($1)',
+      userId !== undefined ? [betIds, userId] : [betIds],
     );
     return camelcaseKeys(resultado.rows);
   }
 
-  async delete(betId: number): Promise<boolean> {
-    const resultado = await pool.query('DELETE FROM bets WHERE id = $1', [betId]);
+  async delete(betId: number, userId: number): Promise<boolean> {
+    const resultado = await pool.query('DELETE FROM bets WHERE id = $1 AND user_id = $2', [betId, userId]);
     return resultado.rowCount > 0;
   }
 
-  async deleteMany(betIds: number[]): Promise<number> {
+  async deleteMany(betIds: number[], userId: number): Promise<number> {
     const resultado = await pool.query(
-      'DELETE FROM bets WHERE id = ANY($1)',
-      [betIds]
+      'DELETE FROM bets WHERE id = ANY($1) AND user_id = $2',
+      [betIds, userId]
     );
     return resultado.rowCount;
   }

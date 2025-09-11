@@ -19,6 +19,7 @@ import {
   ApiResponse,
   ApiTags,
   ApiQuery,
+  ApiBearerAuth,
   ApiBadRequestResponse,
   ApiNotFoundResponse,
   ApiNoContentResponse,
@@ -49,12 +50,16 @@ export class ApostaController {
   @ApiBadRequestResponse({
     description: 'Dados de entrada inválidos.',
   })
-  async criar(@Body() apostaData: CreateBetDto) {
-    return this.apostaService.createBet(apostaData);
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  async criar(@Body() apostaData: CreateBetDto, @User('userId') userId: number) {
+    return this.apostaService.createBet({ ...apostaData, userId });
   }
 
   @Get()
-  @ApiOperation({ summary: 'Lista e filtra as apostas' })
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Lista e filtra as apostas (escopo do usuário)' })
   @ApiQuery({ name: 'betId', required: false, type: Number, description: 'Filtra por ID da aposta.' })
   @ApiQuery({ name: 'startDate', required: false, type: String, description: 'Filtra por data inicial (ex: 2025-09-03).' })
   @ApiQuery({ name: 'endDate', required: false, type: String, description: 'Filtra por data final (ex: 2025-09-04).' })
@@ -65,8 +70,8 @@ export class ApostaController {
     description: 'Lista de apostas retornada com sucesso.',
     type: [BetItem],
   })
-  async findBets(@Query() filters: BetFilterDto) {
-    return this.apostaService.findBets(filters);
+  async findBets(@Query() filters: BetFilterDto, @User('userId') userId: number) {
+    return this.apostaService.findBets({ ...filters, userId });
   }
 
   @Put('finalize-multiple')
@@ -81,10 +86,11 @@ export class ApostaController {
   @ApiNotFoundResponse({
     description: 'Aposta não encontrada.',
   })
-  
-  async finalizarMultiplas(@Body() body: FinalizarMultiplasDto) {
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  async finalizarMultiplas(@Body() body: FinalizarMultiplasDto, @User('userId') userId: number) {
     const { betIds, resultId } = body;
-    return this.apostaService.finalizeMany(betIds, resultId);
+    return this.apostaService.finalizeMany(betIds, resultId, userId);
   }
 
   @Put('finalize/:id')
@@ -99,12 +105,14 @@ export class ApostaController {
   @ApiNotFoundResponse({
     description: 'Aposta não encontrada.',
   })
-  
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
   async finalizar(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: FinalizarApostaDto,
+    @User('userId') userId: number,
   ) {
-    return this.apostaService.finalizeBet(id, body.resultId);
+    return this.apostaService.finalizeBet(id, body.resultId, userId);
   }
 
   @Delete('delete-multiple')
@@ -116,8 +124,10 @@ export class ApostaController {
   @ApiBadRequestResponse({
     description: 'Dados de entrada inválidos.',
   })
-  async deletarMultiplas(@Body() body: { apostaIds: number[] }) {
-    return this.apostaService.deleteManyBets(body.apostaIds);
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  async deletarMultiplas(@Body() body: { apostaIds: number[] }, @User('userId') userId: number) {
+    return this.apostaService.deleteManyBets(body.apostaIds, userId);
   }
 
   // @Get(':id')
@@ -147,13 +157,14 @@ export class ApostaController {
   @ApiNotFoundResponse({
     description: 'Aposta não encontrada.',
   })
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
   async editar(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateData: UpdateApostaDto,
+    @User('userId') userId: number,
   ) {
-    console.log('Controller - Dados recebidos para edição:', updateData);
-    console.log('Controller - ID da aposta:', id);
-    return this.apostaService.updateBet(id, updateData);
+    return this.apostaService.updateBet(id, updateData, userId);
   }
 
   @Delete(':id')
@@ -165,8 +176,10 @@ export class ApostaController {
   @ApiNotFoundResponse({
     description: 'Aposta não encontrada.',
   })
-  async deletar(@Param('id', ParseIntPipe) id: number) {
-    return this.apostaService.deleteBet(id);
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  async deletar(@Param('id', ParseIntPipe) id: number, @User('userId') userId: number) {
+    return this.apostaService.deleteBet(id, userId);
   }
 
   @Get('result-types')

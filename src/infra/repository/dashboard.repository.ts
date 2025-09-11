@@ -8,10 +8,16 @@ import { DailySummaryPoint, DashboardMetrics } from '../../dashboard/dto/dashboa
 @Injectable()
 export class DashboardRepository {
 
-  private buildFilters(filters: DashboardQueryDto): { whereClause: string, params: any[] } {
+  private buildFilters(filters: DashboardQueryDto & { userId?: number }): { whereClause: string, params: any[] } {
     let whereClause = '';
     const params: any[] = [];
     let paramIndex = 1;
+
+    if (filters.userId !== undefined) {
+      whereClause += ` AND b.user_id = $${paramIndex}`;
+      params.push(filters.userId);
+      paramIndex++;
+    }
 
     if (filters.house_id) {
       whereClause += ` AND b.house_id = $${paramIndex}`;
@@ -35,7 +41,7 @@ export class DashboardRepository {
   }
 
   async findDailySummary(
-    filters: DashboardQueryDto,
+    filters: DashboardQueryDto & { userId?: number },
   ): Promise<DailySummaryPoint[]> {
     const { whereClause, params } = this.buildFilters(filters);
 
@@ -55,7 +61,7 @@ export class DashboardRepository {
     return camelcaseKeys(resultado.rows);
   }
 
-  async findDashboardMetrics(filters: DashboardQueryDto): Promise<DashboardMetrics | null> {
+  async findDashboardMetrics(filters: DashboardQueryDto & { userId?: number }): Promise<DashboardMetrics | null> {
     const { whereClause, params } = this.buildFilters(filters);
 
     const query = `

@@ -11,8 +11,8 @@ import { formatPeriod } from '../common/utils/bet.utils';
 export class DashboardService {
   constructor(private readonly dashboardRepository: DashboardRepository) {}
 
-  async calculateMetrics(filters: DashboardQueryDto): Promise<DashboardMetrics | null> {
-    return await this.dashboardRepository.findDashboardMetrics(filters);
+  async calculateMetrics(filters: DashboardQueryDto & { userId?: number }): Promise<DashboardMetrics | null> {
+    return await this.dashboardRepository.findDashboardMetrics(filters as any);
   }
 
   // async getChartData(filters: DashboardQueryDto): Promise<ChartDataPoint[]> {
@@ -43,9 +43,9 @@ export class DashboardService {
   // }
 
 async getDailySummary(
-  filters: DashboardQueryDto,
+  filters: DashboardQueryDto & { userId?: number },
 ): Promise<DailySummaryPoint[]> {
-  return  await this.dashboardRepository.findDailySummary(filters);
+  return  await this.dashboardRepository.findDailySummary(filters as any);
 
   // return dailyData.map((day) => {
   //   return {

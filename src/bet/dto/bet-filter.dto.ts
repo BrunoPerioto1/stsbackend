@@ -26,4 +26,9 @@ export class BetFilterDto {
   @IsOptional()
   @IsString()
   market?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  userId?: number;
 }
