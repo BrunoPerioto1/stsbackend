@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { pool } from '../db/db'; 
 import { HouseDto, FindByIdDto, FindAllHousesDTO } from '../../house/dto/house.dto';
 import { HouseFilterDto } from '../../house/dto/house.filter.dto';
-import camelcaseKeys from 'camelcase-keys';
+
 
 export interface HouseBalance {
   house_id: number;
@@ -29,6 +29,7 @@ export class HouseRepository {
     `;
     const params = [id];
     const result = await pool.query(query, params);
+    const camelcaseKeys = (await import('camelcase-keys')).default;
     return camelcaseKeys(result.rows[0]);
   
   }
