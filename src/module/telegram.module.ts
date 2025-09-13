@@ -5,9 +5,11 @@ import { ApostaModule } from './bet.module';
 import { HouseModule } from './house.module';
 import { DatabaseModule } from '../infra/db/db.module';
 import { UsersModule } from '../users/users.module';
+import { TelegramController } from 'src/telegram/telegram.controller';
 
 @Module({
   imports: [ApostaModule, HouseModule, DatabaseModule, UsersModule],
+  controllers: [TelegramController],
   providers: [TelegramService, GrokService],
 })
 export class TelegramModule {}
