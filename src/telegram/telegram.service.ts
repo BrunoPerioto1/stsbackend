@@ -6,6 +6,7 @@ import { ApostaService } from '../bet/bet.service';
 import { CreateBetDto } from '../bet/dto/bet.dto';
 import { UsersService } from '../users/users.service';
 import { HouseService } from '../house/house.service';
+
 dotenv.config();
 
 function extractLimitFromText(text: string): number | null {
@@ -33,7 +34,7 @@ function extractPercentAfterStopEmoji(text: string): number | null {
 
 @Injectable()
 export class TelegramService implements OnModuleInit {
-  private bot: Telegraf;
+  public bot: Telegraf;
 
   constructor(
     private readonly grokService: GrokService,
@@ -47,44 +48,47 @@ export class TelegramService implements OnModuleInit {
     this.bot = new Telegraf(token);
   }
 
-  onModuleInit() {
-    // Comando /stake para definir a banca do usuário
+  async onModuleInit() {
+    this.registerCommands();
+
+    const url = `${process.env.APP_URL}/telegram/${process.env.TELEGRAM_BOT_TOKEN}`;
+    await this.bot.telegram.setWebhook(url);
+
+    console.log(`🤖 Telegram bot iniciado em webhook: ${url}`);
+  }
+
+  private registerCommands() {
+    // Comando /stake
     this.bot.command('stake', async (ctx) => {
       const args = ctx.message.text.split(' ');
       if (args.length !== 2) {
         await ctx.reply(
-          '❌ Formato incorreto. Use: /stake VALOR\n' +
-          'Exemplo: /stake 2000\n' +
-          'O valor será usado como sua banca para calcular as stakes em porcentagem.'
+          '❌ Formato incorreto. Use: /stake VALOR\nExemplo: /stake 2000',
         );
         return;
       }
 
       const value = Number(args[1].replace(/[.,]/g, ''));
       if (!Number.isFinite(value) || value <= 0) {
-        await ctx.reply('❌ Por favor, forneça um valor válido maior que zero.');
+        await ctx.reply('❌ Valor inválido. Informe um número maior que zero.');
         return;
       }
 
       try {
-        // Primeiro precisamos encontrar o usuário pelo telegram_user_id
         const user = await this.usersService.findByTelegramUserId(ctx.from.id);
         if (!user) {
           await ctx.reply('❌ Usuário não vinculado. Use o comando /vincular primeiro.');
           return;
         }
 
-        // Atualiza a stake do usuário
         await this.usersService.updateUserStake(user.id, value);
-        
+
         await ctx.reply(
-          `✅ Banca definida com sucesso!\n` +
-          `💰 Sua banca atual: R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n` +
-          `\nAgora quando você usar 🛑 50% em suas apostas, será calculado ${(value * 0.5).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+          `✅ Banca definida: R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
         );
       } catch (error) {
         console.error('Erro ao atualizar stake:', error);
-        await ctx.reply('❌ Erro ao atualizar sua banca. Por favor, tente novamente.');
+        await ctx.reply('❌ Erro ao atualizar sua banca. Tente novamente.');
       }
     });
 
@@ -93,8 +97,7 @@ export class TelegramService implements OnModuleInit {
       const args = ctx.message.text.split(' ');
       if (args.length !== 2) {
         await ctx.reply(
-          '❌ Formato incorreto. Use: /vincular SEU_CODIGO\n' +
-          'Para obter o código, acesse o sistema web e clique em "Vincular Telegram".',
+          '❌ Formato incorreto. Use: /vincular SEU_CODIGO',
         );
         return;
       }
@@ -103,128 +106,59 @@ export class TelegramService implements OnModuleInit {
       const telegramUserId = ctx.from.id;
 
       try {
-        console.log('🔄 Tentando vincular conta com código:', code, 'e telegramUserId:', telegramUserId);
-        
         const url = `${process.env.API_URL || 'http://localhost:4000'}/auth/link-telegram/confirm`;
-        console.log('📡 URL da requisição:', url);
-        
         const response = await fetch(url, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            code,
-            telegramUserId,
-          }),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code, telegramUserId }),
         });
 
-        if (!response.ok) {
-          throw new Error(`Erro HTTP: ${response.status} - ${response.statusText}`);
-        }
-
-        const result = await response.json() as {
-          success: boolean;
-          message: string;
-          userId?: number;
-          telegramUserId?: number;
-        };
+        const result: any = await response.json();
 
         if (result.success) {
-          await ctx.reply(
-            '✅ Conta vinculada com sucesso!\n' +
-            'Agora você pode enviar suas apostas diretamente pelo Telegram.',
-          );
+          await ctx.reply('✅ Conta vinculada com sucesso!');
         } else {
-          await ctx.reply(
-            '❌ Erro ao vincular conta: ' + result.message + '\n' +
-            'Verifique se o código está correto e tente novamente.',
-          );
+          await ctx.reply('❌ Erro: ' + result.message);
         }
       } catch (error) {
         console.error('Erro ao confirmar vinculação:', error);
-        await ctx.reply(
-          '❌ Erro ao processar sua solicitação.\n' +
-          'Por favor, tente novamente mais tarde.',
-        );
+        await ctx.reply('❌ Erro ao processar solicitação. Tente mais tarde.');
       }
     });
 
+    // Processamento de aposta (mensagens comuns)
     this.bot.on('message', async (ctx) => {
       const msg = ctx.message as any;
-      const isForwarded = !!msg.forward_from || !!msg.forward_from_chat;
       const userMessage = msg.text ?? msg.caption;
-
       if (!userMessage) return;
-
-      if (isForwarded) {
-        console.log('Mensagem encaminhada detectada:', userMessage);
-      }
 
       try {
         const resolvedHouseId = await this.grokService.resolveHouseId(userMessage);
         const jsonResult = await this.grokService.parseBetMessage(userMessage, resolvedHouseId);
 
-        // Normalização e validação
         const houseId = Number(jsonResult.houseId);
         const odd = Number(jsonResult.odd);
         const game = String(jsonResult.game ?? '').trim();
         const market = String(jsonResult.market ?? '').trim();
         const sport = String(jsonResult.sport ?? '').trim();
 
-        // Calcular stake a partir do 🛑 % usando a banca do usuário
         const percent = extractPercentAfterStopEmoji(userMessage);
         const user = await this.usersService.findByTelegramUserId(ctx.from.id);
-        if (!user) {
-          throw new Error('Usuário não vinculado. Use o comando /vincular primeiro.');
-        }
+        if (!user) throw new Error('Usuário não vinculado. Use /vincular primeiro.');
+
         const userStake = await this.usersService.getUserStake(user.id);
         let stake = percent !== null ? (percent / 100) * userStake : Number(jsonResult.stake);
 
-        // Aplicar limite 🚦 da mensagem, se houver
         const limit = extractLimitFromText(userMessage);
-        if (Number.isFinite(limit as number)) {
-          stake = Math.min(stake, limit as number);
-        }
+        if (limit !== null) stake = Math.min(stake, limit);
 
-        console.log('💰 Cálculo da stake:', {
-          percentagem: percent,
-          bancaUsuario: userStake,
-          stakeCalculada: stake,
-          limite: limit
-        });
+        if (!Number.isFinite(houseId)) throw new Error('houseId inválido');
+        if (!Number.isFinite(stake) || stake <= 0) throw new Error('stake inválida');
+        if (!Number.isFinite(odd) || odd <= 1) throw new Error('odd inválida');
+        if (!game) throw new Error('game vazio');
+        if (!market) throw new Error('mercado vazio');
+        if (!sport) throw new Error('esporte vazio');
 
-        // Ignorar qualquer valor de 💰 para stake (não altera stake, apenas garantimos)
-        // Se desejar, poderíamos logar se houver 💰 na mensagem
-
-        if (!Number.isFinite(houseId)) {
-          throw new Error('houseId inválido ou não mapeado');
-        }
-        if (!Number.isFinite(stake) || stake <= 0) {
-          throw new Error('stake inválida');
-        }
-        if (!Number.isFinite(odd) || odd <= 1) {
-          throw new Error('odd inválida');
-        }
-        if (!game) {
-          throw new Error('game is empty ');
-        }
-        if (!market) {
-          throw new Error('mercado vazio');
-        }
-        if (!game) {
-          throw new Error('esporte vazio');
-        }
-
-        console.log('🔍 Procurando usuário com telegramUserId:', ctx.from.id);
-        // O usuário já foi buscado anteriormente, reutilizando a variável user
-        console.log('👤 Usuário encontrado:', user);
-
-        if (!user) {
-          throw new Error('Usuário não vinculado. Use o comando /vincular para vincular sua conta.');
-        }
-
-        console.log('📝 Criando aposta com userId:', user.id);
         const apostaData: CreateBetDto = {
           userId: user.id,
           game,
@@ -234,39 +168,27 @@ export class TelegramService implements OnModuleInit {
           market,
           sport,
         };
-        
-        console.log('📊 Dados da aposta:', apostaData);
 
         const aposta = await this.apostaService.createBet(apostaData);
+
         let houseName = 'N/A';
-        
-        if (aposta.houseId) {
-          try {
-            const houses = await this.houseService.getAllHouses();
-            const house = houses.find(h => h.id === aposta.houseId);
-            if (house) {
-              houseName = house.name;
-            }
-          } catch (error) {
-            console.error('Erro ao buscar nome da casa:', error);
-          }
+        try {
+          const houses = await this.houseService.getAllHouses();
+          const house = houses.find((h) => h.id === aposta.houseId);
+          if (house) houseName = house.name;
+        } catch (err) {
+          console.error('Erro ao buscar casa:', err);
         }
 
         await ctx.reply(
-          `✅ Aposta salva com sucesso!\n\n🎮 Jogo: ${aposta.game}\n💰 Stake: R$ ${aposta.stake}\n📈 Odd: ${aposta.odd}\n🏆 Mercado: ${aposta.market}\n⚽ Esporte: ${aposta.sport}\n🏢 Casa: ${houseName}\n👤 Usuário: ${user.username}`,
-          { parse_mode: 'Markdown' },
+          `✅ Aposta salva!\n\n🎮 Jogo: ${aposta.game}\n💰 Stake: R$ ${aposta.stake}\n📈 Odd: ${aposta.odd}\n🏆 Mercado: ${aposta.market}\n⚽ Esporte: ${aposta.sport}\n🏢 Casa: ${houseName}\n👤 Usuário: ${user.username}`,
         );
       } catch (err) {
-        console.error('❌ Erro ao processar a mensagem:', err);
+        console.error('❌ Erro ao processar aposta:', err);
         await ctx.reply(
-          `❌ Erro ao processar sua aposta.\n\nDetalhe: ${
-            (err as Error).message || 'verifique o formato da mensagem'
-          }`,
+          `❌ Erro ao processar aposta.\n${(err as Error).message}`,
         );
       }
     });
-
-    this.bot.launch();
-    console.log('🤖 Telegram bot iniciado...');
   }
 }
