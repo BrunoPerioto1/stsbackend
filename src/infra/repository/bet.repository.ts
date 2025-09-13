@@ -1,12 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
- import camelcaseKeys from 'camelcase-keys';
 import { pool } from '../db/db'; 
 import { ResultIdEnum } from '../../bet/dto/result-id.enum';
 import { CreateBetDto, BetItem } from '../../bet/dto/bet.dto';
 import { UpdateApostaDto } from '../../bet/dto/bet.dto';
-import { BetFilterDto } from '../../bet/dto/bet-filter.dto';
-
-@Injectable()
+import { BetFilterDto } from '../../bet/dto/bet-filter.dto';@Injectable()
 export class BetRepository {
 
   async create(betData: CreateBetDto): Promise<{ id: number }> {
@@ -38,6 +35,7 @@ export class BetRepository {
       await client.query(queryInserirResultado, [aposta.id]);
 
       await client.query('COMMIT');
+      const camelcaseKeys = (await import('camelcase-keys')).default;
       return camelcaseKeys(aposta);
     } catch (err) {
       await client.query('ROLLBACK');
@@ -76,7 +74,11 @@ export class BetRepository {
     `;
 
     const resultado = await pool.query(queryAtualizar, valoresAtualizar);
-    return resultado.rowCount > 0 ? camelcaseKeys(resultado.rows[0]) : null;
+    if (resultado.rowCount > 0) {
+      const camelcaseKeys = (await import('camelcase-keys')).default;
+      return camelcaseKeys(resultado.rows[0]);
+    }
+    return null;
   }
 
   async finalizeBetUpdate(betId: number, resultId: ResultIdEnum, profit: number, userId: number): Promise<any> {
@@ -108,6 +110,7 @@ export class BetRepository {
       if (resProfit.rowCount === 0 || resResult.rowCount === 0) {
         return null;
       }
+      const camelcaseKeys = (await import('camelcase-keys')).default;
       return {
         result: camelcaseKeys(resResult.rows[0]),
         bet: camelcaseKeys(resProfit.rows[0]),

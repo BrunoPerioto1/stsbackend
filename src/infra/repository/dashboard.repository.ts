@@ -2,7 +2,7 @@
 import { Injectable } from '@nestjs/common';
 import { pool } from '../db/db';
 import { DashboardQueryDto } from '../../dashboard/dto/dashboard-query.dto';
-import camelcaseKeys from 'camelcase-keys';
+
 import { DailySummaryPoint, DashboardMetrics } from '../../dashboard/dto/dashboard-metrics.dto';            
 
 @Injectable()
@@ -58,6 +58,7 @@ export class DashboardRepository {
     `;
 
     const resultado = await pool.query(query, params);
+    const camelcaseKeys = (await import('camelcase-keys')).default;
     return camelcaseKeys(resultado.rows);
   }
 
@@ -100,6 +101,10 @@ export class DashboardRepository {
     `;
 
     const result = await pool.query(query, params);
-    return result.rows.length ? camelcaseKeys(result.rows[0]) as DashboardMetrics : null;
+    if (result.rows.length) {
+      const camelcaseKeys = (await import('camelcase-keys')).default;
+      return camelcaseKeys(result.rows[0]) as DashboardMetrics;
+    }
+    return null;
   }
 }
