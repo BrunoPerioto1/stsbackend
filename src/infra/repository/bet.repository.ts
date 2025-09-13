@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-// import camelcaseKeys from 'camelcase-keys';
+ import camelcaseKeys from 'camelcase-keys';
 import { pool } from '../db/db'; 
 import { ResultIdEnum } from '../../bet/dto/result-id.enum';
 import { CreateBetDto, BetItem } from '../../bet/dto/bet.dto';
