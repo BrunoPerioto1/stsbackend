@@ -37,3 +37,14 @@ export function formatPeriod(startDate?: string, endDate?: string): string {
   }
   return 'Período não especificado';
 }
+
+export function normalizeName(name?: string): string {
+  const value = (name ?? '').toString();
+  if (!value) return '';
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .trim()
+    .toUpperCase();
+}

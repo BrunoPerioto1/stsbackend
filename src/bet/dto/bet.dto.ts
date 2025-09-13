@@ -1,9 +1,10 @@
 import { IsNumber, IsString, IsPositive, IsNotEmpty, IsOptional, IsArray, ArrayNotEmpty, IsEnum, } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Transform } from 'class-transformer';
+import { Expose, Transform, Type } from 'class-transformer';
 import { ResultIdEnum } from './result-id.enum';
 
 export class CreateBetDto {
+  
   @ApiProperty({
     description: 'Nome do jogo ou evento esportivo',
     example: 'Flamengo vs Palmeiras',
@@ -66,6 +67,15 @@ export class CreateBetDto {
   @IsOptional()
   @IsString()
   betTime?: string;
+
+  @ApiProperty({
+    description: 'ID do usuário que fez a aposta (opcional)',
+    example: 1,
+    required: false
+  })
+  @IsOptional()
+  @IsNumber()
+  userId?: number;
 }
 
 export class UpdateApostaDto {
@@ -218,4 +228,21 @@ export class BetItem {
 
   @ApiPropertyOptional({ description: 'Nome do resultado (WON, LOST, PENDING, etc.)' })
   resultName: string;
+}
+
+
+export class PaginatedBetsResponseDto {
+  @ApiProperty({ description: "Número total de páginas", example: 10 })
+  totalPages!: number;
+
+  @ApiProperty({ description: "Total de registros", example: 125 })
+  total!: number;
+
+  @ApiProperty({
+    type: [BetItem],
+    description: "Lista de apostas",
+    isArray: true
+  })
+  @Type(() => BetItem)
+  data!: BetItem[];
 }

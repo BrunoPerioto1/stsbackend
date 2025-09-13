@@ -8,8 +8,8 @@ export class HouseService {
   constructor(private readonly houseRepository: HouseRepository) {}
 
   
-  async getHouseMetrics(): Promise<HouseDto> {
-    return this.houseRepository.findHouseMetrics();
+  async getHouseMetrics(userId: number): Promise<HouseDto> {
+    return this.houseRepository.findHouseMetrics(userId);
   }
 
 
@@ -21,8 +21,8 @@ export class HouseService {
     return house;
   }
   
-  async getAllHousesBalanceWithFilter(filter?: HouseFilterDto) {
-    return this.houseRepository.getAllHousesBalanceWithCalculations(filter);
+  async getAllHousesBalanceWithFilter(filter: HouseFilterDto, userId: number) {
+    return this.houseRepository.getAllHousesBalanceWithCalculations(filter, userId);
   }
  
 async getAllHouses(): Promise<FindAllHousesDTO[]> {

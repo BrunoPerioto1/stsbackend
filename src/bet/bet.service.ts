@@ -30,19 +30,15 @@ export class ApostaService {
     return { id: created.id, ...betData, casa_id: finalHouseId ?? undefined };
   }
 
-  async updateBet(betId: number, updateData: UpdateApostaDto) {
-      if (updateData.houseId !== undefined && updateData.houseId !== null) {
-      
-    }
-
-    const updated = await this.betRepository.update(betId, updateData);
+  async updateBet(betId: number, updateData: UpdateApostaDto, userId: number) {
+    const updated = await this.betRepository.update(betId, updateData, userId);
     if (!updated) {
       throw new NotFoundException(`Aposta com ID ${betId} não encontrada.`);
     }
     return updated;
   }
 
-  async finalizeBet(betId: number, resultId: number) {
+  async finalizeBet(betId: number, resultId: number, userId: number) {
     const aposta = await this.betRepository.findById(betId);
      const resultIdEnum = resultId as ResultIdEnum;
     
@@ -52,10 +48,14 @@ export class ApostaService {
       Number(aposta.odd)
     );
     
-    return this.betRepository.finalizeBetUpdate(betId, resultIdEnum, profit);
+    const updated = await this.betRepository.finalizeBetUpdate(betId, resultIdEnum, profit, userId);
+    if (!updated) {
+      throw new NotFoundException(`Aposta com ID ${betId} não encontrada para este usuário.`);
+    }
+    return updated;
   }
-async finalizeMany(betIds: number[], resultId: ResultIdEnum) {
-  const rows = await this.betRepository.findByIds(betIds);
+async finalizeMany(betIds: number[], resultId: ResultIdEnum, userId: number) {
+  const rows = await this.betRepository.findByIds(betIds, userId);
 
   const idToBet: Record<number, { stake: number; odd: number }> = {};
   for (const row of rows) {
@@ -68,7 +68,7 @@ async finalizeMany(betIds: number[], resultId: ResultIdEnum) {
     return { betId: id, resultId, profit };
   });
 
-  const updatedBets = await this.betRepository.finalizeMultipleBets(betProfitsWithResultId);
+  const updatedBets = await this.betRepository.finalizeMultipleBets(betProfitsWithResultId, userId);
 
   return { 
     success: true, 
@@ -89,16 +89,16 @@ async finalizeMany(betIds: number[], resultId: ResultIdEnum) {
     return bets;
   }
 
-  async deleteBet(betId: number) {
-    const deleted = await this.betRepository.delete(betId);
+  async deleteBet(betId: number, userId: number) {
+    const deleted = await this.betRepository.delete(betId, userId);
     if (!deleted) {
       throw new NotFoundException(`Aposta com ID ${betId} não encontrada.`);
     }
     return { success: true, message: `Aposta ${betId} deletada com sucesso` };
   }
 
-  async deleteManyBets(betIds: number[]) {
-    const count = await this.betRepository.deleteMany(betIds);
+  async deleteManyBets(betIds: number[], userId: number) {
+    const count = await this.betRepository.deleteMany(betIds, userId);
       return { 
         success: true, 
       deletedCount: count,

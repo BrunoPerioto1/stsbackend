@@ -33,7 +33,7 @@ export class HouseRepository {
   
   }
 
-  async findHouseMetrics(): Promise<HouseDto> {
+  async findHouseMetrics(userId: number): Promise<HouseDto> {
     const query = `
       WITH house_metrics AS (
         SELECT 
@@ -51,7 +51,7 @@ export class HouseRepository {
           ), 0) AS total_return,
           COALESCE(SUM(ht.value), 0) AS transaction_balance
         FROM betting_houses bh
-        LEFT JOIN bets b ON bh.id = b.house_id
+        LEFT JOIN bets b ON bh.id = b.house_id AND b.user_id = $1
         LEFT JOIN bet_results br ON b.id = br.bet_id
         LEFT JOIN house_transactions ht ON bh.id = ht.house_id
         WHERE bh.is_active = true
@@ -59,7 +59,7 @@ export class HouseRepository {
       total_houses AS (
         SELECT COUNT(DISTINCT bh.id) AS total_houses_used
         FROM betting_houses bh
-        INNER JOIN bets b ON bh.id = b.house_id
+        INNER JOIN bets b ON bh.id = b.house_id AND b.user_id = $1
         WHERE bh.is_active = true
       )
       SELECT 
@@ -71,11 +71,13 @@ export class HouseRepository {
       FROM house_metrics hm
       CROSS JOIN total_houses th;
     `;
-    const result = await pool.query(query);
+    const result = await pool.query(query, [userId]);
     return result.rows[0];
   }
 
-async getAllHousesBalanceWithCalculations(filter?: HouseFilterDto): Promise<HouseDto[]> {
+async getAllHousesBalanceWithCalculations(filter: HouseFilterDto, userId: number): Promise<HouseDto[]> {
+  const params: any[] = [userId];
+  let paramIndex = 1;
   let query = `
     WITH house_bets AS (
       SELECT 
@@ -97,12 +99,11 @@ async getAllHousesBalanceWithCalculations(filter?: HouseFilterDto): Promise<Hous
         COUNT(CASE WHEN br.result_id = 1 THEN 1 END) AS won_bets,
         COUNT(CASE WHEN br.result_id = 2 THEN 1 END) AS lost_bets
       FROM betting_houses h
-      INNER JOIN bets b ON h.id = b.house_id
+      INNER JOIN bets b ON h.id = b.house_id AND b.user_id = $${paramIndex}
       LEFT JOIN bet_results br ON b.id = br.bet_id
       WHERE h.is_active = true
   `;
-  const params: any[] = [];
-  let paramIndex = 1;
+  paramIndex++;
   if (filter?.houseId) {
     query += ` AND h.id = $${paramIndex}`;
     params.push(filter.houseId);
