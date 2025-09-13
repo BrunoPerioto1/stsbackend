@@ -24,13 +24,19 @@ function extractLimitFromText(text: string): number | null {
 
 function extractPercentAfterStopEmoji(text: string): number | null {
   if (!text) return null;
-  const percentRegex = /🛑[^0-9]{0,15}([\d]{1,3}(?:[.,][\d]{1,2})?)\s*%?/i;
+
+  const percentRegex = /🛑[^0-9]{0,15}(\d{1,3}(?:[.,]\d{1,2})?)\s*%?/i;
   const m = text.match(percentRegex);
   if (!m) return null;
-  const normalized = m[1].replace(/\./g, '').replace(/,/g, '.');
+
+
+  const normalized = m[1].replace(',', '.');
   const val = Number(normalized);
+
   return Number.isFinite(val) && val >= 0 ? val : null;
 }
+
+
 
 @Injectable()
 export class TelegramService implements OnModuleInit {
