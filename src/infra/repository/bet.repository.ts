@@ -1,9 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { pool } from '../db/db'; 
 import { ResultIdEnum } from '../../bet/dto/result-id.enum';
 import { CreateBetDto, BetItem } from '../../bet/dto/bet.dto';
 import { UpdateApostaDto } from '../../bet/dto/bet.dto';
-import { BetFilterDto } from '../../bet/dto/bet-filter.dto';@Injectable()
+import { BetFilterDto } from '../../bet/dto/bet-filter.dto';
+import { toCamel } from '../../common/utils/camelcase';
+
+@Injectable()
 export class BetRepository {
 
   async create(betData: CreateBetDto): Promise<{ id: number }> {
@@ -11,7 +14,6 @@ export class BetRepository {
     try {
       await client.query('BEGIN');
 
-      // Insere a aposta
       const queryInserirAposta = `
         INSERT INTO bets (game, stake, odd, house_id, market, sport, profit, user_id)
         VALUES ($1, $2, $3, $4, $5, $6, 0, $7)
@@ -29,14 +31,10 @@ export class BetRepository {
       ]);
       const aposta = resultadoAposta.rows[0];
 
-      const queryInserirResultado = `
-        INSERT INTO bet_results (bet_id) VALUES ($1)
-      `;
-      await client.query(queryInserirResultado, [aposta.id]);
+      await client.query(`INSERT INTO bet_results (bet_id) VALUES ($1)`, [aposta.id]);
 
       await client.query('COMMIT');
-      const camelcaseKeys = (await import('camelcase-keys')).default;
-      return camelcaseKeys(aposta);
+      return await toCamel(aposta);
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
@@ -74,11 +72,7 @@ export class BetRepository {
     `;
 
     const resultado = await pool.query(queryAtualizar, valoresAtualizar);
-    if (resultado.rowCount > 0) {
-      const camelcaseKeys = (await import('camelcase-keys')).default;
-      return camelcaseKeys(resultado.rows[0]);
-    }
-    return null;
+    return resultado.rowCount > 0 ? await toCamel(resultado.rows[0]) : null;
   }
 
   async finalizeBetUpdate(betId: number, resultId: ResultIdEnum, profit: number, userId: number): Promise<any> {
@@ -110,10 +104,9 @@ export class BetRepository {
       if (resProfit.rowCount === 0 || resResult.rowCount === 0) {
         return null;
       }
-      const camelcaseKeys = (await import('camelcase-keys')).default;
       return {
-        result: camelcaseKeys(resResult.rows[0]),
-        bet: camelcaseKeys(resProfit.rows[0]),
+        result: await toCamel(resResult.rows[0]),
+        bet: await toCamel(resProfit.rows[0]),
       };
     } catch (err) {
       await client.query('ROLLBACK');
@@ -123,7 +116,10 @@ export class BetRepository {
     }
   }
 
-  async finalizeMultipleBets(betProfits: { betId: number; resultId: ResultIdEnum; profit: number }[], userId: number): Promise<any> {
+  async finalizeMultipleBets(
+    betProfits: { betId: number; resultId: ResultIdEnum; profit: number }[],
+    userId: number
+  ): Promise<any> {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -131,24 +127,24 @@ export class BetRepository {
       const results: Array<{betId: number; result: any; bet: any}> = [];
       
       for (const { betId, resultId, profit } of betProfits) {
-        const resultQuery = `
-          UPDATE bet_results br
-          SET result_id = $1, updated_at = NOW()
-          FROM bets b
-          WHERE br.bet_id = $2
-            AND b.id = br.bet_id
-            AND b.user_id = $3
-          RETURNING br.*;
-        `;
-        const resultRes = await client.query(resultQuery, [resultId, betId, userId]);
+        const resultRes = await client.query(
+          `UPDATE bet_results br
+           SET result_id = $1, updated_at = NOW()
+           FROM bets b
+           WHERE br.bet_id = $2
+             AND b.id = br.bet_id
+             AND b.user_id = $3
+           RETURNING br.*;`,
+          [resultId, betId, userId]
+        );
         
-        const profitQuery = `
-          UPDATE bets
-          SET profit = $1, updated_at = NOW()
-          WHERE id = $2 AND user_id = $3
-          RETURNING *;
-        `;
-        const profitRes = await client.query(profitQuery, [profit, betId, userId]);
+        const profitRes = await client.query(
+          `UPDATE bets
+           SET profit = $1, updated_at = NOW()
+           WHERE id = $2 AND user_id = $3
+           RETURNING *;`,
+          [profit, betId, userId]
+        );
         
         if (resultRes.rowCount > 0 && profitRes.rowCount > 0) {
           results.push({
@@ -160,9 +156,7 @@ export class BetRepository {
       }
       
       await client.query('COMMIT');
-      
-  const camelcaseKeys = (await import('camelcase-keys')).default;
-  return camelcaseKeys(results, { deep: true });
+      return await toCamel(results, { deep: true });
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
@@ -180,27 +174,22 @@ export class BetRepository {
       queryConditions.push(`b.id = $${paramIndex++}`);
       queryParams.push(filters.betId);
     }
-    
     if (filters.userId !== undefined) {
       queryConditions.push(`b.user_id = $${paramIndex++}`);
       queryParams.push(filters.userId);
     }
-    
     if (filters.startDate !== undefined) {
       queryConditions.push(`b.bet_time >= $${paramIndex++}`);
       queryParams.push(filters.startDate);
     }
-    
     if (filters.endDate !== undefined) {
       queryConditions.push(`b.bet_time <= $${paramIndex++}`);
       queryParams.push(filters.endDate);
     }
-    
     if (filters.resultId !== undefined) {
       queryConditions.push(`br.result_id = $${paramIndex++}`);
       queryParams.push(filters.resultId);
     }
-
     if (filters.market !== undefined) {
       queryConditions.push(`b.market ILIKE $${paramIndex++}`);
       queryParams.push(`%${filters.market}%`);
@@ -224,32 +213,27 @@ export class BetRepository {
         b.bet_time,
         br.result_id,
         r.name AS result_name
-      FROM
-        bets b
-      LEFT JOIN
-        bet_results br ON br.bet_id = b.id
-      LEFT JOIN
-        betting_houses bh ON bh.id = b.house_id
-      LEFT JOIN
-        results r ON br.result_id = r.id
+      FROM bets b
+      LEFT JOIN bet_results br ON br.bet_id = b.id
+      LEFT JOIN betting_houses bh ON bh.id = b.house_id
+      LEFT JOIN results r ON br.result_id = r.id
       ${whereClause}
-      ORDER BY
-        b.bet_time DESC
+      ORDER BY b.bet_time DESC
     `;
 
     const result = await pool.query(query, queryParams);
-
-    const camelcaseKeys = (await import('camelcase-keys')).default;
     if (filters.betId !== undefined) {
-      return result.rowCount > 0 ? camelcaseKeys(result.rows[0]) : null;
+      return result.rowCount > 0 ? await toCamel(result.rows[0]) : null;
     }
-    return camelcaseKeys(result.rows);
+    return await toCamel(result.rows);
   }
 
   async findById(betId: number): Promise<any> {
-  const result = await pool.query('SELECT id, stake , odd FROM bets WHERE id = $1', [betId]);
-  const camelcaseKeys = (await import('camelcase-keys')).default;
-  return result.rowCount > 0 ? camelcaseKeys(result.rows[0]) : null;
+    const result = await pool.query(
+      'SELECT id, stake, odd FROM bets WHERE id = $1',
+      [betId]
+    );
+    return result.rowCount > 0 ? await toCamel(result.rows[0]) : null;
   }
 
   async findByIds(betIds: number[], userId?: number): Promise<any[]> {
@@ -259,12 +243,14 @@ export class BetRepository {
         : 'SELECT id, stake, odd FROM bets WHERE id = ANY($1)',
       userId !== undefined ? [betIds, userId] : [betIds],
     );
-    const camelcaseKeys = (await import('camelcase-keys')).default;
-    return camelcaseKeys(resultado.rows);
+    return await toCamel(resultado.rows);
   }
 
   async delete(betId: number, userId: number): Promise<boolean> {
-    const resultado = await pool.query('DELETE FROM bets WHERE id = $1 AND user_id = $2', [betId, userId]);
+    const resultado = await pool.query(
+      'DELETE FROM bets WHERE id = $1 AND user_id = $2',
+      [betId, userId]
+    );
     return resultado.rowCount > 0;
   }
 

@@ -2,13 +2,12 @@
 import { Injectable } from '@nestjs/common';
 import { pool } from '../db/db';
 import { DashboardQueryDto } from '../../dashboard/dto/dashboard-query.dto';
-
-import { DailySummaryPoint, DashboardMetrics } from '../../dashboard/dto/dashboard-metrics.dto';            
+import { DailySummaryPoint, DashboardMetrics } from '../../dashboard/dto/dashboard-metrics.dto';
+import { toCamel } from '../../common/utils/camelcase';
 
 @Injectable()
 export class DashboardRepository {
-
-  private buildFilters(filters: DashboardQueryDto & { userId?: number }): { whereClause: string, params: any[] } {
+  private buildFilters(filters: DashboardQueryDto & { userId?: number }): { whereClause: string; params: any[] } {
     let whereClause = '';
     const params: any[] = [];
     let paramIndex = 1;
@@ -40,9 +39,7 @@ export class DashboardRepository {
     return { whereClause, params };
   }
 
-  async findDailySummary(
-    filters: DashboardQueryDto & { userId?: number },
-  ): Promise<DailySummaryPoint[]> {
+  async findDailySummary(filters: DashboardQueryDto & { userId?: number }): Promise<DailySummaryPoint[]> {
     const { whereClause, params } = this.buildFilters(filters);
 
     const query = `
@@ -58,8 +55,7 @@ export class DashboardRepository {
     `;
 
     const resultado = await pool.query(query, params);
-    const camelcaseKeys = (await import('camelcase-keys')).default;
-    return camelcaseKeys(resultado.rows);
+    return await toCamel<DailySummaryPoint[]>(resultado.rows);
   }
 
   async findDashboardMetrics(filters: DashboardQueryDto & { userId?: number }): Promise<DashboardMetrics | null> {
@@ -102,8 +98,7 @@ export class DashboardRepository {
 
     const result = await pool.query(query, params);
     if (result.rows.length) {
-      const camelcaseKeys = (await import('camelcase-keys')).default;
-      return camelcaseKeys(result.rows[0]) as DashboardMetrics;
+      return await toCamel<DashboardMetrics>(result.rows[0]);
     }
     return null;
   }
