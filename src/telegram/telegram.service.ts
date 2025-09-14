@@ -16,8 +16,14 @@ function extractLimitFromText(text: string): number | null {
   const m2 = text.match(wordsRegex);
   const raw = (m1?.[1] || m2?.[2] || '').trim();
   if (!raw) return null;
-  const normalized = raw.replace(/\./g, '').replace(/,/g, '.');
+  
+ 
+  const normalized = raw.includes(',') 
+    ? raw.replace(/\./g, '').replace(',', '.') // Caso brasileiro
+    : raw; // Caso internacional
+  
   const val = Number(normalized);
+  console.log(`Limite extraído: "${raw}" -> normalizado: "${normalized}" -> valor: ${val}`);
   return Number.isFinite(val) && val > 0 ? val : null;
 }
 
@@ -26,11 +32,16 @@ function extractPercentAfterStopEmoji(text: string): number | null {
   const percentRegex = /🛑[^0-9]{0,15}([\d]{1,3}(?:[.,][\d]{1,2})?)\s*%?/i;
   const m = text.match(percentRegex);
   if (!m) return null;
-  const normalized = m[1].replace(/\./g, '').replace(/,/g, '.');
+  
+  const raw = m[1];
+  const normalized = raw.includes(',') 
+    ? raw.replace(/\./g, '').replace(',', '.') 
+    : raw; 
+  
   const val = Number(normalized);
+  console.log(`Percentagem extraída: "${raw}" -> normalizada: "${normalized}" -> valor: ${val}`);
   return Number.isFinite(val) && val >= 0 ? val : null;
 }
-
 @Injectable()
 export class TelegramService implements OnModuleInit {
   private bot: Telegraf;

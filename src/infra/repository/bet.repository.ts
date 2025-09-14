@@ -14,13 +14,10 @@ export class BetRepository {
     try {
       await client.query('BEGIN');
 
-      const queryInserirAposta = `
-        INSERT INTO bets (game, stake, odd, house_id, market, sport, profit, user_id)
-        VALUES ($1, $2, $3, $4, $5, $6, 0, $7)
-        RETURNING *,
-        (SELECT name FROM betting_houses WHERE id = $4) as house_name
-      `;
-      const resultadoAposta = await client.query(queryInserirAposta, [
+      // Determinar se devemos incluir bet_time na query
+      let queryFields = 'game, stake, odd, house_id, market, sport, profit, user_id';
+      let queryValues = '$1, $2, $3, $4, $5, $6, 0, $7';
+      const queryParams = [
         betData.game,
         betData.stake,
         betData.odd,
@@ -28,7 +25,27 @@ export class BetRepository {
         betData.market,
         betData.sport,
         betData.userId,
-      ]);
+      ];
+      
+      // Se betTime for fornecido, incluí-lo na query
+      if (betData.betTime) {
+        queryFields += ', bet_time';
+        queryValues += ', $8';
+        queryParams.push(betData.betTime);
+      } else {
+        // Se não for fornecido, usar NOW() AT TIME ZONE 'UTC' para garantir que seja salvo em UTC
+        queryFields += ', bet_time';
+        queryValues += ', NOW() AT TIME ZONE \'UTC\'';
+      }
+
+      const queryInserirAposta = `
+        INSERT INTO bets (${queryFields})
+        VALUES (${queryValues})
+        RETURNING *,
+        (SELECT name FROM betting_houses WHERE id = $4) as house_name
+      `;
+      
+      const resultadoAposta = await client.query(queryInserirAposta, queryParams);
       const aposta = resultadoAposta.rows[0];
 
       await client.query(`INSERT INTO bet_results (bet_id) VALUES ($1)`, [aposta.id]);
@@ -60,7 +77,7 @@ export class BetRepository {
       return null;
     }
 
-    camposAtualizar.push(`updated_at = NOW()`);
+    camposAtualizar.push(`updated_at = NOW() AT TIME ZONE 'UTC'`);
     valoresAtualizar.push(betId);
     valoresAtualizar.push(userId);
 
@@ -82,7 +99,7 @@ export class BetRepository {
 
       const queryResult = `
         UPDATE bet_results br
-        SET result_id = $1, updated_at = NOW()
+        SET result_id = $1, updated_at = NOW() AT TIME ZONE 'UTC'
         FROM bets b
         WHERE br.bet_id = $2
           AND b.id = br.bet_id
@@ -93,7 +110,7 @@ export class BetRepository {
 
       const queryProfit = `
         UPDATE bets
-        SET profit = $1, updated_at = NOW()
+        SET profit = $1, updated_at = NOW() AT TIME ZONE 'UTC'
         WHERE id = $2 AND user_id = $3
         RETURNING *;
       `;
@@ -129,7 +146,7 @@ export class BetRepository {
       for (const { betId, resultId, profit } of betProfits) {
         const resultRes = await client.query(
           `UPDATE bet_results br
-           SET result_id = $1, updated_at = NOW()
+           SET result_id = $1, updated_at = NOW() AT TIME ZONE 'UTC'
            FROM bets b
            WHERE br.bet_id = $2
              AND b.id = br.bet_id
@@ -140,7 +157,7 @@ export class BetRepository {
         
         const profitRes = await client.query(
           `UPDATE bets
-           SET profit = $1, updated_at = NOW()
+           SET profit = $1, updated_at = NOW() AT TIME ZONE 'UTC'
            WHERE id = $2 AND user_id = $3
            RETURNING *;`,
           [profit, betId, userId]

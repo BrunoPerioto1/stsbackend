@@ -25,7 +25,7 @@ import {
   ApiNoContentResponse,
 } from '@nestjs/swagger';
 import { ApostaService } from './bet.service';
-import { CreateBetDto } from './dto/bet.dto';
+import { CreateBetDto, DeleteMultipleBetsDto } from './dto/bet.dto';
 import { UpdateApostaDto } from '../bet/dto/bet.dto';
 import {
   FinalizarApostaDto,
@@ -126,8 +126,11 @@ export class ApostaController {
   })
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
-  async deletarMultiplas(@Body() body: { apostaIds: number[] }, @User('userId') userId: number) {
-    return this.apostaService.deleteManyBets(body.apostaIds, userId);
+  async deletarMultiplas
+
+
+  (@Body() body: DeleteMultipleBetsDto, @User('userId') userId: number) {
+    return this.apostaService.deleteManyBets(body.betIds, userId);
   }
 
   // @Get(':id')
@@ -143,6 +146,16 @@ export class ApostaController {
   // async buscar(@Param('id', ParseIntPipe) id: number) {
   //   return this.apostaService.findBetById(id);
   // }
+    @Get('result-types')
+  @ApiOperation({ summary: 'Lista todos os tipos de resultados' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Lista de tipos de resultados retornada com sucesso.',
+    type: [Object],
+  })
+  async getResultTypes() {
+    return this.apostaService.getResultTypes();
+  }
 
   @Put(':id')
   @ApiOperation({ summary: 'Atualiza uma aposta existente' })
@@ -182,16 +195,7 @@ export class ApostaController {
     return this.apostaService.deleteBet(id, userId);
   }
 
-  @Get('result-types')
-  @ApiOperation({ summary: 'Lista todos os tipos de resultados' })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'Lista de tipos de resultados retornada com sucesso.',
-    type: [Object],
-  })
-  async getResultTypes() {
-    return this.apostaService.getResultTypes();
-  }
+
 
 
 }
