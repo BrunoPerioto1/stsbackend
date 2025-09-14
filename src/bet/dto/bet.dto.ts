@@ -171,6 +171,19 @@ export class FinalizarApostaDto {
   resultId: ResultIdEnum;
 }
 
+export class DeleteMultipleBetsDto {
+  @ApiProperty({
+    description: 'Array de IDs das apostas a serem deletadas',
+    example: [1, 2, 3],
+    required: true,
+    type: [Number]
+  })
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsNumber({}, { each: true })
+  @Transform(({ value }) => Array.isArray(value) ? value.map(id => Number(id)) : value)
+  betIds: number[];
+}
 export class FinalizarMultiplasDto {
   @ApiProperty({
     description: 'Array de IDs das apostas a serem finalizadas',
