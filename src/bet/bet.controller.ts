@@ -133,19 +133,6 @@ export class ApostaController {
     return this.apostaService.deleteManyBets(body.betIds, userId);
   }
 
-  // @Get(':id')
-  // @ApiOperation({ summary: 'Busca uma aposta por ID' })
-  // @ApiResponse({
-  //   status: HttpStatus.OK,
-  //   description: 'Aposta encontrada com sucesso.',
-  //   type: CreateBetDto,
-  // })
-  // @ApiNotFoundResponse({
-  //   description: 'Aposta não encontrada.',
-  // })
-  // async buscar(@Param('id', ParseIntPipe) id: number) {
-  //   return this.apostaService.findBetById(id);
-  // }
     @Get('result-types')
   @ApiOperation({ summary: 'Lista todos os tipos de resultados' })
   @ApiResponse({
