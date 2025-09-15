@@ -245,17 +245,17 @@ export class BetItem {
 
 
 export class PaginatedBetsResponseDto {
-  @ApiProperty({ description: "Número total de páginas", example: 10 })
-  totalPages!: number;
+  @ApiPropertyOptional({ description: "Número total de páginas", example: 10 })
+  totalPages?: number;
 
   @ApiProperty({ description: "Total de registros", example: 125 })
-  total!: number;
+  total?: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     type: [BetItem],
     description: "Lista de apostas",
     isArray: true
   })
   @Type(() => BetItem)
-  data!: BetItem[];
+  data?: BetItem[];
 }
