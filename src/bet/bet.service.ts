@@ -18,28 +18,19 @@ export class ApostaService {
 
   async createBet(betData: CreateBetDto) {
     let finalHouseId: number | null = betData.houseId ?? null;
-    
-    // Garantir que a data da aposta seja salva em UTC
-    const nowUTC = new Date();
-    // Converter para string ISO em formato UTC
-    const betTimeUTC = nowUTC.toISOString();
+    if (finalHouseId !== null) {
+     
+    }
 
     const created = await this.betRepository.create({
       ...betData,
       casa_id: finalHouseId ?? undefined,
-      betTime: betTimeUTC, // Adiciona o timestamp UTC como string ISO
     } as CreateBetDto);
 
     return { id: created.id, ...betData, casa_id: finalHouseId ?? undefined };
   }
 
   async updateBet(betId: number, updateData: UpdateApostaDto, userId: number) {
-    // Se a atualização incluir betTime, garantir que está em UTC
-    if (updateData.betTime) {
-      const betTime = new Date(updateData.betTime);
-      updateData.betTime = betTime.toISOString(); // Converter para formato ISO em UTC
-    }
-    
     const updated = await this.betRepository.update(betId, updateData, userId);
     if (!updated) {
       throw new NotFoundException(`Aposta com ID ${betId} não encontrada.`);
@@ -87,40 +78,13 @@ async finalizeMany(betIds: number[], resultId: ResultIdEnum, userId: number) {
 }
 
   async findBets(filters: BetFilterDto): Promise<BetItem[] | BetItem | null> {
-    // Cria uma cópia do filtro para não modificar o original
-    const utcFilters = { ...filters };
-    
-    // Garantir que as datas estão em UTC
-    if (utcFilters.startDate) {
-      // Certifique-se de que a data está em UTC
-      const startDate = new Date(utcFilters.startDate);
-      // Manter o objeto Date, mas garantir que representa UTC
-      utcFilters.startDate = new Date(Date.UTC(
-        startDate.getFullYear(),
-        startDate.getMonth(),
-        startDate.getDate(),
-        0, 0, 0, 0
-      ));
-    }
-    
-    if (utcFilters.endDate) {
-      // Certifique-se de que a data está em UTC
-      const endDate = new Date(utcFilters.endDate);
-      // Definir para o final do dia em UTC
-      utcFilters.endDate = new Date(Date.UTC(
-        endDate.getFullYear(),
-        endDate.getMonth(),
-        endDate.getDate(),
-        23, 59, 59, 999
-      ));
-    }
+  
 
-    if (utcFilters.startDate && utcFilters.endDate && 
-        utcFilters.startDate > utcFilters.endDate) {
+    if (filters.startDate && filters.endDate && new Date(filters.startDate) > new Date(filters.endDate)) {
       throw new BadRequestException('A data inicial não pode ser maior que a data final.');
     }
 
-    const bets = await this.betRepository.findBets(utcFilters);
+    const bets = await this.betRepository.findBets(filters);
 
     return bets;
   }
