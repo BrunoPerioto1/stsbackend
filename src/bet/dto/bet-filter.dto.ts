@@ -32,16 +32,15 @@ export class BetFilterDto {
   @IsNumber()
   userId?: number;
 
-@IsOptional()
-@Type(() => Number)
-@IsNumber()
-page?: number;
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  page?: number;
 
-@IsOptional()
-@Type(() => Number)
-@IsNumber()
-perPage?: number;
-
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  perPage?: number;
 }
 
 
