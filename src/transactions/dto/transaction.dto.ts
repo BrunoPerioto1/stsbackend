@@ -17,14 +17,10 @@ export class TransactionTypeDto {
   name: string;
 }
 
-export class TransactionDto {
+export class GetTransactionDto {
   @ApiProperty({ description: "ID da transação", example: 123 })
   @IsNumber()
   id: number;
-
-  @ApiProperty({ description: "ID da casa de apostas", example: 1 })
-  @IsNumber()
-  houseId: number;
 
   @ApiProperty({ description: "Nome da casa de apostas", example: "Bet365" })
   @IsString()
@@ -69,6 +65,15 @@ export class NewTransactionDto {
   })
   @IsNumber()
   value: number;
+
+
+  @ApiProperty({
+    description: 'ID do usuário que realizou a transação',
+    example: 42,
+    required: false
+  })
+  @IsNumber()
+  userId?: number;
 
 
 }
