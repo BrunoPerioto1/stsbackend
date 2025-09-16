@@ -14,4 +14,9 @@ export class TransactionFilterDto {
     @Type(() => Number)
     @IsNumber()
     houseId?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  userId?: number;
 }
