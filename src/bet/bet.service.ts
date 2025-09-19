@@ -6,7 +6,7 @@ import {
 import { pool } from '../infra/db/db';
 import { ResultIdEnum } from './dto/result-id.enum';
 import { CreateBetDto } from './dto/bet.dto';
-import { UpdateApostaDto,BetItem } from './dto/bet.dto';
+import { UpdateApostaDto, BetItem, PaginatedBetsResponseDto } from './dto/bet.dto';
 import { BetRepository } from '../infra/repository/bet.repository';
 import { calculateProfit } from '../common/utils/bet.utils';
 import { BetFilterDto } from './dto/bet-filter.dto';
@@ -77,16 +77,25 @@ async finalizeMany(betIds: number[], resultId: ResultIdEnum, userId: number) {
   };
 }
 
-  async findBets(filters: BetFilterDto): Promise<BetItem[] | BetItem | null> {
-  
-
+  async findBets(filters: BetFilterDto): Promise<PaginatedBetsResponseDto> {
     if (filters.startDate && filters.endDate && new Date(filters.startDate) > new Date(filters.endDate)) {
       throw new BadRequestException('A data inicial não pode ser maior que a data final.');
     }
 
+    filters.page = filters.page || 1;
+    filters.perPage = filters.perPage || 30;
+    
     const bets = await this.betRepository.findBets(filters);
-
-    return bets;
+    
+    const total = await this.betRepository.countBets(filters);
+    
+    const totalPages = Math.ceil(total / filters.perPage || 1);
+    
+    return {
+      data: Array.isArray(bets) ? bets : (bets ? [bets] : []),
+      total,
+      totalPages,
+    };
   }
 
   async deleteBet(betId: number, userId: number) {

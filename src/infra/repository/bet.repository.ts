@@ -5,6 +5,7 @@ import { CreateBetDto, BetItem } from '../../bet/dto/bet.dto';
 import { UpdateApostaDto } from '../../bet/dto/bet.dto';
 import { BetFilterDto } from '../../bet/dto/bet-filter.dto';
 import { toCamel } from '../../common/utils/camelcase';
+import { filter } from 'rxjs/internal/operators/filter';
 
 @Injectable()
 export class BetRepository {
@@ -190,15 +191,21 @@ export class BetRepository {
       queryConditions.push(`br.result_id = $${paramIndex++}`);
       queryParams.push(filters.resultId);
     }
-    if (filters.market !== undefined) {
-      queryConditions.push(`b.market ILIKE $${paramIndex++}`);
-      queryParams.push(`%${filters.market}%`);
+    if (filters.q !== undefined) {
+      queryConditions.push(`(b.market ILIKE $${paramIndex++} OR b.game ILIKE $${paramIndex++})`);
+      queryParams.push(`%${filters.q}%`, `%${filters.q}%`);
     }
 
+    // Cria a cláusula WHERE com as condições
     const whereClause = queryConditions.length > 0
       ? `WHERE ${queryConditions.join(' AND ')}`
       : '';
-    
+      
+    // Sempre aplica a paginação, usando valores padrão se não fornecidos
+    const page = filters.page || 1;
+    const perPage = filters.perPage || 30;
+    const offset = (page - 1) * perPage;
+      
     const query = `
       SELECT
         b.id,
@@ -219,6 +226,7 @@ export class BetRepository {
       LEFT JOIN results r ON br.result_id = r.id
       ${whereClause}
       ORDER BY b.bet_time DESC
+      LIMIT ${perPage} OFFSET ${offset}
     `;
 
     const result = await pool.query(query, queryParams);
@@ -267,5 +275,52 @@ export class BetRepository {
       'SELECT id, name FROM results ORDER BY name'
     );
     return resultado.rows;
+  }
+  
+  async countBets(filters: BetFilterDto = {}): Promise<number> {
+    const queryConditions: string[] = [];
+    const queryParams: any[] = [];
+    let paramIndex = 1;
+
+    if (filters.betId !== undefined) {
+      queryConditions.push(`b.id = $${paramIndex++}`);
+      queryParams.push(filters.betId);
+    }
+    if (filters.userId !== undefined) {
+      queryConditions.push(`b.user_id = $${paramIndex++}`);
+      queryParams.push(filters.userId);
+    }
+    if (filters.startDate !== undefined) {
+      queryConditions.push(`b.bet_time >= $${paramIndex++}`);
+      queryParams.push(filters.startDate);
+    }
+    if (filters.endDate !== undefined) {
+      queryConditions.push(`b.bet_time <= $${paramIndex++}`);
+      queryParams.push(filters.endDate);
+    }
+    if (filters.resultId !== undefined) {
+      queryConditions.push(`br.result_id = $${paramIndex++}`);
+      queryParams.push(filters.resultId);
+    }
+    if (filters.q !== undefined) {
+      queryConditions.push(`(b.market ILIKE $${paramIndex++} OR b.game ILIKE $${paramIndex++})`);
+      queryParams.push(`%${filters.q}%`, `%${filters.q}%`);
+    }
+
+    const whereClause = queryConditions.length > 0
+      ? `WHERE ${queryConditions.join(' AND ')}`
+      : '';
+    
+    const query = `
+      SELECT COUNT(*) as total
+      FROM bets b
+      LEFT JOIN bet_results br ON br.bet_id = b.id
+      LEFT JOIN betting_houses bh ON bh.id = b.house_id
+      LEFT JOIN results r ON br.result_id = r.id
+      ${whereClause}
+    `;
+
+    const result = await pool.query(query, queryParams);
+    return parseInt(result.rows[0].total);
   }
 }

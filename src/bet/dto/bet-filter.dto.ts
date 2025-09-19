@@ -25,23 +25,22 @@ export class BetFilterDto {
  
   @IsOptional()
   @IsString()
-  market?: string;
+  q?: string;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   userId?: number;
 
-@IsOptional()
-@Type(() => Number)
-@IsNumber()
-page?: number;
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  page?: number;
 
-@IsOptional()
-@Type(() => Number)
-@IsNumber()
-perPage?: number;
-
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  perPage?: number;
 }
 
 

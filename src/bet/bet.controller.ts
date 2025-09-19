@@ -30,7 +30,8 @@ import { UpdateApostaDto } from '../bet/dto/bet.dto';
 import {
   FinalizarApostaDto,
   FinalizarMultiplasDto,
-  BetItem
+  BetItem,
+  PaginatedBetsResponseDto
 } from './dto/bet.dto';
 import { BetFilterDto } from './dto/bet-filter.dto';
 
@@ -64,13 +65,22 @@ export class ApostaController {
   @ApiQuery({ name: 'startDate', required: false, type: String, description: 'Filtra por data inicial (ex: 2025-09-03).' })
   @ApiQuery({ name: 'endDate', required: false, type: String, description: 'Filtra por data final (ex: 2025-09-04).' })
   @ApiQuery({ name: 'resultId', required: false, type: Number, description: 'Filtra por ID do resultado.' })
-  @ApiQuery({ name: 'market', required: false, type: String, description: 'Filtra por nome do mercado (busca parcial).' })
+  @ApiQuery({ name: 'q', required: false, type: String, description: 'Filtra por nome do mercado ou jogo.' })
+  @ApiQuery({ name: 'page', required: true, type: Number, description: 'Página atual para paginação (padrão: 1).' })
+  @ApiQuery({ name: 'perPage', required: true, type: Number, description: 'Itens por página para paginação (padrão: 30).' })
   @ApiResponse({
     status: HttpStatus.OK,
     description: 'Lista de apostas retornada com sucesso.',
-    type: [BetItem],
+    type: PaginatedBetsResponseDto,
   })
   async findBets(@Query() filters: BetFilterDto, @User('userId') userId: number) {
+    // Converte page e perPage para números se estiverem definidos
+    if (filters.page !== undefined) {
+      filters.page = Number(filters.page);
+    }
+    if (filters.perPage !== undefined) {
+      filters.perPage = Number(filters.perPage);
+    }
     return this.apostaService.findBets({ ...filters, userId });
   }
 
