@@ -191,9 +191,9 @@ export class BetRepository {
       queryConditions.push(`br.result_id = $${paramIndex++}`);
       queryParams.push(filters.resultId);
     }
-    if (filters.market !== undefined) {
-      queryConditions.push(`b.market ILIKE $${paramIndex++}`);
-      queryParams.push(`%${filters.market}%`);
+    if (filters.q !== undefined) {
+      queryConditions.push(`(b.market ILIKE $${paramIndex++} OR b.game ILIKE $${paramIndex++})`);
+      queryParams.push(`%${filters.q}%`, `%${filters.q}%`);
     }
 
     // Cria a cláusula WHERE com as condições
@@ -302,9 +302,9 @@ export class BetRepository {
       queryConditions.push(`br.result_id = $${paramIndex++}`);
       queryParams.push(filters.resultId);
     }
-    if (filters.market !== undefined) {
-      queryConditions.push(`b.market ILIKE $${paramIndex++}`);
-      queryParams.push(`%${filters.market}%`);
+    if (filters.q !== undefined) {
+      queryConditions.push(`(b.market ILIKE $${paramIndex++} OR b.game ILIKE $${paramIndex++})`);
+      queryParams.push(`%${filters.q}%`, `%${filters.q}%`);
     }
 
     const whereClause = queryConditions.length > 0

@@ -82,20 +82,15 @@ async finalizeMany(betIds: number[], resultId: ResultIdEnum, userId: number) {
       throw new BadRequestException('A data inicial não pode ser maior que a data final.');
     }
 
-    // Definindo valores padrão para paginação
     filters.page = filters.page || 1;
     filters.perPage = filters.perPage || 30;
     
-    // Obtém os dados paginados
     const bets = await this.betRepository.findBets(filters);
     
-    // Obtém a contagem total de registros para a paginação
     const total = await this.betRepository.countBets(filters);
     
-    // Calcula o número total de páginas
     const totalPages = Math.ceil(total / filters.perPage || 1);
     
-    // Retorna o resultado paginado no formato do DTO
     return {
       data: Array.isArray(bets) ? bets : (bets ? [bets] : []),
       total,
