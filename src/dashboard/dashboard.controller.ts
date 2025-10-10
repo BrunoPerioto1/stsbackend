@@ -22,6 +22,19 @@ export class DashboardController {
     return this.dashboardService.calculateMetrics({ ...query, userId } as any);
   }
 
+
+  @Get('monthly-summary')
+  @ApiOperation({ summary: 'Obtém resumo mensal para gráficos' })
+  @ApiResponse({
+    status: 200,
+    description: 'Resumo mensal retornado com sucesso.',
+  })
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  async getMonthlySummary(@Query() query: DashboardQueryDto, @User('userId') userId: number) {
+    return this.dashboardService.getMonthlySummary({ ...query, userId } as any);
+  }
+
   // @Get('chart-data')
   // @ApiOperation({ summary: 'Obtém dados para gráficos do dashboard' })
   // @ApiResponse({

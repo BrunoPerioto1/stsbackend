@@ -2,7 +2,7 @@
 import { Injectable } from '@nestjs/common';
 import { pool } from '../db/db';
 import { DashboardQueryDto } from '../../dashboard/dto/dashboard-query.dto';
-import { DailySummaryPoint, DashboardMetrics } from '../../dashboard/dto/dashboard-metrics.dto';
+import { DailySummaryPoint, DashboardMetrics, MonthSummaryPoint } from '../../dashboard/dto/dashboard-metrics.dto';
 import { toCamel } from '../../common/utils/camelcase';
 
 @Injectable()
@@ -56,6 +56,26 @@ export class DashboardRepository {
 
     const resultado = await pool.query(query, params);
     return await toCamel<DailySummaryPoint[]>(resultado.rows);
+  }
+
+
+// refatorar pra ksyelly pq nao faz sentido ter filtro por dia aqui 
+  async findMonthlySummary(filters: DashboardQueryDto & { userId?: number }): Promise<MonthSummaryPoint[]> {
+    const { whereClause, params } = this.buildFilters(filters);
+
+    const query = `
+      SELECT
+        DATE_TRUNC('month', b.bet_time) AS "month",
+        COUNT(b.id) AS "total_bets",
+        COALESCE(SUM(b.profit), 0) AS "profit_month"
+      FROM bets b
+      LEFT JOIN bet_results br ON b.id = br.bet_id
+      WHERE 1=1 ${whereClause}
+      GROUP BY DATE_TRUNC('month', b.bet_time)
+      ORDER BY DATE_TRUNC('month', b.bet_time) ASC
+    `;
+    const resultado = await pool.query(query, params);
+    return await toCamel<MonthSummaryPoint[]>(resultado.rows);
   }
 
   async findDashboardMetrics(filters: DashboardQueryDto & { userId?: number }): Promise<DashboardMetrics | null> {

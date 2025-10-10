@@ -25,6 +25,13 @@ export interface DailySummaryPoint {
   profitDay: number;
 }
 
+
+export interface MonthSummaryPoint {
+  month: string;
+  totalBets: number;
+  profitMonth: number;
+}
+
 // export interface PerformanceSummary {
 //   period: string;
 //   metrics: DashboardMetrics;

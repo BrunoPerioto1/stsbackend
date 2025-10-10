@@ -4,8 +4,8 @@ import { DashboardQueryDto } from './dto/dashboard-query.dto';
 import {
   DashboardMetrics,
   DailySummaryPoint,
+  MonthSummaryPoint
 } from './dto/dashboard-metrics.dto';
-import { formatPeriod } from '../common/utils/bet.utils';
 
 @Injectable()
 export class DashboardService {
@@ -57,5 +57,9 @@ async getDailySummary(
   
 }
 
-
+async getMonthlySummary(
+  filters: DashboardQueryDto & { userId?: number },
+): Promise<MonthSummaryPoint[]> {
+  return  await this.dashboardRepository.findMonthlySummary(filters as any);
+}
 }
