@@ -34,8 +34,8 @@ CREATE TABLE IF NOT EXISTS house_balances (
 CREATE TABLE IF NOT EXISTS bets (
     id SERIAL PRIMARY KEY,
     game VARCHAR(255) NOT NULL,
-    stake DECIMAL(10,2) NOT NULL CHECK (stake > 0),
-    odd DECIMAL(5,2) NOT NULL CHECK (odd > 1),
+    stake DECIMAL(10,2) NOT NULL ,
+    odd DECIMAL(5,2) NOT NULL ,
     house_id INTEGER NULL REFERENCES betting_houses(id) ON DELETE SET NULL,
     market VARCHAR(255) NOT NULL,
     sport VARCHAR(50) NOT NULL,
