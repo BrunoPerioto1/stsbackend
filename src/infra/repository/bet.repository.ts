@@ -6,6 +6,21 @@ import { UpdateApostaDto } from '../../bet/dto/bet.dto';
 import { BetFilterDto } from '../../bet/dto/bet-filter.dto';
 import { toCamel } from '../../common/utils/camelcase';
 import { filter } from 'rxjs/internal/operators/filter';
+import { isNotEmpty } from 'class-validator';
+import { UserId } from '../../db_types/Users';
+import { BetId } from '../../db_types/Bet';
+import { ResultId } from '../../db_types/Results';
+
+export interface FilterGetBets {
+  betId?: BetId;
+  userId?: UserId;
+  startDate?: Date;
+  endDate?: Date;
+  resultId?: ResultId;
+  q?: string;
+  page?: number;
+  perPage?: number;
+} 
 
 @Injectable()
 export class BetRepository {
@@ -166,161 +181,126 @@ export class BetRepository {
     }
   }
 
-  async findBets(filters: BetFilterDto = {}): Promise<BetItem[] | BetItem | null> {
-    const queryConditions: string[] = [];
-    const queryParams: any[] = [];
-    let paramIndex = 1;
-
-    if (filters.betId !== undefined) {
-      queryConditions.push(`b.id = $${paramIndex++}`);
-      queryParams.push(filters.betId);
-    }
-    if (filters.userId !== undefined) {
-      queryConditions.push(`b.user_id = $${paramIndex++}`);
-      queryParams.push(filters.userId);
-    }
-    if (filters.startDate !== undefined) {
-      queryConditions.push(`b.bet_time >= $${paramIndex++}`);
-      queryParams.push(filters.startDate);
-    }
-    if (filters.endDate !== undefined) {
-      queryConditions.push(`b.bet_time <= $${paramIndex++}`);
-      queryParams.push(filters.endDate);
-    }
-    if (filters.resultId !== undefined) {
-      queryConditions.push(`br.result_id = $${paramIndex++}`);
-      queryParams.push(filters.resultId);
-    }
-    if (filters.q !== undefined) {
-      queryConditions.push(`(b.market ILIKE $${paramIndex++} OR b.game ILIKE $${paramIndex++})`);
-      queryParams.push(`%${filters.q}%`, `%${filters.q}%`);
-    }
-
-    // Cria a cláusula WHERE com as condições
-    const whereClause = queryConditions.length > 0
-      ? `WHERE ${queryConditions.join(' AND ')}`
-      : '';
-      
-    // Sempre aplica a paginação, usando valores padrão se não fornecidos
-    const page = filters.page || 1;
-    const perPage = filters.perPage || 30;
-    const offset = (page - 1) * perPage;
-      
-    const query = `
-      SELECT
-        b.id,
-        b.game,
-        b.stake,
-        b.odd,
-        b.house_id,
-        b.market,
-        b.sport,
-        bh.name as house_name,
-        b.profit,
-        b.bet_time,
-        br.result_id,
-        r.name AS result_name
-      FROM bets b
-      LEFT JOIN bet_results br ON br.bet_id = b.id
-      LEFT JOIN betting_houses bh ON bh.id = b.house_id
-      LEFT JOIN results r ON br.result_id = r.id
-      ${whereClause}
-      ORDER BY b.bet_time DESC
-      LIMIT ${perPage} OFFSET ${offset}
-    `;
-
-    const result = await pool.query(query, queryParams);
-    if (filters.betId !== undefined) {
-      return result.rowCount > 0 ? await toCamel(result.rows[0]) : null;
-    }
-    return await toCamel(result.rows);
-  }
-
-  async findById(betId: number): Promise<any> {
-    const result = await pool.query(
-      'SELECT id, stake, odd FROM bets WHERE id = $1',
-      [betId]
-    );
-    return result.rowCount > 0 ? await toCamel(result.rows[0]) : null;
-  }
-
-  async findByIds(betIds: number[], userId?: number): Promise<any[]> {
-    const resultado = await pool.query(
-      userId !== undefined
-        ? 'SELECT id, stake, odd FROM bets WHERE id = ANY($1) AND user_id = $2'
-        : 'SELECT id, stake, odd FROM bets WHERE id = ANY($1)',
-      userId !== undefined ? [betIds, userId] : [betIds],
-    );
-    return await toCamel(resultado.rows);
-  }
-
-  async delete(betId: number, userId: number): Promise<boolean> {
-    const resultado = await pool.query(
-      'DELETE FROM bets WHERE id = $1 AND user_id = $2',
-      [betId, userId]
-    );
-    return resultado.rowCount > 0;
-  }
-
-  async deleteMany(betIds: number[], userId: number): Promise<number> {
-    const resultado = await pool.query(
-      'DELETE FROM bets WHERE id = ANY($1) AND user_id = $2',
-      [betIds, userId]
-    );
-    return resultado.rowCount;
-  }
-
-  async resultTypes (): Promise<{ id: number; name: string }[]> {
-    const resultado = await pool.query(
-      'SELECT id, name FROM results ORDER BY name'
-    );
-    return resultado.rows;
+  async findBets(filters: FilterGetBets) {
+    const { betId, userId, startDate, endDate, resultId, q, page, perPage } = filters;
+  
+    return this.dbRead
+      .selectFrom("bets as b")
+      .leftJoin("bet_results as br", "br.bet_id", "b.id")
+      .leftJoin("betting_houses as bh", "bh.id", "b.house_id")
+      .leftJoin("results as r", "r.id", "br.result_id")
+      .select([
+        "b.id",
+        "b.game",
+        "b.stake",
+        "b.odd",
+        "b.house_id",
+        "b.market",
+        "b.sport",
+        "bh.name as houseName",
+        "b.profit",
+        "b.bet_time",
+        "br.result_id",
+        "r.name as resultName",
+      ])
+      .$if(isNotEmpty(betId), (qb) => qb.where("b.id", "=", betId))
+      .$if(isNotEmpty(userId), (qb) => qb.where("b.user_id", "=", userId))
+      .$if(isNotEmpty(startDate), (qb) => qb.where("b.bet_time", ">=", startDate))
+      .$if(isNotEmpty(endDate), (qb) => qb.where("b.bet_time", "<=", endDate))
+      .$if(isNotEmpty(resultId), (qb) => qb.where("br.result_id", "=", resultId))
+      .$if(isNotEmpty(q), (qb) =>
+        qb.where((eb) =>
+          eb.or([
+            eb("b.market", "ilike", `%${q}%`),
+            eb("b.game", "ilike", `%${q}%`),
+          ]),
+        ),
+      )
+      .$if(isNotEmpty(page) && isNotEmpty(perPage), (qb) =>
+        qb.limit(perPage!).offset((page! - 1) * perPage!),
+      )
+      .orderBy("b.bet_time", "desc")
+      .execute();
   }
   
-  async countBets(filters: BetFilterDto = {}): Promise<number> {
-    const queryConditions: string[] = [];
-    const queryParams: any[] = [];
-    let paramIndex = 1;
-
-    if (filters.betId !== undefined) {
-      queryConditions.push(`b.id = $${paramIndex++}`);
-      queryParams.push(filters.betId);
-    }
-    if (filters.userId !== undefined) {
-      queryConditions.push(`b.user_id = $${paramIndex++}`);
-      queryParams.push(filters.userId);
-    }
-    if (filters.startDate !== undefined) {
-      queryConditions.push(`b.bet_time >= $${paramIndex++}`);
-      queryParams.push(filters.startDate);
-    }
-    if (filters.endDate !== undefined) {
-      queryConditions.push(`b.bet_time <= $${paramIndex++}`);
-      queryParams.push(filters.endDate);
-    }
-    if (filters.resultId !== undefined) {
-      queryConditions.push(`br.result_id = $${paramIndex++}`);
-      queryParams.push(filters.resultId);
-    }
-    if (filters.q !== undefined) {
-      queryConditions.push(`(b.market ILIKE $${paramIndex++} OR b.game ILIKE $${paramIndex++})`);
-      queryParams.push(`%${filters.q}%`, `%${filters.q}%`);
-    }
-
-    const whereClause = queryConditions.length > 0
-      ? `WHERE ${queryConditions.join(' AND ')}`
-      : '';
-    
-    const query = `
-      SELECT COUNT(*) as total
-      FROM bets b
-      LEFT JOIN bet_results br ON br.bet_id = b.id
-      LEFT JOIN betting_houses bh ON bh.id = b.house_id
-      LEFT JOIN results r ON br.result_id = r.id
-      ${whereClause}
-    `;
-
-    const result = await pool.query(query, queryParams);
-    return parseInt(result.rows[0].total);
+  async findById(betId: BetId) {
+    return this.dbRead
+      .selectFrom("bets")
+      .select(["id", "stake", "odd"])
+      .where("id", "=", betId)
+      .executeTakeFirst();
   }
+  
+  async findByIds(betIds: BetId[], userId?: UserId) {
+    return this.dbRead
+      .selectFrom("bets")
+      .select(["id", "stake", "odd"])
+      .$if(betIds.length > 0, (qb) => qb.where("id", "in", betIds))
+      .$if(isNotEmpty(userId), (qb) => qb.where("user_id", "=", userId))
+      .execute();
+  }
+  
+  async delete(betId: BetId, userId: UserId) {
+    const result = await this.dbWrite.transaction().execute(async (trx) => {
+      const deletedBet = await trx
+        .deleteFrom("bets")
+        .where("id", "=", betId)
+        .where("user_id", "=", userId)
+        .returningAll()
+        .executeTakeFirst();
+  
+      return deletedBet;
+    });
+  
+    return result;
+  }
+
+  async deleteMany(betIds: BetId[], userId: UserId) {
+    const result = await this.dbWrite.transaction().execute(async (trx) => {
+      const deletedBets = await trx
+        .deleteFrom("bets")
+        .where("id", "in", betIds)
+        .where("user_id", "=", userId)
+        .returningAll()
+        .execute();
+      return deletedBets;
+    });
+  
+    return result;
+  }
+  async resultTypes() {
+    return this.dbRead
+      .selectFrom("results")
+      .select(["id", "name"])
+      .orderBy("name", "asc")
+      .execute();
+  }
+  
+  async countBets(filters: FilterGetBets) {
+    const { betId, userId, startDate, endDate, resultId, q } = filters;
+  
+    const result = await this.dbRead
+      .selectFrom("bets as b")
+      .leftJoin("bet_results as br", "br.bet_id", "b.id")
+      .leftJoin("betting_houses as bh", "bh.id", "b.house_id")
+      .leftJoin("results as r", "r.id", "br.result_id")
+      .select(({ fn }) => [fn.count("b.id").as("total")])
+      .$if(isNotEmpty(betId), (qb) => qb.where("b.id", "=", betId))
+      .$if(isNotEmpty(userId), (qb) => qb.where("b.user_id", "=", userId))
+      .$if(isNotEmpty(startDate), (qb) => qb.where("b.bet_time", ">=", startDate))
+      .$if(isNotEmpty(endDate), (qb) => qb.where("b.bet_time", "<=", endDate))
+      .$if(isNotEmpty(resultId), (qb) => qb.where("br.result_id", "=", resultId))
+      .$if(isNotEmpty(q), (qb) =>
+        qb.where((eb) =>
+          eb.or([
+            eb("b.market", "ilike", `%${q}%`),
+            eb("b.game", "ilike", `%${q}%`),
+          ]),
+        ),
+      )
+      .executeTakeFirst();
+  
+    return Number(result?.total ?? 0);
+  }
+
 }
