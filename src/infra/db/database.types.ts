@@ -5,7 +5,7 @@ import type ResultsTable from '../../db_types/Results';
 
 export interface Database {
   bets: BetsTable;
-  bet_results: BetResultsTable;
-  betting_houses: BettingHousesTable;
+  betResults: BetResultsTable;
+  bettingHouses: BettingHousesTable;
   results: ResultsTable;
 }

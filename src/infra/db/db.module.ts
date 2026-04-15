@@ -1,10 +1,14 @@
-import { Module, Global } from '@nestjs/common';
-import { DatabaseService } from './db.service';
+import { Global, Logger, Module } from '@nestjs/common';
+import { CamelCasePlugin, Kysely, PostgresDialect } from 'kysely';
 import { Pool } from 'pg';
-import { Kysely, PostgresDialect } from 'kysely';
+
 import { pool } from './db';
+import { DatabaseService } from './db.service';
 import type { Database } from './database.types';
 import { KYSELY_DB } from './db.tokens';
+
+export const DATABASE_WRITE_CONNECTION = 'DATABASE_WRITE_CONNECTION';
+export const DATABASE_READ_CONNECTION = 'DATABASE_READ_CONNECTION';
 
 @Global()
 @Module({
@@ -19,9 +23,42 @@ import { KYSELY_DB } from './db.tokens';
       useFactory: () =>
         new Kysely<Database>({
           dialect: new PostgresDialect({ pool }),
+          plugins: [new CamelCasePlugin()],
         }),
     },
+    {
+      provide: DATABASE_WRITE_CONNECTION,
+      useFactory: () => {
+        const db = new Kysely<Database>({
+          dialect: new PostgresDialect({ pool }),
+          plugins: [new CamelCasePlugin()],
+        });
+
+        new Logger('DB').log('WRITE connected');
+
+        return db;
+      },
+    },
+    {
+      provide: DATABASE_READ_CONNECTION,
+      useFactory: () => {
+        const db = new Kysely<Database>({
+          dialect: new PostgresDialect({ pool }),
+          plugins: [new CamelCasePlugin()],
+        });
+
+        new Logger('DB').log('READ connected');
+
+        return db;
+      },
+    },
   ],
-  exports: [DatabaseService, Pool, KYSELY_DB],
+  exports: [
+    DatabaseService,
+    Pool,
+    KYSELY_DB,
+    DATABASE_WRITE_CONNECTION,
+    DATABASE_READ_CONNECTION,
+  ],
 })
 export class DatabaseModule {}

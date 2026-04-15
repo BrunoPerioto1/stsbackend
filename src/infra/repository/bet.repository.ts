@@ -1,14 +1,18 @@
-import { Injectable } from '@nestjs/common';
-import { ResultIdEnum } from '../../bet/dto/result-id.enum';
-import { CreateBetDto, BetItem } from '../../bet/dto/bet.dto';
-import { UpdateApostaDto } from '../../bet/dto/bet.dto';
-import { BetFilterDto } from '../../bet/dto/bet-filter.dto';
-import { filter } from 'rxjs/internal/operators/filter';
-import { isNotEmpty } from 'class-validator';
-import { UserId } from '../../db_types/Users';
-import { BetId, NewBet, UpdateBet } from '../../db_types/Bet';
-import { ResultId } from '../../db_types/Results';
-import { NewBetResult } from '../../db_types/BetsResults';
+import { Inject, Injectable } from "@nestjs/common";
+import { Kysely } from "kysely";
+
+import {
+  DATABASE_READ_CONNECTION,
+  DATABASE_WRITE_CONNECTION,
+} from "../db/db.module";
+
+import { ResultIdEnum } from "../../bet/dto/result-id.enum";
+import { isNotEmpty } from "class-validator";
+import { UserId } from "../../db_types/Users";
+import { BetId, NewBet, UpdateBet } from "../../db_types/Bet";
+import { ResultId } from "../../db_types/Results";
+import { NewBetResult } from "../../db_types/BetsResults";
+import type { Database } from "../db/database.types";
 
 export interface FilterGetBets {
   betId?: BetId;
@@ -19,54 +23,60 @@ export interface FilterGetBets {
   q?: string;
   page?: number;
   perPage?: number;
-} 
+}
 
 @Injectable()
 export class BetRepository {
+  constructor(
+    @Inject(DATABASE_WRITE_CONNECTION)
+    private readonly dbWrite: Kysely<Database>,
+    @Inject(DATABASE_READ_CONNECTION)
+    private readonly dbRead: Kysely<Database>,
+  ) {}
 
   async create(newBet: NewBet) {
-  const result = await this.dbWrite.transaction().execute(async (trx) => {
-    const createdBet = await trx
-      .insertInto("bets")
-      .values(newBet)
+    const result = await this.dbWrite.transaction().execute(async (trx) => {
+      const createdBet = await trx
+            .insertInto("bets")
+        .values(newBet)
+        .returningAll()
+        .returning((eb) => [
+          eb
+                .selectFrom("bettingHouses")
+            .select("name")
+                .whereRef("bettingHouses.id", "=", "bets.houseId")
+            .as("houseName"),
+        ])
+        .executeTakeFirstOrThrow();
+
+      const newBetResult: NewBetResult = {
+        betId: createdBet.id,
+      };
+
+      await trx
+        .insertInto("betResults")
+        .values(newBetResult)
+        .returningAll()
+        .executeTakeFirstOrThrow();
+
+      return createdBet;
+    });
+
+    return result;
+  }
+
+  async update(betId: BetId, update: UpdateBet, userId: UserId) {
+    return this.dbWrite
+      .updateTable("bets")
+      .set({
+        ...update,
+        updatedAt: new Date(),
+      })
+      .where("id", "=", betId)
+      .where("userId", "=", userId)
       .returningAll()
-      .returning((eb) => [
-        eb
-          .selectFrom("bettingHouses")
-          .select("name")
-          .whereRef("bettingHouses.id", "=", "bets.houseId")
-          .as("houseName"),
-      ])
-      .executeTakeFirstOrThrow();
-
-    const newBetResult: NewBetResult = {
-      betId: createdBet.id,
-    };
-
-    await trx
-      .insertInto("betResults")
-      .values(newBetResult)
-      .returningAll()
-      .executeTakeFirstOrThrow();
-
-    return createdBet;
-  });
-
-  return result;
-}
-
- async update(betId: BetId, update: UpdateBet, userId: UserId) {
-  return this.dbWrite
-    .updateTable("bets")
-    .set({
-      ...update,
-      updatedAt: new Date(),
-    })
-    .where("id", "=", betId)
-    .where("userId", "=", userId)
-    .returningAll()
-    .executeTakeFirst();
-}
+      .executeTakeFirst();
+  }
 
  async finalizeBet(
   betId: BetId,
@@ -78,7 +88,7 @@ export class BetRepository {
     const updatedBetResult = await trx
       .updateTable("betResults as br")
       .set({
-        resultId,
+        resultId: resultId as ResultId,
         updatedAt: new Date(),
       })
       .from("bets as b")
@@ -127,7 +137,7 @@ export class BetRepository {
       const updatedBetResult = await trx
         .updateTable("betResults as br")
         .set({
-          resultId,
+          resultId: resultId as ResultId,
           updatedAt: new Date(),
         })
         .from("bets as b")
@@ -159,98 +169,102 @@ export class BetRepository {
 
     return results;
   });
-
+  
   return result;
 }
 
   async findBets(filters: FilterGetBets) {
-  const { betId, userId, startDate, endDate, resultId, q, page, perPage } = filters;
+    const { betId, userId, startDate, endDate, resultId, q, page, perPage } = filters;
 
-  return this.dbRead
-    .selectFrom("bets as b")
-    .leftJoin("betResults as br", "br.betId", "b.id")
-    .leftJoin("bettingHouses as bh", "bh.id", "b.houseId")
-    .leftJoin("results as r", "r.id", "br.resultId")
-    .select([
-      "b.id",
-      "b.game",
-      "b.stake",
-      "b.odd",
-      "b.houseId",
-      "b.market",
-      "b.sport",
-      "bh.name as houseName",
-      "b.profit",
-      "b.betTime",
-      "br.resultId",
-      "r.name as resultName",
-    ])
-    .$if(isNotEmpty(betId), (qb) => qb.where("b.id", "=", betId))
-    .$if(isNotEmpty(userId), (qb) => qb.where("b.userId", "=", userId))
-    .$if(isNotEmpty(startDate), (qb) => qb.where("b.betTime", ">=", startDate))
-    .$if(isNotEmpty(endDate), (qb) => qb.where("b.betTime", "<=", endDate))
-    .$if(isNotEmpty(resultId), (qb) => qb.where("br.resultId", "=", resultId))
-    .$if(isNotEmpty(q), (qb) =>
-      qb.where((eb) =>
-        eb.or([
-          eb("b.market", "ilike", `%${q}%`),
-          eb("b.game", "ilike", `%${q}%`),
-        ]),
-      ),
-    )
-    .$if(isNotEmpty(page) && isNotEmpty(perPage), (qb) =>
-      qb.limit(perPage!).offset((page! - 1) * perPage!),
-    )
-    .orderBy("b.betTime", "desc")
-    .execute();
-}
-
-async findById(betId: BetId) {
-  return this.dbRead
-    .selectFrom("bets")
-    .select(["id", "stake", "odd"])
-    .where("id", "=", betId)
-    .executeTakeFirst();
-}
-
-async findByIds(betIds: BetId[], userId?: UserId) {
-  return this.dbRead
-    .selectFrom("bets")
-    .select(["id", "stake", "odd"])
-    .$if(betIds.length > 0, (qb) => qb.where("id", "in", betIds))
-    .$if(isNotEmpty(userId), (qb) => qb.where("userId", "=", userId))
-    .execute();
-}
-
-async delete(betId: BetId, userId: UserId) {
-  const result = await this.dbWrite.transaction().execute(async (trx) => {
-    const deletedBet = await trx
-      .deleteFrom("bets")
-      .where("id", "=", betId)
-      .where("userId", "=", userId)
-      .returningAll()
-      .executeTakeFirst();
-
-    return deletedBet;
-  });
-
-  return result;
-}
-
-async deleteMany(betIds: BetId[], userId: UserId) {
-  const result = await this.dbWrite.transaction().execute(async (trx) => {
-    const deletedBets = await trx
-      .deleteFrom("bets")
-      .where("id", "in", betIds)
-      .where("userId", "=", userId)
-      .returningAll()
+    return this.dbRead
+      .selectFrom("bets as b")
+          .leftJoin("betResults as br", "br.betId", "b.id")
+          .leftJoin("bettingHouses as bh", "bh.id", "b.houseId")
+      .leftJoin("results as r", "r.id", "br.resultId")
+      .select([
+        "b.id",
+        "b.game",
+        "b.stake",
+        "b.odd",
+        "b.houseId",
+        "b.market",
+        "b.sport",
+        "bh.name as houseName",
+        "b.profit",
+        "b.betTime",
+        "br.resultId",
+        "r.name as resultName",
+      ])
+      .$if(isNotEmpty(betId), (qb) => qb.where("b.id", "=", betId!))
+      .$if(isNotEmpty(userId), (qb) => qb.where("b.userId", "=", userId!))
+      .$if(isNotEmpty(startDate), (qb) => qb.where("b.betTime", ">=", startDate!))
+      .$if(isNotEmpty(endDate), (qb) => qb.where("b.betTime", "<=", endDate!))
+      .$if(isNotEmpty(resultId), (qb) => qb.where("br.resultId", "=", resultId!))
+      .$if(isNotEmpty(q), (qb) =>
+        qb.where((eb) =>
+          eb.or([
+            eb("b.market", "ilike", `%${q}%`),
+            eb("b.game", "ilike", `%${q}%`),
+          ]),
+        ),
+      )
+      .$if(isNotEmpty(page) && isNotEmpty(perPage), (qb) =>
+        qb.limit(perPage!).offset((page! - 1) * perPage!),
+      )
+      .orderBy("b.betTime", "desc")
       .execute();
+  }
 
-    return deletedBets;
-  });
+  async findById(betId: BetId) {
+    return this.dbRead
+      .selectFrom("bets")
+      .select(["id", "stake", "odd"])
+      .where("id", "=", betId)
+      .executeTakeFirst();
+  }
 
-  return result;
-}
+  async findByIds(betIds: BetId[], userId?: UserId) {
+    let query = this.dbRead
+      .selectFrom("bets")
+      .select(["id", "stake", "odd"])
+      .$if(betIds.length > 0, (qb) => qb.where("id", "in", betIds));
+
+    if (userId !== undefined) {
+      query = query.where("userId", "=", userId);
+    }
+
+    return query.execute();
+  }
+
+  async delete(betId: BetId, userId: UserId) {
+    const result = await this.dbWrite.transaction().execute(async (trx) => {
+      const deletedBet = await trx
+        .deleteFrom("bets")
+        .where("id", "=", betId)
+        .where("userId", "=", userId)
+        .returningAll()
+        .executeTakeFirst();
+
+      return deletedBet;
+    });
+
+    return result;
+  }
+
+  async deleteMany(betIds: BetId[], userId: UserId) {
+    const result = await this.dbWrite.transaction().execute(async (trx) => {
+      const deletedBets = await trx
+        .deleteFrom("bets")
+        .where("id", "in", betIds)
+        .where("userId", "=", userId)
+        .returningAll()
+        .execute();
+
+      return deletedBets;
+    });
+
+    return result;
+  }
 
   async resultTypes() {
     return this.dbRead
@@ -259,32 +273,31 @@ async deleteMany(betIds: BetId[], userId: UserId) {
       .orderBy("name", "asc")
       .execute();
   }
-  
-async countBets(filters: FilterGetBets) {
-  const { betId, userId, startDate, endDate, resultId, q } = filters;
 
-  const result = await this.dbRead
-    .selectFrom("bets as b")
-    .leftJoin("betResults as br", "br.betId", "b.id")
-    .leftJoin("bettingHouses as bh", "bh.id", "b.houseId")
-    .leftJoin("results as r", "r.id", "br.resultId")
-    .select(({ fn }) => [fn.count("b.id").as("total")])
-    .$if(isNotEmpty(betId), (qb) => qb.where("b.id", "=", betId))
-    .$if(isNotEmpty(userId), (qb) => qb.where("b.userId", "=", userId))
-    .$if(isNotEmpty(startDate), (qb) => qb.where("b.betTime", ">=", startDate))
-    .$if(isNotEmpty(endDate), (qb) => qb.where("b.betTime", "<=", endDate))
-    .$if(isNotEmpty(resultId), (qb) => qb.where("br.resultId", "=", resultId))
-    .$if(isNotEmpty(q), (qb) =>
-      qb.where((eb) =>
-        eb.or([
-          eb("b.market", "ilike", `%${q}%`),
-          eb("b.game", "ilike", `%${q}%`),
-        ]),
-      ),
-    )
-    .executeTakeFirst();
+  async countBets(filters: FilterGetBets) {
+    const { betId, userId, startDate, endDate, resultId, q } = filters;
 
-  return Number(result?.total ?? 0);
-}
+    const result = await this.dbRead
+      .selectFrom("bets as b")
+          .leftJoin("betResults as br", "br.betId", "b.id")
+          .leftJoin("bettingHouses as bh", "bh.id", "b.houseId")
+      .leftJoin("results as r", "r.id", "br.resultId")
+      .select(({ fn }) => [fn.count("b.id").as("total")])
+      .$if(isNotEmpty(betId), (qb) => qb.where("b.id", "=", betId!))
+      .$if(isNotEmpty(userId), (qb) => qb.where("b.userId", "=", userId!))
+      .$if(isNotEmpty(startDate), (qb) => qb.where("b.betTime", ">=", startDate!))
+      .$if(isNotEmpty(endDate), (qb) => qb.where("b.betTime", "<=", endDate!))
+      .$if(isNotEmpty(resultId), (qb) => qb.where("br.resultId", "=", resultId!))
+      .$if(isNotEmpty(q), (qb) =>
+        qb.where((eb) =>
+          eb.or([
+            eb("b.market", "ilike", `%${q}%`),
+            eb("b.game", "ilike", `%${q}%`),
+          ]),
+        ),
+      )
+      .executeTakeFirst();
 
+    return Number(result?.total ?? 0);
+  }
 }
