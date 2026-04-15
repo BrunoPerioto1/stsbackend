@@ -6,10 +6,10 @@ export type BetResultId = number & { __type: 'BetResultId' };
 
 export default interface BetResultsTable {
   id: ColumnType<BetResultId, BetResultId | undefined, never>;
-  bet_id: ColumnType<BetId, BetId, BetId>;
-  result_id: ColumnType<ResultId, ResultId | undefined, ResultId>; // DEFAULT 9 = PENDING
-  created_at: ColumnType<Date, Date | undefined, never>;
-  updated_at: ColumnType<Date, Date | undefined, Date>;
+  betId: ColumnType<BetId, BetId, BetId>;
+  resultId: ColumnType<ResultId, ResultId | undefined, ResultId>; // DEFAULT 9 = PENDING
+  createdAt: ColumnType<Date, Date | undefined, never>;
+  updatedAt: ColumnType<Date, Date | undefined, Date>;
 }
 
 export type BetResult = Selectable<BetResultsTable>;      // SELECT

@@ -7,14 +7,14 @@ export default interface UsersTable {
   id: ColumnType<UserId, UserId | undefined, never>;
   username: ColumnType<string, string, string>;
   email: ColumnType<string, string, string>;
-  password_hash: ColumnType<string, string, string>;
-  full_name: ColumnType<string | null, string | null, string | null>;
-  is_active: ColumnType<boolean | null, boolean | null, boolean | null>;
-  role_id: ColumnType<RoleId, RoleId, RoleId>;
-  created_at: ColumnType<Date, Date | undefined, never>;
-  updated_at: ColumnType<Date, Date | undefined, Date>;
-  last_login: ColumnType<Date | null, Date | null, Date | null>;
-  telegram_user_id: ColumnType<number | null, number | null, number | null>; // bigint como number
+  passwordHash: ColumnType<string, string, string>;
+  fullName: ColumnType<string | null, string | null, string | null>;
+  isActive: ColumnType<boolean | null, boolean | null, boolean | null>;
+  roleId: ColumnType<RoleId, RoleId, RoleId>;
+  createdAt: ColumnType<Date, Date | undefined, never>;
+  updatedAt: ColumnType<Date, Date | undefined, Date>;
+  lastLogin: ColumnType<Date | null, Date | null, Date | null>;
+  telegramUserId: ColumnType<number | null, number | null, number | null>; // bigint como number
   stake: ColumnType<number | null, number | null, number | null>; // NUMERIC como number
 }
 

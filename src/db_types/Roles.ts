@@ -7,8 +7,8 @@ export default interface RolesTable {
   name: ColumnType<string, string, string>;
   description: ColumnType<string | null, string | null, string | null>;
   permissions: ColumnType<string[] | null, string[] | null, string[] | null>; // JSONB como array de strings
-  created_at: ColumnType<Date, Date | undefined, never>;
-  updated_at: ColumnType<Date, Date | undefined, Date>;
+  createdAt: ColumnType<Date, Date | undefined, never>;
+  updatedAt: ColumnType<Date, Date | undefined, Date>;
 }
 
 export type Role = Selectable<RolesTable>;      // SELECT

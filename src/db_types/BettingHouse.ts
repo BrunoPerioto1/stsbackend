@@ -5,9 +5,9 @@ export type BettingHouseId = number & { __type: 'BettingHouseId' };
 export default interface BettingHousesTable {
   id: ColumnType<BettingHouseId, BettingHouseId | undefined, never>;
   name: ColumnType<string, string, string>;
-  is_active: ColumnType<boolean, boolean | undefined, boolean>;
-  created_at: ColumnType<Date, Date | undefined, never>;
-  updated_at: ColumnType<Date, Date | undefined, Date>;
+  isActive: ColumnType<boolean, boolean | undefined, boolean>;
+  createdAt: ColumnType<Date, Date | undefined, never>;
+  updatedAt: ColumnType<Date, Date | undefined, Date>;
 }
 
 export type BettingHouse = Selectable<BettingHousesTable>;   // SELECT
