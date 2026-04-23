@@ -82,7 +82,7 @@ export class HouseRepository {
         "bh.name as houseName",
       ])
       .where("ht.userId", "=", userId)
-      .$if(filter?.houseId !== undefined, (qb) =>
+      .$if(isNotEmpty(filter?.houseId), (qb) =>
         qb.where("ht.houseId", "=", filter!.houseId!),
       )
       .$if(isNotEmpty(filter?.houseName), (qb) =>
