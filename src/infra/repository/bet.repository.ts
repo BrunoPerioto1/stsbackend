@@ -1,6 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { Kysely } from "kysely";
-
 import {
   DATABASE_READ_CONNECTION,
   DATABASE_WRITE_CONNECTION,
