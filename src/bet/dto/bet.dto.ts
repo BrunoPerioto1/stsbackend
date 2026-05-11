@@ -3,10 +3,10 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Transform, Type } from 'class-transformer';
 import { ResultIdEnum } from './result-id.enum';
 
-export class CreateBetDto {
+export class CreateBetRequestDto {
   
-  @ApiProperty({
-    description: 'Nome do jogo ou evento esportivo',
+  @ApiProperty({  
+    description: 'Game or sporting event name',
     example: 'Flamengo vs Palmeiras',
     required: true
   })
@@ -15,7 +15,7 @@ export class CreateBetDto {
   game: string;
 
   @ApiProperty({
-    description: 'Valor da aposta',
+    description: 'Bet stake amount',
     example: 50.00,
     required: true
   })
@@ -24,7 +24,7 @@ export class CreateBetDto {
   stake: number;
 
   @ApiProperty({
-    description: 'Odd da aposta',
+    description: 'Bet odds',
     example: 2.50,
     required: true
   })
@@ -33,7 +33,7 @@ export class CreateBetDto {
   odd: number;
 
   @ApiProperty({
-    description: 'ID da casa de apostas (opcional)',
+    description: 'Sportsbook ID',
     example: 1,
     required: false
   })
@@ -42,8 +42,8 @@ export class CreateBetDto {
   houseId?: number;
 
   @ApiProperty({
-    description: 'Mercado da aposta',
-    example: 'Resultado Final',
+    description: 'Betting market',
+    example: 'Match result',
     required: true
   })
   @IsString()
@@ -51,8 +51,8 @@ export class CreateBetDto {
   market: string;
 
   @ApiProperty({
-    description: 'Esporte da aposta',
-    example: 'Futebol',
+    description: 'Sport',
+    example: 'Soccer',
     required: true
   })
   @IsString()
@@ -60,7 +60,7 @@ export class CreateBetDto {
   sport: string;
 
   @ApiProperty({
-    description: 'Data e hora da aposta (opcional)',
+    description: 'Bet date and time (optional)',
     example: '2024-01-15T20:00:00Z',
     required: false
   })
@@ -69,13 +69,12 @@ export class CreateBetDto {
   betTime?: string;
 
   @ApiProperty({
-    description: 'ID do usuário que fez a aposta (opcional)',
-    example: 1,
-    required: false
+    description: 'User ID who placed the bet',
+    required: true
   })
-  @IsOptional()
   @IsNumber()
-  userId?: number;
+  @IsNotEmpty()
+  userId: number;
 }
 
 export class UpdateApostaDto {
@@ -221,8 +220,8 @@ export class BetItem {
   @ApiProperty({ description: 'Cotação da aposta' })
   odd: number;
 
-  @ApiProperty({ description: 'ID da casa de apostas' })
-  houseId: number;
+  @ApiProperty({ description: 'ID da casa de apostas', nullable: true })
+  houseId: number | null;
 
   @ApiProperty({ description: 'Mercado da aposta (ex: "Resultado Final", "Over/Under")' })
   market: string;
@@ -237,10 +236,10 @@ export class BetItem {
   betTime: Date;
 
   @ApiPropertyOptional({ description: 'ID do resultado da aposta' })
-  resultId: number;
+  resultId?: number;
 
   @ApiPropertyOptional({ description: 'Nome do resultado (WON, LOST, PENDING, etc.)' })
-  resultName: string;
+  resultName?: string;
 }
 
 
@@ -259,3 +258,5 @@ export class PaginatedBetsResponseDto {
   @Type(() => BetItem)
   data?: BetItem[];
 }
+
+export { CreateBetRequestDto as CreateBetDto };

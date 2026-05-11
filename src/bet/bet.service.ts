@@ -2,14 +2,21 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  InternalServerErrorException,
 } from '@nestjs/common';
-import { pool } from '../infra/db/db';
 import { ResultIdEnum } from './dto/result-id.enum';
 import { CreateBetDto } from './dto/bet.dto';
-import { UpdateApostaDto, BetItem, PaginatedBetsResponseDto } from './dto/bet.dto';
-import { BetRepository } from '../infra/repository/bet.repository';
+import { UpdateApostaDto, PaginatedBetsResponseDto } from './dto/bet.dto';
+import {
+  BetRepository,
+  type FilterGetBets,
+} from '../infra/repository/bet.repository';
 import { calculateProfit } from '../common/utils/bet.utils';
 import { BetFilterDto } from './dto/bet-filter.dto';
+import type { BetId, NewBet, UpdateBet } from '../db_types/Bet';
+import type { BettingHouseId } from '../db_types/BettingHouse';
+import type { UserId } from '../db_types/Users';
+import type { ResultId } from '../db_types/Results';
 
 @Injectable()
 export class ApostaService {
@@ -17,58 +24,99 @@ export class ApostaService {
 
 
   async createBet(betData: CreateBetDto) {
-    let finalHouseId: number | null = betData.houseId ?? null;
-    if (finalHouseId !== null) {
-     
+    const newBet: NewBet = {
+      game: betData.game,
+      stake: betData.stake,
+      odd: betData.odd,
+      market: betData.market,
+      sport: betData.sport,
+      userId: betData.userId as UserId,
+      houseId:
+        betData.houseId != null
+          ? (betData.houseId as BettingHouseId)
+          : null,
+      betTime: betData.betTime ? new Date(betData.betTime) : undefined,
+    };
+
+    const result = await this.betRepository.create(newBet);
+
+    if (!result) {
+      throw new InternalServerErrorException();
     }
 
-    const created = await this.betRepository.create({
-      ...betData,
-      casa_id: finalHouseId ?? undefined,
-    } as CreateBetDto);
+    const { id, ...createdParams } = result;
 
-    return { id: created.id, ...betData, casa_id: finalHouseId ?? undefined };
+    return { id, ...createdParams };
   }
 
   async updateBet(betId: number, updateData: UpdateApostaDto, userId: number) {
-    const updated = await this.betRepository.update(betId, updateData, userId);
+    const updated = await this.betRepository.update(
+      betId as BetId,
+      updateData as UpdateBet,
+      userId as UserId,
+    );
     if (!updated) {
-      throw new NotFoundException(`Aposta com ID ${betId} não encontrada.`);
+      throw new NotFoundException(`Bet with ID ${betId} not found`);
     }
     return updated;
   }
 
-  async finalizeBet(betId: number, resultId: number, userId: number) {
-    const aposta = await this.betRepository.findById(betId);
-     const resultIdEnum = resultId as ResultIdEnum;
-    
+  async finalizeBet(
+    betId: number,
+    resultId: ResultIdEnum,
+    userId: number,
+  ) {
+    const bet = await this.betRepository.findById(betId as BetId);
+    if (!bet) {
+      throw new NotFoundException(`Bet with ID ${betId} not found`);
+    }
+    const resultIdEnum = resultId as ResultIdEnum;
+
     const profit = calculateProfit(
       resultIdEnum,
-      Number(aposta.stake),
-      Number(aposta.odd)
+      Number(bet.stake),
+      Number(bet.odd),
     );
-    
-    const updated = await this.betRepository.finalizeBetUpdate(betId, resultIdEnum, profit, userId);
+
+    const updated = await this.betRepository.finalizeBet(
+      betId as BetId,
+      resultIdEnum,
+      profit,
+      userId as UserId,
+    );
     if (!updated) {
-      throw new NotFoundException(`Aposta com ID ${betId} não encontrada para este usuário.`);
+      throw new NotFoundException(
+        `Bet with ID ${betId} not found for this user.`,
+      );
     }
     return updated;
   }
-async finalizeMany(betIds: number[], resultId: ResultIdEnum, userId: number) {
-  const rows = await this.betRepository.findByIds(betIds, userId);
 
-  const idToBet: Record<number, { stake: number; odd: number }> = {};
-  for (const row of rows) {
-    idToBet[row.id] = { stake: row.stake, odd: row.odd };
-  }
+  async finalizeMany(
+    betIds: number[],
+    resultId: ResultIdEnum,
+    userId: number,
+  ) {
+    const rows = await this.betRepository.findByIds(
+      betIds as BetId[],
+      userId as UserId,
+    );
 
-  const betProfitsWithResultId = betIds.map((id) => {
-    const bet = idToBet[id];
-    const profit = bet ? calculateProfit(resultId, bet.stake, bet.odd) : 0;
-    return { betId: id, resultId, profit };
-  });
+    const idToBet: Record<number, { stake: number; odd: number }> = {};
+    for (const row of rows) {
+      idToBet[row.id] = { stake: row.stake, odd: row.odd };
+    }
 
-  const updatedBets = await this.betRepository.finalizeMultipleBets(betProfitsWithResultId, userId);
+    const betProfitsWithResultId = betIds.map((id) => {
+      const bet = idToBet[id];
+      const profit = bet ? calculateProfit(resultId, bet.stake, bet.odd) : 0;
+      return { betId: id as BetId, resultId, profit };
+    });
+
+    const updatedBets = await this.betRepository.finalizeMultipleBets(
+      betProfitsWithResultId,
+      userId as UserId,
+    );
 
   return { 
     success: true, 
@@ -77,29 +125,47 @@ async finalizeMany(betIds: number[], resultId: ResultIdEnum, userId: number) {
   };
 }
 
-  // async findBets(filters: BetFilterDto): Promise<PaginatedBetsResponseDto> {
-  //   if (filters.startDate && filters.endDate && new Date(filters.startDate) > new Date(filters.endDate)) {
-  //     throw new BadRequestException('A data inicial não pode ser maior que a data final.');
-  //   }
+  async findBets(filters: BetFilterDto): Promise<PaginatedBetsResponseDto> {
+    if (
+      filters.startDate &&
+      filters.endDate &&
+      new Date(filters.startDate) > new Date(filters.endDate)
+    ) {
+      throw new BadRequestException(
+        'A data inicial não pode ser maior que a data final.',
+      );
+    }
 
-  //   filters.page = filters.page || 1;
-  //   filters.perPage = filters.perPage || 30;
-    
-  //   const bets = await this.betRepository.findBets(filters);
-    
-  //   const total = await this.betRepository.countBets(filters);
-    
-  //   const totalPages = Math.ceil(total / filters.perPage || 1);
-    
-  //   return {
-  //     data: Array.isArray(bets) ? bets : (bets ? [bets] : []),
-  //     total,
-  //     totalPages,
-  //   };
-  // }
+    const repositoryFilter = {
+      betId: filters.betId,
+      userId: filters.userId,
+      startDate: filters.startDate ? new Date(filters.startDate) : undefined,
+      endDate: filters.endDate ? new Date(filters.endDate) : undefined,
+      resultId: filters.resultId,
+      q: filters.q,
+      page: filters.page ?? 1,
+      perPage: filters.perPage ?? 30,
+    } as FilterGetBets;
+
+    const [bets, total] = await Promise.all([
+      this.betRepository.findBets(repositoryFilter),
+      this.betRepository.countBets(repositoryFilter),
+    ]);
+
+    return {
+      total,
+      totalPages: repositoryFilter.perPage
+        ? Math.ceil(total / repositoryFilter.perPage)
+        : 1,
+      data: bets as PaginatedBetsResponseDto['data'],
+    };
+  }
 
   async deleteBet(betId: number, userId: number) {
-    const deleted = await this.betRepository.delete(betId, userId);
+    const deleted = await this.betRepository.delete(
+      betId as BetId,
+      userId as UserId,
+    );
     if (!deleted) {
       throw new NotFoundException(`Aposta com ID ${betId} não encontrada.`);
     }
@@ -107,15 +173,18 @@ async finalizeMany(betIds: number[], resultId: ResultIdEnum, userId: number) {
   }
 
   async deleteManyBets(betIds: number[], userId: number) {
-    const count = await this.betRepository.deleteMany(betIds, userId);
-      return { 
-        success: true, 
-      deletedCount: count,
-      message: `${count} apostas deletadas com sucesso`,
+    const deletedRows = await this.betRepository.deleteMany(
+      betIds as BetId[],
+      userId as UserId,
+    );
+    return {
+      success: true,
+      deletedCount: deletedRows.length,
+      message: `${deletedRows.length} apostas deletadas com sucesso`,
     };
   }
 
-  async getResultTypes(): Promise<{ id: number; name: string }[]> {
+  async getResultTypes(){
     return this.betRepository.resultTypes();
 }
 }
