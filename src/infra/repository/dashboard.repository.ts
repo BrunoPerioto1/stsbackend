@@ -1,11 +1,8 @@
 // src/dashboard/dashboard.repository.ts
 import { Inject, Injectable } from '@nestjs/common';
 import { Kysely } from 'kysely';
-import { pool } from '../db/db';
 import type { Database } from '../db/database.types';
 import { DATABASE_READ_CONNECTION } from '../db/db.module';
-import { DailySummaryPoint, DashboardMetrics, MonthSummaryPoint } from '../../dashboard/dto/dashboard-metrics.dto';
-import { toCamel } from '../../common/utils/camelcase';
 import { BettingHouseId } from '../../db_types/BettingHouse';
 import { UserId } from '../../db_types/Users';
 import { isNotEmpty } from 'class-validator';

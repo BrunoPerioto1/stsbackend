@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { HouseRepository, HouseBalance } from '../infra/repository/house.repository';
 import { HouseDto, FindAllHousesDTO } from 'src/house/dto/house.dto';
-import { HouseFilterDto } from './dto/house.filter.dto';
+import { HouseFilterRequestDto } from './dto/house.filter.dto';
 
 @Injectable()
 export class HouseService {
@@ -21,7 +21,7 @@ export class HouseService {
     return house;
   }
   
-  async getAllHousesBalanceWithFilter(filter: HouseFilterDto, userId: number) {
+  async getAllHousesBalanceWithFilter(filter: HouseFilterRequestDto, userId: number) {
     return this.houseRepository.getAllHousesBalanceWithCalculations(filter, userId);
   }
  
