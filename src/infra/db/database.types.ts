@@ -16,7 +16,7 @@ export interface Database {
   results: ResultsTable;
   roles: RolesTable;
   users: UsersTable;
-  transactions: TransactionTypesTable
+  transactionTypes: TransactionTypesTable
   houseBalances: HouseBalancesTable
   houseTransactions: HouseTransactionsTable
 }

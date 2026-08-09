@@ -11,22 +11,22 @@ export class CreateUserResponseDTO {
   email: string;
 
   @ApiProperty({ required: false })
-  full_name?: string | null;
+  fullName?: string | null;
 
   @ApiProperty()
-  is_active: boolean | null;
+  isActive: boolean | null;
 
   @ApiProperty()
-  role_id: number;
+  roleId: number;
 
   @ApiProperty()
-  created_at: Date | null;
+  createdAt: Date | null;
 
   @ApiProperty()
-  updated_at: Date | null;
+  updatedAt: Date | null;
 
   @ApiProperty({ required: false })
-  last_login?: Date | null;
+  lastLogin?: Date | null;
 }
 
 

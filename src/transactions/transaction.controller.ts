@@ -43,7 +43,7 @@ export class TransactionController {
   @ApiQuery({ name: 'endDate', required: false, type: String, description: 'Filtra por data final (ex: 2025-09-04).' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Lista de transações retornada com sucesso.' })
   findAllTransactions(@Query() filter: TransactionFilterDto, @User('userId') userId: number) {
-    return this.transactionService.findAllTransactions({ ...filter, userId });
+    return this.transactionService.findAllTransactions(userId, filter);
   }
 @Get('types')
   @ApiOperation({ summary: 'Lista todos os tipos de transações' })

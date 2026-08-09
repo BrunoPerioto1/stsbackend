@@ -37,7 +37,7 @@ async findAllTransactions(userId: UserId, filter?: FilterGetTransactions) {
   return this.dbRead
     .selectFrom("houseTransactions as ht")
     .leftJoin("bettingHouses as h", "ht.houseId", "h.id")
-    .leftJoin("transactions as tt", "ht.transactionTypeId", "tt.id")
+    .leftJoin("transactionTypes as tt", "ht.transactionTypeId", "tt.id")
     .select([
       "ht.id",
       "h.name as houseName",
@@ -60,7 +60,7 @@ async findAllTransactions(userId: UserId, filter?: FilterGetTransactions) {
 }
   async findAllTypeTransactions() {
     return this.dbRead
-      .selectFrom("transactions")
+      .selectFrom("transactionTypes")
       .select(["id", "name"])
       .orderBy("name", "asc")
       .execute();

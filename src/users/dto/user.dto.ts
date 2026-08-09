@@ -11,23 +11,23 @@ export class UserDto {
   email: string;
 
   @ApiProperty()
-  password_hash: string;
+  passwordHash: string;
 
   @ApiProperty({ nullable: true })
-  full_name: string | null;
+  fullName: string | null;
 
   @ApiProperty({ nullable: true })
-  is_active: boolean | null;
+  isActive: boolean | null;
 
   @ApiProperty()
-  role_id: number;
+  roleId: number;
 
   @ApiProperty({ type: String, nullable: true })
-  created_at: Date | null;
+  createdAt: Date | null;
 
   @ApiProperty({ type: String, nullable: true })
-  updated_at: Date | null;
+  updatedAt: Date | null;
 
   @ApiProperty({ type: String, nullable: true })
-  last_login: Date | null;
+  lastLogin: Date | null;
 }

@@ -14,6 +14,13 @@ import { UserId } from '../db_types/Users';
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
+  @Get('date-range')
+  @ApiOperation({ summary: 'Obtém a data da primeira e da última aposta do usuário' })
+  @ApiResponse({ status: 200, description: 'Intervalo retornado com sucesso.' })
+  async getDateRange(@User('userId') userId: UserId) {
+    return this.dashboardService.getBetDateRange(userId);
+  }
+
   @Get('metrics')
   @ApiOperation({ summary: 'Obtém métricas do dashboard' })
   @ApiResponse({ status: 200, description: 'Métricas retornadas com sucesso.' })

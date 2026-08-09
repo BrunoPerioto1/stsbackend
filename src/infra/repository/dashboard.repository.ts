@@ -76,6 +76,17 @@ async findMonthlySummary(filters: FilterDashboard) {
     .orderBy(({ fn, ref }) => fn<Date>("date_trunc", ["month" as any, ref("b.betTime")]), "asc")
     .execute();
 }
+async findBetDateRange(userId: UserId) {
+  return this.dbRead
+    .selectFrom("bets as b")
+    .where("b.userId", "=", userId)
+    .select((eb) => [
+      eb.fn.min("b.betTime").as("firstBetDate"),
+      eb.fn.max("b.betTime").as("lastBetDate"),
+    ])
+    .executeTakeFirst();
+}
+
 async findDashboardMetrics(filters: FilterDashboard) {
   const { startDate, endDate, houseId, userId } = filters;
 

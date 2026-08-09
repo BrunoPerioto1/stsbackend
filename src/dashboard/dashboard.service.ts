@@ -15,6 +15,14 @@ export class DashboardService {
     return this.dashboardRepository.findMonthlySummary({ ...filter, userId });
   }
 
+  async getBetDateRange(userId: UserId) {
+    const range = await this.dashboardRepository.findBetDateRange(userId);
+    return {
+      firstBetDate: range?.firstBetDate ?? null,
+      lastBetDate: range?.lastBetDate ?? null,
+    };
+  }
+
   async getDashboardMetrics(userId: UserId, filter: DashboardQueryDto) {
     const raw = await this.dashboardRepository.findDashboardMetrics({ ...filter, userId });
 
