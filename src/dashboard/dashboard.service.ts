@@ -44,7 +44,7 @@ export class DashboardService {
       canceledBets: Number(raw.canceledBets),
       averageStake: Number(raw.averageStake),
       averageOdd:   Number(raw.averageOdd),
-      winRate: totalBets   > 0 ? wonBets     / totalBets   : 0,
+      hitRate: totalBets   > 0 ? wonBets     / totalBets   : 0,
       roi:     totalStaked > 0 ? totalProfit / totalStaked : 0,
     };
   }

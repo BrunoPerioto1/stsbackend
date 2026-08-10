@@ -1,6 +1,6 @@
 // src/dashboard/dashboard.repository.ts
 import { Inject, Injectable } from '@nestjs/common';
-import { Kysely } from 'kysely';
+import { Kysely, sql } from 'kysely';
 import type { Database } from '../db/database.types';
 import { DATABASE_READ_CONNECTION } from '../db/db.module';
 import { BettingHouseId } from '../../db_types/BettingHouse';
@@ -44,7 +44,7 @@ async findDailySummary(filters: FilterDashboard) {
     .select(({ fn, ref }) => [
       fn<Date>("date", [ref("b.betTime")]).as("date"),
       fn.count("b.id").as("totalBets"),
-      fn<number>("coalesce", [fn.sum<number>("b.profit"), 0 as any]).as("profitDay"),
+      fn<number>("coalesce", [fn.sum<number>("b.profit"), sql.lit(0)]).as("profitDay"),
     ])
     .groupBy(({ fn, ref }) => fn<Date>("date", [ref("b.betTime")]))
     .orderBy(({ fn, ref }) => fn<Date>("date", [ref("b.betTime")]), "asc")
@@ -70,7 +70,7 @@ async findMonthlySummary(filters: FilterDashboard) {
     .select(({ fn, ref }) => [
       fn<Date>("date_trunc", ["month" as any, ref("b.betTime")]).as("month"),
       fn.count("b.id").as("totalBets"),
-      fn<number>("coalesce", [fn.sum<number>("b.profit"), 0 as any]).as("profitMonth"),
+      fn<number>("coalesce", [fn.sum<number>("b.profit"), sql.lit(0)]).as("profitMonth"),
     ])
     .groupBy(({ fn, ref }) => fn<Date>("date_trunc", ["month" as any, ref("b.betTime")]))
     .orderBy(({ fn, ref }) => fn<Date>("date_trunc", ["month" as any, ref("b.betTime")]), "asc")
@@ -139,10 +139,10 @@ async findDashboardMetrics(filters: FilterDashboard) {
           .else(0)
           .end(),
       ]).as("canceledBets"),
-      eb.fn<number>("coalesce", [eb.fn.avg<number>("b.stake"), 0 as any]).as("averageStake"),
-      eb.fn<number>("coalesce", [eb.fn.avg<number>("b.odd"), 0 as any]).as("averageOdd"),
-      eb.fn<number>("coalesce", [eb.fn.sum<number>("b.stake"), 0 as any]).as("totalStaked"),
-      eb.fn<number>("coalesce", [eb.fn.sum<number>("b.profit"), 0 as any]).as("totalProfit"),
+      eb.fn<number>("coalesce", [eb.fn.avg<number>("b.stake"), sql.lit(0)]).as("averageStake"),
+      eb.fn<number>("coalesce", [eb.fn.avg<number>("b.odd"), sql.lit(0)]).as("averageOdd"),
+      eb.fn<number>("coalesce", [eb.fn.sum<number>("b.stake"), sql.lit(0)]).as("totalStaked"),
+      eb.fn<number>("coalesce", [eb.fn.sum<number>("b.profit"), sql.lit(0)]).as("totalProfit"),
     ])
     .executeTakeFirst();
 }

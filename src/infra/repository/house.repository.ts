@@ -1,6 +1,6 @@
 // house.repository.ts
 import { Inject, Injectable } from '@nestjs/common';
-import { Kysely } from 'kysely';
+import { Kysely, sql } from 'kysely';
 import { isNotEmpty } from 'class-validator';
 import type { Database } from '../db/database.types';
 import { DATABASE_READ_CONNECTION, DATABASE_WRITE_CONNECTION } from '../db/db.module';
@@ -55,19 +55,19 @@ export class HouseRepository {
       .select((eb) => [
         'b.houseId',
         eb.fn.count('b.id').as('totalBets'),
-        eb.fn<number>('coalesce', [eb.fn.sum<number>('b.stake'), 0 as any]).as('totalStake'),
-        eb.fn<number>('coalesce', [eb.fn.sum<number>('b.profit'), 0 as any]).as('totalBetProfit'),
+        eb.fn<number>('coalesce', [eb.fn.sum<number>('b.stake'), sql.lit(0)]).as('totalStake'),
+        eb.fn<number>('coalesce', [eb.fn.sum<number>('b.profit'), sql.lit(0)]).as('totalBetProfit'),
         eb.fn<number>('coalesce', [
           eb.fn.sum<number>(eb.case().when('br.resultId', '=', 9 as any).then(1).else(0).end()),
-          0 as any,
+          sql.lit(0),
         ]).as('pendingBets'),
         eb.fn<number>('coalesce', [
           eb.fn.sum<number>(eb.case().when('br.resultId', '=', 1 as any).then(1).else(0).end()),
-          0 as any,
+          sql.lit(0),
         ]).as('wonBets'),
         eb.fn<number>('coalesce', [
           eb.fn.sum<number>(eb.case().when('br.resultId', '=', 2 as any).then(1).else(0).end()),
-          0 as any,
+          sql.lit(0),
         ]).as('lostBets'),
       ])
       .groupBy('b.houseId');
@@ -81,17 +81,17 @@ export class HouseRepository {
         'ht.houseId',
         eb.fn<number>('coalesce', [
           eb.fn.sum<number>(eb.case().when('ht.transactionTypeId', '=', 1 as any).then(eb.ref('ht.value')).else(0).end()),
-          0 as any,
+          sql.lit(0),
         ]).as('totalDeposit'),
         eb.fn<number>('coalesce', [
           eb.fn.sum<number>(eb.case().when('ht.transactionTypeId', '=', 2 as any).then(eb.ref('ht.value')).else(0).end()),
-          0 as any,
+          sql.lit(0),
         ]).as('totalWithdrawalRaw'),
         eb.fn<number>('coalesce', [
           eb.fn.sum<number>(eb.case().when('ht.transactionTypeId', '=', 3 as any).then(eb.ref('ht.value')).else(0).end()),
-          0 as any,
+          sql.lit(0),
         ]).as('totalAdjustment'),
-        eb.fn<number>('coalesce', [eb.fn.sum<number>('ht.value'), 0 as any]).as('totalTransactions'),
+        eb.fn<number>('coalesce', [eb.fn.sum<number>('ht.value'), sql.lit(0)]).as('totalTransactions'),
         eb.fn.max('ht.createdAt').as('lastMovementAt'),
       ])
       .groupBy('ht.houseId');
@@ -157,12 +157,12 @@ export class HouseRepository {
         eb.fn.count('b.id').as('settledBets'),
         eb.fn<number>('coalesce', [
           eb.fn.sum<number>(eb.case().when('br.resultId', '=', 1 as any).then(1).else(0).end()),
-          0 as any,
+          sql.lit(0),
         ]).as('wonBets'),
-        eb.fn<number>('coalesce', [eb.fn.avg<number>('b.odd'), 0 as any]).as('avgOdd'),
-        eb.fn<number>('coalesce', [eb.fn.avg<number>('b.stake'), 0 as any]).as('avgStake'),
-        eb.fn<number>('coalesce', [eb.fn.sum<number>('b.stake'), 0 as any]).as('volume'),
-        eb.fn<number>('coalesce', [eb.fn.sum<number>('b.profit'), 0 as any]).as('profit'),
+        eb.fn<number>('coalesce', [eb.fn.avg<number>('b.odd'), sql.lit(0)]).as('avgOdd'),
+        eb.fn<number>('coalesce', [eb.fn.avg<number>('b.stake'), sql.lit(0)]).as('avgStake'),
+        eb.fn<number>('coalesce', [eb.fn.sum<number>('b.stake'), sql.lit(0)]).as('volume'),
+        eb.fn<number>('coalesce', [eb.fn.sum<number>('b.profit'), sql.lit(0)]).as('profit'),
       ])
       .execute();
   }
