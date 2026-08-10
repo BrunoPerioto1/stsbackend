@@ -1,79 +1,68 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { pool } from '../db/db'; 
-import { toCamel } from 'src/common/utils/camelcase';
+import { Inject, Injectable } from '@nestjs/common';
+import { BettingHouseId } from '../../db_types/BettingHouse';
+import { UserId } from '../../db_types/Users';
+import { NewHouseTransaction } from '../../db_types/HouseTransactions';
+import { DATABASE_READ_CONNECTION, DATABASE_WRITE_CONNECTION } from '../db/db.module';
+import { Kysely } from 'kysely';
+import { Database } from '../db/database.types';
+import { isNotEmpty } from 'class-validator';
 
-import {  NewTransactionDto, GetTransactionDto,  } from 'src/transactions/dto/transaction.dto';
-import { TransactionFilterDto } from 'src/transactions/dto/transaction.filter.dto';
-
-
+export interface FilterGetTransactions {
+  houseId?: BettingHouseId;
+  startDate?: Date;
+  endDate?: Date;
+}
 
 @Injectable()
 export class TransactionRepository {
-  async create(transactionData: NewTransactionDto): Promise<{ id: number }> {
-        const query = `
-            INSERT INTO house_transactions (house_id, transaction_type_id, value, user_id)
-            VALUES ($1, $2, $3, $4)
-            RETURNING id
-        `;
-        const params = [
-            transactionData.houseId,
-            transactionData.transactionTypeId,
-            transactionData.value,
-            transactionData.userId
-        ];
-        const result = await pool.query(query, params);
-        return { id: result.rows[0].id };
-    }
 
-async findAllTransactions(filter?: TransactionFilterDto): Promise<GetTransactionDto[]> {
-    let query = `
-        SELECT 
-        ht.id, 
-        h.name as house_name,
-        tt.name as transaction_type,
-        ht.value, 
-        ht.created_at 
-      FROM house_transactions ht
-      LEFT JOIN betting_houses h ON ht.house_id = h.id
-      LEFT JOIN transaction_types tt ON ht.transaction_type_id = tt.id
-    `;
-    const params: any[] = [];
-    const conditions: string[] = [];
-    if (filter) {
-      if (filter.houseId) {
-        conditions.push(`ht.house_id = $${params.length + 1}`);
-        params.push(filter.houseId);
-      }
+  constructor(
+    @Inject(DATABASE_WRITE_CONNECTION)
+    private readonly dbWrite: Kysely<Database>,
+    @Inject(DATABASE_READ_CONNECTION)
+    private readonly dbRead: Kysely<Database>,
+  ) {}
 
-      if (filter.userId) {
-        conditions.push(`ht.user_id = $${params.length + 1}`);
-        params.push(filter.userId);
-      }
-      if (filter.startDate) {
-        conditions.push(`ht.created_at >= $${params.length + 1}`);
-        params.push(filter.startDate);
-      }
-      if (filter.endDate) {
-        conditions.push(`ht.created_at <= $${params.length + 1}`);
-        params.push(filter.endDate);
-      }
-    }
-    if (conditions.length > 0) {
-      query += ' WHERE ' + conditions.join(' AND ');
-    }
-    query += ' ORDER BY ht.created_at DESC';
-    const result = await pool.query(query, params);
-    return await toCamel(result.rows);
-    
-  }
+ async create(newHouseTransaction: NewHouseTransaction) {
+  const result = await this.dbWrite
+    .insertInto("houseTransactions")
+    .values(newHouseTransaction)
+    .returning("id")
+    .executeTakeFirstOrThrow();
 
-  async findAllTypeTransactions(): Promise<{ id: number, name: string }[]> {
-    const query = `
-      SELECT id, name
-      FROM transaction_types
-      ORDER BY name
-    `;
-    const result = await pool.query(query);
-    return result.rows;
+  return result;
+}
+
+async findAllTransactions(userId: UserId, filter?: FilterGetTransactions) {
+  return this.dbRead
+    .selectFrom("houseTransactions as ht")
+    .leftJoin("bettingHouses as h", "ht.houseId", "h.id")
+    .leftJoin("transactionTypes as tt", "ht.transactionTypeId", "tt.id")
+    .select([
+      "ht.id",
+      "h.name as houseName",
+      "tt.name as transactionType",
+      "ht.value",
+      "ht.createdAt",
+    ])
+    .where("ht.userId", "=", userId) 
+    .$if(isNotEmpty(filter?.houseId), (qb) =>
+      qb.where("ht.houseId", "=", filter!.houseId!)
+    )
+    .$if(isNotEmpty(filter?.startDate), (qb) =>
+      qb.where("ht.createdAt", ">=", filter!.startDate!)
+    )
+    .$if(isNotEmpty(filter?.endDate), (qb) =>
+      qb.where("ht.createdAt", "<=", filter!.endDate!)
+    )
+    .orderBy("ht.createdAt", "desc")
+    .execute();
+}
+  async findAllTypeTransactions() {
+    return this.dbRead
+      .selectFrom("transactionTypes")
+      .select(["id", "name"])
+      .orderBy("name", "asc")
+      .execute();
   }
 }

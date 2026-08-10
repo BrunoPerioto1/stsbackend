@@ -3,6 +3,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { v4 as uuidv4 } from 'uuid';
 import { Request } from 'express';
 import { UsersRepository } from '../infra/repository/users.repository';
+import type { UserId } from '../db_types/Users';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -48,7 +49,7 @@ export class TelegramLinkResponse {
 @ApiBearerAuth()
 @Controller('auth')
 export class TelegramLinkController {
-  private telegramLinkCodes = new Map<string, number>();
+  private telegramLinkCodes: Record<string, number> = {};
 
   constructor(private readonly usersRepository: UsersRepository) {}
 
@@ -72,7 +73,7 @@ export class TelegramLinkController {
   @Post('link-telegram')
   @UseGuards(AuthGuard('jwt'))
   async generateLinkCode(@Req() req: Request): Promise<{ code: string }> {
-    const userId = (req.user as any).userId;
+    const userId = (req.user as any).userId as UserId;
     const user = await this.usersRepository.findById(userId);
     if (!user) {
       throw new NotFoundException('Usuário não encontrado.');
@@ -104,7 +105,7 @@ export class TelegramLinkController {
       if (existingUser) {
         throw new BadRequestException('Este ID do Telegram já está vinculado a outra conta.');
       }
-      await this.usersRepository.vincularTelegram(userId, telegramUserId);
+      await this.usersRepository.linkTelegram(userId as UserId, telegramUserId);
       delete this.telegramLinkCodes[code];
 
       return {

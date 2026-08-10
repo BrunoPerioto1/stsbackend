@@ -66,9 +66,15 @@ export class TelegramService implements OnModuleInit {
     this.registerCommands();
 
     const url = `${process.env.APP_URL}/telegram/${process.env.TELEGRAM_BOT_TOKEN}`;
-    await this.bot.telegram.setWebhook(url);
-
-    console.log(`🤖 Telegram bot iniciado em webhook: ${url}`);
+    try {
+      await this.bot.telegram.setWebhook(url);
+      console.log(`🤖 Telegram bot iniciado em webhook: ${url}`);
+    } catch (error) {
+      console.error(
+        `⚠️  Não foi possível registrar o webhook do Telegram (${url}). O bot ficará indisponível, mas o resto da API continua rodando.`,
+        error instanceof Error ? error.message : error,
+      );
+    }
   }
 
   private registerCommands() {

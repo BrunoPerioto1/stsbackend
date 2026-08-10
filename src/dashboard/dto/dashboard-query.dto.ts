@@ -1,6 +1,7 @@
 import { IsOptional, IsISO8601, IsNumber, IsPositive } from 'class-validator';
-import { Transform } from 'class-transformer';
+import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
+import { BettingHouseId } from '../../db_types/BettingHouse';
 
 export class DashboardQueryDto {
   @ApiProperty({
@@ -9,10 +10,10 @@ export class DashboardQueryDto {
     required: false
   })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @IsPositive()
-  @Transform(({ value }) => value ? Number(value) : undefined)
-  house_id?: number;
+  houseId?: BettingHouseId;
 
   @ApiProperty({
     description: 'Data de início para filtrar os dados do dashboard',
@@ -21,7 +22,6 @@ export class DashboardQueryDto {
   })
   @IsOptional()
   @IsISO8601()
-  @Transform(({ value }) => value ? new Date(value).toISOString() : undefined)
   startDate?: string;
 
   @ApiProperty({
@@ -31,6 +31,5 @@ export class DashboardQueryDto {
   })
   @IsOptional()
   @IsISO8601()
-  @Transform(({ value }) => value ? new Date(value).toISOString() : undefined)
   endDate?: string;
 }

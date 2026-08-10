@@ -10,7 +10,8 @@ import {
 } from '@nestjs/swagger';
 import { HouseService } from './house.service';
 import { InsufficientBalanceErrorDto } from '../infra/dto/error-response.dto';
-import { HouseFilterDto } from './dto/house.filter.dto';
+import { HouseFilterRequestDto } from './dto/house.filter.dto';
+import { CreateHouseDto } from './dto/house.dto';
 import { UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { User } from '../common/decorators/user.decorator';
@@ -30,7 +31,7 @@ export class HouseController {
     status: 200,
     description: 'Saldos calculados com sucesso.',
   })
-  calculateAllHousesBalance(@Query() filter: HouseFilterDto, @User('userId') userId: number) {
+  calculateAllHousesBalance(@Query() filter: HouseFilterRequestDto, @User('userId') userId: number) {
     return this.houseService.getAllHousesBalanceWithFilter(filter, userId);
   }
 
@@ -48,6 +49,32 @@ export class HouseController {
   @ApiResponse({ status: 200, description: 'Lista de casas retornada com sucesso.' })
   getAllHouses() {
     return this.houseService.getAllHouses();
+  }
+
+  @Post()
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Cadastra uma nova casa de apostas' })
+  @ApiResponse({ status: 201, description: 'Casa criada com sucesso.' })
+  createHouse(@Body() dto: CreateHouseDto) {
+    return this.houseService.createHouse(dto);
+  }
+
+  @Get('ranking')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Ranking de casas por ROI/Lucro/Taxa de acerto (escopo do usuário)' })
+  @ApiQuery({ name: 'startDate', required: false, type: String })
+  @ApiQuery({ name: 'endDate', required: false, type: String })
+  @ApiQuery({ name: 'minBets', required: false, type: Number })
+  @ApiResponse({ status: 200, description: 'Ranking retornado com sucesso.' })
+  getHouseRanking(
+    @Query('startDate') startDate: string | undefined,
+    @Query('endDate') endDate: string | undefined,
+    @Query('minBets') minBets: string | undefined,
+    @User('userId') userId: number,
+  ) {
+    return this.houseService.getHouseRanking(userId, startDate, endDate, minBets ? Number(minBets) : undefined);
   }
 
   @Get(':id')

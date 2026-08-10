@@ -22,7 +22,7 @@ export class CreateUserRequestDTO {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
-  full_name?: string;
+  fullName?: string;
 }
 
 export class UpdateUserRequestDTO extends PartialType(CreateUserRequestDTO) {}

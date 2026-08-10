@@ -1,61 +1,51 @@
 import { Injectable } from '@nestjs/common';
 import { DashboardRepository } from '../infra/repository/dashboard.repository';
 import { DashboardQueryDto } from './dto/dashboard-query.dto';
-import {
-  DashboardMetrics,
-  DailySummaryPoint,
-} from './dto/dashboard-metrics.dto';
-import { formatPeriod } from '../common/utils/bet.utils';
+import { UserId } from '../db_types/Users';
 
 @Injectable()
 export class DashboardService {
   constructor(private readonly dashboardRepository: DashboardRepository) {}
 
-  async calculateMetrics(filters: DashboardQueryDto & { userId?: number }): Promise<DashboardMetrics | null> {
-    return await this.dashboardRepository.findDashboardMetrics(filters as any);
+  async getDailySummary(userId: UserId, filter: DashboardQueryDto) {
+    return this.dashboardRepository.findDailySummary({ ...filter, userId });
   }
 
-  // async getChartData(filters: DashboardQueryDto): Promise<ChartDataPoint[]> {
-  //   const metrics = await this.calculateMetrics(filters);
-  //   return [
-  //     { date: 'Investido', value: metrics.totalInvestido },
-  //     { date: 'Retorno', value: metrics.totalRetorno },
-  //     { date: 'Lucro', value: metrics.lucroTotal },
-  //   ];
-  // }
+  async getMonthlySummary(userId: UserId, filter: DashboardQueryDto) {
+    return this.dashboardRepository.findMonthlySummary({ ...filter, userId });
+  }
 
-  // async getPerformanceSummary(
-  //   filters: DashboardQueryDto,
-  // ): Promise<PerformanceSummary> {
-  //   const metrics = await this.calculateMetrics(filters);
-  //   let trend: 'positive' | 'negative' | 'neutral' = 'neutral';
-  //   if (metrics.lucroTotal > 0) {
-  //     trend = 'positive';
-  //   } else if (metrics.lucroTotal < 0) {
-  //     trend = 'negative';
-  //   }
-  //   const period = this.formatPeriod(filters.startDate, filters.endDate);
-  //   return {
-  //     period,
-  //     metrics,
-  //     trend,
-  //   };
-  // }
+  async getBetDateRange(userId: UserId) {
+    const range = await this.dashboardRepository.findBetDateRange(userId);
+    return {
+      firstBetDate: range?.firstBetDate ?? null,
+      lastBetDate: range?.lastBetDate ?? null,
+    };
+  }
 
-async getDailySummary(
-  filters: DashboardQueryDto & { userId?: number },
-): Promise<DailySummaryPoint[]> {
-  return  await this.dashboardRepository.findDailySummary(filters as any);
+  async getDashboardMetrics(userId: UserId, filter: DashboardQueryDto) {
+    const raw = await this.dashboardRepository.findDashboardMetrics({ ...filter, userId });
 
-  // return dailyData.map((day) => {
-  //   return {
-  //     date: day.date,
-  //     totalBets: day.totalBets,
-  //     profitDay: day.profitDay,
-  //   };
-  // });
-  
-}
+    if (!raw) return null;
 
+    const totalBets   = Number(raw.totalBets);
+    const wonBets     = Number(raw.wonBets);
+    const totalStaked = Number(raw.totalStaked);
+    const totalProfit = Number(raw.totalProfit);
 
+    return {
+      ...raw,
+      totalBets,
+      wonBets,
+      totalStaked,
+      totalProfit,
+      lostBets:     Number(raw.lostBets),
+      pendingBets:  Number(raw.pendingBets),
+      canceledBets: Number(raw.canceledBets),
+      averageStake: Number(raw.averageStake),
+      averageOdd:   Number(raw.averageOdd),
+      hitRate: totalBets   > 0 ? wonBets     / totalBets   : 0,
+      roi:     totalStaked > 0 ? totalProfit / totalStaked : 0,
+    };
+  }
 }

@@ -5,7 +5,7 @@ import { ApostaModule } from './bet.module';
 import { HouseModule } from './house.module';
 import { DatabaseModule } from '../infra/db/db.module';
 import { UsersModule } from '../users/users.module';
-import { TelegramController } from 'src/telegram/telegram.controller';
+import { TelegramController } from '../telegram/telegram.controller';
 
 @Module({
   imports: [ApostaModule, HouseModule, DatabaseModule, UsersModule],

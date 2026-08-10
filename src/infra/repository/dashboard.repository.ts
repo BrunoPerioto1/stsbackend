@@ -1,105 +1,149 @@
 // src/dashboard/dashboard.repository.ts
-import { Injectable } from '@nestjs/common';
-import { pool } from '../db/db';
-import { DashboardQueryDto } from '../../dashboard/dto/dashboard-query.dto';
-import { DailySummaryPoint, DashboardMetrics } from '../../dashboard/dto/dashboard-metrics.dto';
-import { toCamel } from '../../common/utils/camelcase';
+import { Inject, Injectable } from '@nestjs/common';
+import { Kysely, sql } from 'kysely';
+import type { Database } from '../db/database.types';
+import { DATABASE_READ_CONNECTION } from '../db/db.module';
+import { BettingHouseId } from '../../db_types/BettingHouse';
+import { UserId } from '../../db_types/Users';
+import { isNotEmpty } from 'class-validator';
+
+export interface FilterDashboard {
+  startDate?: string;
+  endDate?: string;
+  houseId?: BettingHouseId;
+  house_id?: BettingHouseId;
+  userId?: UserId;
+}
 
 @Injectable()
 export class DashboardRepository {
-  private buildFilters(filters: DashboardQueryDto & { userId?: number }): { whereClause: string; params: any[] } {
-    let whereClause = '';
-    const params: any[] = [];
-    let paramIndex = 1;
+  constructor(
+    @Inject(DATABASE_READ_CONNECTION)
+    private readonly dbRead: Kysely<Database>,
+  ) {}
 
-    if (filters.userId !== undefined) {
-      whereClause += ` AND b.user_id = $${paramIndex}`;
-      params.push(filters.userId);
-      paramIndex++;
-    }
 
-    if (filters.house_id) {
-      whereClause += ` AND b.house_id = $${paramIndex}`;
-      params.push(filters.house_id);
-      paramIndex++;
-    }
 
-    if (filters.startDate) {
-      whereClause += ` AND b.bet_time >= $${paramIndex}`;
-      params.push(filters.startDate);
-      paramIndex++;
-    }
+async findDailySummary(filters: FilterDashboard) {
+  const { startDate, endDate, houseId, userId } = filters;
 
-    if (filters.endDate) {
-      whereClause += ` AND b.bet_time <= $${paramIndex}`;
-      params.push(filters.endDate);
-      paramIndex++;
-    }
+  return this.dbRead
+    .selectFrom("bets as b")
+    .$if(isNotEmpty(userId), (qb) =>
+      qb.where("b.userId", "=", userId!),
+    )
+    .$if(isNotEmpty(houseId), (qb) =>
+      qb.where("b.houseId", "=", houseId!),
+    )
+    .$if(isNotEmpty(startDate), (qb) =>
+      qb.where("b.betTime", ">=", new Date(startDate!)),
+    )
+    .$if(isNotEmpty(endDate), (qb) =>
+      qb.where("b.betTime", "<=", new Date(endDate!)),
+    )
+    .select(({ fn, ref }) => [
+      fn<Date>("date", [ref("b.betTime")]).as("date"),
+      fn.count("b.id").as("totalBets"),
+      fn<number>("coalesce", [fn.sum<number>("b.profit"), sql.lit(0)]).as("profitDay"),
+    ])
+    .groupBy(({ fn, ref }) => fn<Date>("date", [ref("b.betTime")]))
+    .orderBy(({ fn, ref }) => fn<Date>("date", [ref("b.betTime")]), "asc")
+    .execute();
+}
+async findMonthlySummary(filters: FilterDashboard) {
+  const { startDate, endDate, houseId, userId } = filters;
 
-    return { whereClause, params };
-  }
+  return this.dbRead
+    .selectFrom("bets as b")
+    .$if(isNotEmpty(userId), (qb) =>
+      qb.where("b.userId", "=", userId!),
+    )
+    .$if(isNotEmpty(houseId), (qb) =>
+      qb.where("b.houseId", "=", houseId!),
+    )
+    .$if(isNotEmpty(startDate), (qb) =>
+      qb.where("b.betTime", ">=", new Date(startDate!)),
+    )
+    .$if(isNotEmpty(endDate), (qb) =>
+      qb.where("b.betTime", "<=", new Date(endDate!)),
+    )
+    .select(({ fn, ref }) => [
+      fn<Date>("date_trunc", ["month" as any, ref("b.betTime")]).as("month"),
+      fn.count("b.id").as("totalBets"),
+      fn<number>("coalesce", [fn.sum<number>("b.profit"), sql.lit(0)]).as("profitMonth"),
+    ])
+    .groupBy(({ fn, ref }) => fn<Date>("date_trunc", ["month" as any, ref("b.betTime")]))
+    .orderBy(({ fn, ref }) => fn<Date>("date_trunc", ["month" as any, ref("b.betTime")]), "asc")
+    .execute();
+}
+async findBetDateRange(userId: UserId) {
+  return this.dbRead
+    .selectFrom("bets as b")
+    .where("b.userId", "=", userId)
+    .select((eb) => [
+      eb.fn.min("b.betTime").as("firstBetDate"),
+      eb.fn.max("b.betTime").as("lastBetDate"),
+    ])
+    .executeTakeFirst();
+}
 
-  async findDailySummary(filters: DashboardQueryDto & { userId?: number }): Promise<DailySummaryPoint[]> {
-    const { whereClause, params } = this.buildFilters(filters);
+async findDashboardMetrics(filters: FilterDashboard) {
+  const { startDate, endDate, houseId, userId } = filters;
 
-    const query = `
-      SELECT 
-        DATE(b.bet_time) AS "date",
-        COUNT(b.id) AS "total_bets",
-        COALESCE(SUM(b.profit), 0) AS "profit_day"
-      FROM bets b
-      LEFT JOIN bet_results br ON b.id = br.bet_id
-      WHERE 1=1 ${whereClause}
-      GROUP BY DATE(b.bet_time)
-      ORDER BY DATE(b.bet_time) ASC
-    `;
-
-    const resultado = await pool.query(query, params);
-    return await toCamel<DailySummaryPoint[]>(resultado.rows);
-  }
-
-  async findDashboardMetrics(filters: DashboardQueryDto & { userId?: number }): Promise<DashboardMetrics | null> {
-    const { whereClause, params } = this.buildFilters(filters);
-
-    const query = `
-      WITH bet_stats AS (
-        SELECT 
-          COUNT(b.id) as total_bets,
-          COUNT(CASE WHEN br.result_id = 1 THEN 1 END) as won_bets,
-          COUNT(CASE WHEN br.result_id = 2 THEN 1 END) as lost_bets,
-          COUNT(CASE WHEN br.result_id = 9 THEN 1 END) as pending_bets,
-          COUNT(CASE WHEN br.result_id = 3 THEN 1 END) as canceled_bets,
-          COALESCE(AVG(b.stake), 0) as average_stake,
-          COALESCE(AVG(b.odd), 0) as average_odd,
-          COALESCE(SUM(b.stake), 0) as total_staked,
-          COALESCE(SUM(b.profit), 0) as total_profit
-        FROM bets b
-        LEFT JOIN bet_results br ON b.id = br.bet_id
-        WHERE 1=1 ${whereClause}
-      )
-      SELECT
-        total_bets as "totalBets",
-        won_bets as "wonBets",
-        lost_bets as "lostBets",
-        pending_bets as "pendingBets",
-        average_stake as "averageStake",
-        average_odd as "averageOdd",
-        canceled_bets as "canceledBets",
-        total_staked as "totalStaked",
-        total_profit as "totalProfit",
-        CASE WHEN total_staked > 0 
-             THEN ROUND((total_profit / total_staked) * 100, 2)
-             ELSE 0 END as "roi",
-        CASE WHEN (won_bets + lost_bets) > 0
-             THEN ROUND((won_bets::numeric / (won_bets + lost_bets)) * 100, 2)
-             ELSE 0 END as "hitRate"
-      FROM bet_stats;
-    `;
-
-    const result = await pool.query(query, params);
-    if (result.rows.length) {
-      return await toCamel<DashboardMetrics>(result.rows[0]);
-    }
-    return null;
-  }
+  return this.dbRead
+    .selectFrom("bets as b")
+    .leftJoin("betResults as br", "br.betId", "b.id")
+    .$if(isNotEmpty(userId), (qb) =>
+      qb.where("b.userId", "=", userId!),
+    )
+    .$if(isNotEmpty(houseId), (qb) =>
+      qb.where("b.houseId", "=", houseId!),
+    )
+    .$if(isNotEmpty(startDate), (qb) =>
+      qb.where("b.betTime", ">=", new Date(startDate!)),
+    )
+    .$if(isNotEmpty(endDate), (qb) =>
+      qb.where("b.betTime", "<=", new Date(endDate!)),
+    )
+    .select((eb) => [
+      eb.fn.count("b.id").as("totalBets"),
+      eb.fn<number>("sum", [
+        eb
+          .case()
+          .when("br.resultId", "=", 1 as any)
+          .then(1)
+          .else(0)
+          .end(),
+      ]).as("wonBets"),
+      eb.fn<number>("sum", [
+        eb
+          .case()
+          .when("br.resultId", "=", 2 as any)
+          .then(1)
+          .else(0)
+          .end(),
+      ]).as("lostBets"),
+      eb.fn<number>("sum", [
+        eb
+          .case()
+          .when("br.resultId", "=", 9 as any)
+          .then(1)
+          .else(0)
+          .end(),
+      ]).as("pendingBets"),
+      eb.fn<number>("sum", [
+        eb
+          .case()
+          .when("br.resultId", "=", 3 as any)
+          .then(1)
+          .else(0)
+          .end(),
+      ]).as("canceledBets"),
+      eb.fn<number>("coalesce", [eb.fn.avg<number>("b.stake"), sql.lit(0)]).as("averageStake"),
+      eb.fn<number>("coalesce", [eb.fn.avg<number>("b.odd"), sql.lit(0)]).as("averageOdd"),
+      eb.fn<number>("coalesce", [eb.fn.sum<number>("b.stake"), sql.lit(0)]).as("totalStaked"),
+      eb.fn<number>("coalesce", [eb.fn.sum<number>("b.profit"), sql.lit(0)]).as("totalProfit"),
+    ])
+    .executeTakeFirst();
+}
 }

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserRequestDTO, UpdateUserRequestDTO } from './dto/request.dto';
@@ -33,6 +33,15 @@ export class UsersController {
   @ApiOperation({ summary: 'Atualizar usuário logado' })
   async update(@Req() req: any, @Body() dto: UpdateUserRequestDTO) {
     return this.usersService.updateMe(req.user.userId, dto);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('jwt')
+  @Delete('me/telegram')
+  @ApiOperation({ summary: 'Desvincula a conta do Telegram do usuário logado' })
+  async unlinkTelegram(@Req() req: any) {
+    await this.usersService.desvincularTelegram(req.user.userId);
+    return { success: true };
   }
 }
 

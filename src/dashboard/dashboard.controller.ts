@@ -1,48 +1,53 @@
+// dashboard.controller.ts
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { AuthGuard } from '@nestjs/passport';
 import { DashboardService } from './dashboard.service';
 import { DashboardQueryDto } from './dto/dashboard-query.dto';
-import { AuthGuard } from '@nestjs/passport';
 import { User } from '../common/decorators/user.decorator';
+import { UserId } from '../db_types/Users';
 
 @ApiTags('Dashboard')
 @Controller('dashboard')
+@UseGuards(AuthGuard('jwt'))
+@ApiBearerAuth()
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
-  @Get('metrics')
-  @ApiOperation({ summary: 'Obtém métricas do dashboard' })
-  @ApiResponse({
-    status: 200,
-    description: 'Métricas retornadas com sucesso.',
-  })
-  @UseGuards(AuthGuard('jwt'))
-  @ApiBearerAuth()
-  async getMetrics(@Query() query: DashboardQueryDto, @User('userId') userId: number) {
-    return this.dashboardService.calculateMetrics({ ...query, userId } as any);
+  @Get('date-range')
+  @ApiOperation({ summary: 'Obtém a data da primeira e da última aposta do usuário' })
+  @ApiResponse({ status: 200, description: 'Intervalo retornado com sucesso.' })
+  async getDateRange(@User('userId') userId: UserId) {
+    return this.dashboardService.getBetDateRange(userId);
   }
 
-  // @Get('chart-data')
-  // @ApiOperation({ summary: 'Obtém dados para gráficos do dashboard' })
-  // @ApiResponse({
-  //   status: 200,
-  //   description: 'Dados dos gráficos retornados com sucesso.',
-  // })
-  // async getChartData(@Query() query: DashboardQueryDto) {
-  //   return this.dashboardService.getChartData(query);
-  // }
+  @Get('metrics')
+  @ApiOperation({ summary: 'Obtém métricas do dashboard' })
+  @ApiResponse({ status: 200, description: 'Métricas retornadas com sucesso.' })
+  async getMetrics(
+    @Query() query: DashboardQueryDto,
+    @User('userId') userId: UserId,
+  ) {
+    return this.dashboardService.getDashboardMetrics(userId, query);
+  }
 
- 
+  @Get('monthly-summary')
+  @ApiOperation({ summary: 'Obtém resumo mensal para gráficos' })
+  @ApiResponse({ status: 200, description: 'Resumo mensal retornado com sucesso.' })
+  async getMonthlySummary(
+    @Query() query: DashboardQueryDto,
+    @User('userId') userId: UserId,
+  ) {
+    return this.dashboardService.getMonthlySummary(userId, query);
+  }
 
   @Get('daily-summary')
   @ApiOperation({ summary: 'Obtém resumo diário para gráficos' })
-  @ApiResponse({
-    status: 200,
-    description: 'Resumo diário retornado com sucesso.',
-  })
-  @UseGuards(AuthGuard('jwt'))
-  @ApiBearerAuth()
-  async getDailySummary(@Query() query: DashboardQueryDto, @User('userId') userId: number) {
-    return this.dashboardService.getDailySummary({ ...query, userId } as any);
+  @ApiResponse({ status: 200, description: 'Resumo diário retornado com sucesso.' })
+  async getDailySummary(
+    @Query() query: DashboardQueryDto,
+    @User('userId') userId: UserId,
+  ) {
+    return this.dashboardService.getDailySummary(userId, query);
   }
 }

@@ -5,13 +5,16 @@ import { UsersRepository } from '../infra/repository/users.repository';
 import { UserDto } from './dto/user.dto';
 import { CreateUserRequestDTO, UpdateUserRequestDTO } from './dto/request.dto';
 import { CreateUserResponseDTO } from './dto/response.dto';
+import type { UserId } from '../db_types/Users';
+import type { RoleId } from '../db_types/Roles';
 
 @Injectable()
 export class UsersService {
     constructor(private readonly usersRepository: UsersRepository) {}
 
     async findByEmail(email: string): Promise<UserDto | null> {
-        return this.usersRepository.findByEmail(email);
+        const user = await this.usersRepository.findByEmail(email);
+        return user ?? null;
     }
 
     async createUser(params: CreateUserRequestDTO): Promise<CreateUserResponseDTO> {
@@ -25,58 +28,63 @@ export class UsersService {
             throw new BadRequestException('Username já cadastrado');
         }
 
-        const password_hash = await bcrypt.hash(params.password, 10);
+        const passwordHash = await bcrypt.hash(params.password, 10);
         const created = await this.usersRepository.insertUser({
             username: params.username,
             email: params.email,
-            password_hash,
-            role_id: params.roleId,
-            full_name: params.full_name ?? null,
+            passwordHash,
+            roleId: params.roleId as RoleId,
+            fullName: params.fullName ?? null,
         });
 
-        const { password_hash: _, ...safe } = created as any;
+        const { passwordHash: _, ...safe } = created as any;
         return safe as CreateUserResponseDTO;
     }
 
-    async getMe(userId: number): Promise<Omit<UserDto, 'password_hash'>> {
-        const user = await this.usersRepository.findById(userId);
+    async getMe(userId: number): Promise<Omit<UserDto, 'passwordHash'>> {
+        const user = await this.usersRepository.findById(userId as UserId);
         if (!user) throw new BadRequestException('Usuário não encontrado.');
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { password_hash, ...safe } = user as any;
+        const { passwordHash, ...safe } = user as any;
         return safe;
     }
 
-    async updateMe(userId: number, params: UpdateUserRequestDTO): Promise<Omit<UserDto, 'password_hash'>> {
+    async updateMe(userId: number, params: UpdateUserRequestDTO): Promise<Omit<UserDto, 'passwordHash'>> {
         const fields: any = {};
         if (params.username) fields.username = params.username;
         if (params.email) fields.email = params.email;
-        if (params.full_name !== undefined) fields.full_name = params.full_name;
-        if (params.roleId !== undefined) fields.role_id = params.roleId;
-        if (params.password) fields.password_hash = await bcrypt.hash(params.password, 10);
+        if (params.fullName !== undefined) fields.fullName = params.fullName;
+        if (params.roleId !== undefined) fields.roleId = params.roleId as RoleId;
+        if (params.password) fields.passwordHash = await bcrypt.hash(params.password, 10);
 
-        const updated = await this.usersRepository.updateUser(userId, fields);
+        const updated = await this.usersRepository.updateUser(userId as UserId, fields);
         if (!updated) throw new BadRequestException('Erro ao atualizar usuário.');
         // eslint-disable-next-line @typescript-eslint/no-unused_vars
-        const { password_hash, ...safe } = updated as any;
+        const { passwordHash, ...safe } = updated as any;
         return safe;
     }
       async vincularTelegram(userId: number, telegramUserId: number) {
-        await this.usersRepository.vincularTelegram(userId, telegramUserId);
+        await this.usersRepository.linkTelegram(userId as UserId, telegramUserId);
+    }
+
+    async desvincularTelegram(userId: number) {
+        await this.usersRepository.updateUser(userId as UserId, { telegramUserId: null });
     }
 
     async findByTelegramUserId(telegramUserId: number): Promise<UserDto | null> {
-        return this.usersRepository.findByTelegramUserId(telegramUserId);
+        const user = await this.usersRepository.findByTelegramUserId(telegramUserId);
+        return user ?? null;
     }
 
     async updateUserStake(userId: number, stake: number): Promise<boolean> {
         if (!Number.isFinite(stake) || stake <= 0) {
             throw new Error('Valor da stake deve ser maior que zero');
         }
-        return this.usersRepository.updateUserStake(userId, stake);
+        return this.usersRepository.updateUserStake(userId as UserId, stake);
     }
 
     async getUserStake(userId: number): Promise<number> {
-        const stake = await this.usersRepository.getUserStake(userId);
+        const stake = await this.usersRepository.getUserStake(userId as UserId);
         return stake ?? 2000; // Retorna 2000 como valor padrão se não encontrar
     }
 }
