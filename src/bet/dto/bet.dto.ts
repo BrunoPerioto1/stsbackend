@@ -68,13 +68,12 @@ export class CreateBetRequestDto {
   @IsString()
   betTime?: string;
 
-  @ApiProperty({
-    description: 'User ID who placed the bet',
-    required: true
+  @ApiPropertyOptional({
+    description: 'User ID who placed the bet (preenchido automaticamente a partir do token)',
   })
+  @IsOptional()
   @IsNumber()
-  @IsNotEmpty()
-  userId: number;
+  userId?: number;
 }
 
 export class UpdateApostaDto {
