@@ -6,18 +6,22 @@ import { UsersRepository } from '../infra/repository/users.repository';
 import type { UserId } from '../db_types/Users';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { ApiProperty } from '@nestjs/swagger';
+import { IsInt, IsNotEmpty, IsString } from 'class-validator';
 
 export class TelegramLinkRequest {
   @ApiProperty({
     description: 'Código de vinculação gerado',
     example: '550e8400-e29b-41d4-a716-446655440000'
   })
+  @IsString()
+  @IsNotEmpty()
   code!: string;
 
   @ApiProperty({
     description: 'ID do usuário no Telegram',
     example: 123456789
   })
+  @IsInt()
   telegramUserId!: number;
 }
 
