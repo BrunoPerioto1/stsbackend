@@ -6,6 +6,7 @@ import { DATABASE_READ_CONNECTION, DATABASE_WRITE_CONNECTION } from '../db/db.mo
 import { Kysely } from 'kysely';
 import { Database } from '../db/database.types';
 import { isNotEmpty } from 'class-validator';
+import { endOfDay } from '../../common/utils/bet.utils';
 
 export interface FilterGetTransactions {
   houseId?: BettingHouseId;
@@ -53,7 +54,7 @@ async findAllTransactions(userId: UserId, filter?: FilterGetTransactions) {
       qb.where("ht.createdAt", ">=", filter!.startDate!)
     )
     .$if(isNotEmpty(filter?.endDate), (qb) =>
-      qb.where("ht.createdAt", "<=", filter!.endDate!)
+      qb.where("ht.createdAt", "<=", endOfDay(filter!.endDate!))
     )
     .orderBy("ht.createdAt", "desc")
     .execute();

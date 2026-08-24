@@ -13,6 +13,7 @@ export default interface BetsTable {
   market: ColumnType<string, string, string>;
   sport: ColumnType<string, string, string>;
   profit: ColumnType<number | null, number | null, number | null>;
+  cashoutValue: ColumnType<number | null, number | null, number | null>;
   userId: ColumnType<UserId | null, UserId | null | undefined, UserId | null>;
   betTime: ColumnType<Date, Date | undefined, Date>;
   createdAt: ColumnType<Date, Date | undefined, never>;

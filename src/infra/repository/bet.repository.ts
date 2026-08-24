@@ -12,6 +12,7 @@ import { BetId, NewBet, UpdateBet } from "../../db_types/Bet";
 import { ResultId } from "../../db_types/Results";
 import { NewBetResult } from "../../db_types/BetsResults";
 import type { Database } from "../db/database.types";
+import { endOfDay } from "../../common/utils/bet.utils";
 
 export interface FilterGetBets {
   betId?: BetId;
@@ -82,6 +83,7 @@ export class BetRepository {
   resultId: ResultIdEnum,
   profit: number,
   userId: UserId,
+  cashoutValue?: number,
 ) {
   const result = await this.dbWrite.transaction().execute(async (trx) => {
     const updatedBetResult = await trx
@@ -101,6 +103,7 @@ export class BetRepository {
       .updateTable("bets")
       .set({
         profit,
+        cashoutValue: cashoutValue ?? null,
         updatedAt: new Date(),
       })
       .where("id", "=", betId)
@@ -190,6 +193,7 @@ export class BetRepository {
         "b.sport",
         "bh.name as houseName",
         "b.profit",
+        "b.cashoutValue",
         "b.betTime",
         "br.resultId",
         "r.name as resultName",
@@ -197,7 +201,7 @@ export class BetRepository {
       .$if(isNotEmpty(betId), (qb) => qb.where("b.id", "=", betId!))
       .$if(isNotEmpty(userId), (qb) => qb.where("b.userId", "=", userId!))
       .$if(isNotEmpty(startDate), (qb) => qb.where("b.betTime", ">=", startDate!))
-      .$if(isNotEmpty(endDate), (qb) => qb.where("b.betTime", "<=", endDate!))
+      .$if(isNotEmpty(endDate), (qb) => qb.where("b.betTime", "<=", endOfDay(endDate!)))
       .$if(isNotEmpty(resultId), (qb) => qb.where("br.resultId", "=", resultId!))
       .$if(isNotEmpty(q), (qb) =>
         qb.where((eb) =>
@@ -285,7 +289,7 @@ export class BetRepository {
       .$if(isNotEmpty(betId), (qb) => qb.where("b.id", "=", betId!))
       .$if(isNotEmpty(userId), (qb) => qb.where("b.userId", "=", userId!))
       .$if(isNotEmpty(startDate), (qb) => qb.where("b.betTime", ">=", startDate!))
-      .$if(isNotEmpty(endDate), (qb) => qb.where("b.betTime", "<=", endDate!))
+      .$if(isNotEmpty(endDate), (qb) => qb.where("b.betTime", "<=", endOfDay(endDate!)))
       .$if(isNotEmpty(resultId), (qb) => qb.where("br.resultId", "=", resultId!))
       .$if(isNotEmpty(q), (qb) =>
         qb.where((eb) =>

@@ -4,18 +4,31 @@ export function calculateProfit(
   resultId: ResultIdEnum,
   stake: number,
   odd: number,
+  cashoutValue?: number,
 ): number {
   switch (resultId) {
     case ResultIdEnum.WON:
       return stake * (odd - 1);
     case ResultIdEnum.LOST:
       return -stake;
+    case ResultIdEnum.HALF_WON:
+      return (stake / 2) * (odd - 1);
+    case ResultIdEnum.HALF_LOST:
+      return -(stake / 2);
+    case ResultIdEnum.CASHOUT:
+      return (cashoutValue ?? 0) - stake;
     case ResultIdEnum.CANCELED:
     case ResultIdEnum.PENDING:
       return 0;
     default:
       return 0;
   }
+}
+
+export function endOfDay(date: Date): Date {
+  const d = new Date(date);
+  d.setUTCHours(23, 59, 59, 999);
+  return d;
 }
 
 export function formatPeriod(startDate?: string, endDate?: string): string {
