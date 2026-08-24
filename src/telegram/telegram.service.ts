@@ -200,8 +200,14 @@ export class TelegramService implements OnModuleInit {
           console.error('Erro ao buscar casa:', err);
         }
 
+        const horario = new Date(aposta.betTime).toLocaleTimeString('pt-BR', {
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: 'America/Sao_Paulo',
+        });
+
         await ctx.reply(
-          `✅ Aposta salva!\n\n🎮 Jogo: ${aposta.game}\n💰 Stake: R$ ${aposta.stake}\n📈 Odd: ${aposta.odd}\n🏆 Mercado: ${aposta.market}\n⚽ Esporte: ${aposta.sport}\n🏢 Casa: ${houseName}\n👤 Usuário: ${user.username}`,
+          `✅ Aposta salva!\n\n🎮 Jogo: ${aposta.game}\n🕐 Horário: ${horario}\n💰 Stake: R$ ${aposta.stake}\n📈 Odd: ${aposta.odd}\n🏆 Mercado: ${aposta.market}\n⚽ Esporte: ${aposta.sport}\n🏢 Casa: ${houseName}\n👤 Usuário: ${user.username}`,
         );
       } catch (err) {
         console.error('❌ Erro ao processar aposta:', err);
