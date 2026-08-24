@@ -1,378 +1,152 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Betting Tracker — API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+A NestJS backend for tracking sports bets: bankroll, bookmaker balances, deposits/withdrawals, and performance analytics — with a Telegram bot that uses an LLM to auto-log bets straight from a tipster channel.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+Companion frontend: **sts** (React + TypeScript dashboard) — separate repository.
 
-# Betting Tracker Backend
+## Features
 
-Backend NestJS para o sistema de rastreamento de apostas esportivas.
+- **Bet lifecycle** — create, edit, delete, and settle bets as Won, Lost, Half-Won, Half-Lost, Cashout (with the actual cashed-out amount), Canceled, or Pending, with profit computed automatically for each outcome.
+- **Bulk settlement** — resolve many pending bets at once.
+- **Bookmaker accounts** — balance per bookmaker (deposits − withdrawals + bet profit), plus a ranking view (ROI, hit rate, average odd/stake) to compare where you actually perform.
+- **Financial transactions** — deposits, withdrawals, and manual adjustments per bookmaker, with insufficient-balance validation on withdrawals.
+- **Dashboard analytics** — daily/monthly profit summaries and aggregate metrics (ROI, hit rate, average stake/odd) over a date range.
+- **Telegram bot** — parses free-text tip messages (an emoji-tagged format posted by a tipster channel) into structured bets using an LLM, resolves the bookmaker by fuzzy name matching, sizes the stake from a percentage of the user's bankroll, and confirms back with the logged details.
+- **Account linking** — one-time code flow to link a Telegram account to a web account.
+- JWT authentication, request validation via `class-validator`/`class-transformer`, and a generated Swagger/OpenAPI doc.
 
-## 🚀 Funcionalidades
+## Tech stack
 
-- **API RESTful** para gestão de apostas
-- **Cálculo automático** de lucros baseado em resultados
-- **Suporte a 9 tipos** de resultados diferentes
-- **Validação de dados** com class-validator
-- **CORS habilitado** para integração com frontend
-- **Banco PostgreSQL** com TypeORM
+- **NestJS 11** (TypeScript)
+- **PostgreSQL** via **Kysely** (typed query builder, not an ORM) with separate read/write connections
+- **Passport JWT** for auth, **bcrypt** for password hashing
+- **Telegraf** for the Telegram bot, **Groq SDK** (LLM) for parsing tip messages
+- **class-validator** / **class-transformer** for DTO validation
+- **Swagger** (`@nestjs/swagger`) for API docs
 
-## 🛠️ Tecnologias
+## Architecture
 
-- **Framework**: NestJS 11
-- **Database**: PostgreSQL + TypeORM
-- **Validation**: class-validator + class-transformer
-- **HTTP Client**: Axios
-- **Language**: TypeScript
-
-## 📋 Pré-requisitos
-
-- Node.js 18+
-- PostgreSQL 12+
-- npm ou yarn
-
-## ⚙️ Instalação
-
-1. **Clone o repositório**
-   ```bash
-   git clone <repository-url>
-   cd meu-bot-telegram-1
-   ```
-
-2. **Instale as dependências**
-   ```bash
-   npm install
-   ```
-
-3. **Configure as variáveis de ambiente**
-   ```bash
-   cp env.example .env
-   ```
-   
-   Edite o arquivo `.env` com suas configurações:
-   ```env
-   DB_USER=postgres
-   DB_HOST=localhost
-   DB_NAME=betting_tracker
-   DB_PASSWORD=sua_senha_aqui
-   DB_PORT=5432
-   PORT=3000
-   NODE_ENV=development
-   ```
-
-4. **Configure o banco de dados**
-   ```bash
-   # Conecte ao PostgreSQL
-   psql -U postgres
-   
-   # Crie o banco
-   CREATE DATABASE betting_tracker;
-   
-   # Execute o schema
-   \c betting_tracker
-   \i database/schema.sql
-   ```
-
-5. **Inicie o servidor**
-   ```bash
-   npm run start:dev
-   ```
-
-## 🗄️ Estrutura do Banco
-
-### Tabela `apostas`
-- `id`: ID único da aposta
-- `jogo`: Nome do jogo/evento
-- `stake`: Valor apostado
-- `odd`: Odd da aposta
-- `casa`: Casa de apostas
-- `mercado`: Tipo de mercado
-- `esporte`: Esporte da aposta
-- `data`: Data/hora da aposta
-
-### Tabela `aposta_results`
-- `id`: ID único do resultado
-- `aposta_id`: Referência à aposta
-- `result_id`: ID do resultado (enum)
-- `created_at`: Data de criação
-- `updated_at`: Data de atualização
-
-## 🔌 API Endpoints
-
-### Apostas
-
-#### `GET /apostas`
-Lista todas as apostas com lucros calculados.
-
-**Response:**
-```json
-[
-  {
-    "id": 1,
-    "jogo": "Flamengo x Vasco",
-    "stake": 100.00,
-    "odd": 2.50,
-    "casa": "Bet365",
-    "mercado": "Resultado Final",
-    "esporte": "Futebol",
-    "data": "2024-01-15T10:00:00Z",
-    "result_id": 9,
-    "lucro_calculado": 0.00
-  }
-]
+```mermaid
+graph LR
+    WEB["sts frontend<br/>(React)"] -->|REST + JWT| API
+    TG["Telegram tipster<br/>channel"] -->|message| BOT["Telegram bot<br/>(Telegraf)"]
+    BOT -->|"parse message"| LLM["Groq LLM"]
+    LLM -->|"structured bet JSON"| BOT
+    BOT -->|"create bet"| API["NestJS API"]
+    API --> DB[("PostgreSQL<br/>(Kysely)")]
 ```
 
-#### `GET /apostas/:id`
-Busca uma aposta específica por ID.
+The bot and the web frontend are just two entry points into the same bet/bookmaker domain — both end up calling the same services.
 
-#### `POST /apostas`
-Cria uma nova aposta.
+Feature modules follow a controller → service → repository layering, with Kysely-typed table interfaces under `src/db_types`:
 
-**Request Body:**
-```json
-{
-  "jogo": "Flamengo x Vasco",
-  "stake": 100.00,
-  "odd": 2.50,
-  "casa": "Bet365",
-  "mercado": "Resultado Final",
-  "esporte": "Futebol"
-}
-```
-
-#### `PUT /apostas/finalizar/:id`
-Finaliza uma aposta individual.
-
-**Request Body:**
-```json
-{
-  "resultId": 1
-}
-```
-
-#### `PUT /apostas/finalizar-multiplas`
-Finaliza múltiplas apostas de uma vez.
-
-**Request Body:**
-```json
-{
-  "apostaIds": [1, 2, 3],
-  "resultId": 1
-}
-```
-
-## 📊 Tipos de Resultado
-
-| ID | Nome | Descrição | Cálculo do Lucro |
-|----|------|-----------|------------------|
-| 1 | GANHOU | Aposta ganhadora | `stake * (odd - 1)` |
-| 2 | PERDEU | Aposta perdedora | `-stake` |
-| 3 | EMPATE | Resultado empatado | `0` |
-| 4 | ANULADA | Aposta anulada | `0` |
-| 5 | MEIO_GANHO | Meio ganho | `(stake/2) * (odd-1) - stake/2` |
-| 6 | REEMBOLSADA | Aposta reembolsada | `0` |
-| 7 | MEIO_GANHO_2 | Meio ganho (tipo 2) | `(stake/2) * (odd-1) - stake/2` |
-| 8 | MEIO_PERDIDO | Meio perdido | `-stake/2` |
-| 9 | PENDENTE | Aguardando resultado | `0` |
-
-## 🚨 Troubleshooting
-
-### Erro de Conexão com Banco
-```bash
-# Verifique se o PostgreSQL está rodando
-sudo systemctl status postgresql
-
-# Teste a conexão
-psql -U postgres -h localhost -d betting_tracker
-```
-
-### Erro de CORS
-O CORS já está habilitado no `main.ts`. Se ainda houver problemas, verifique se o frontend está acessando a URL correta.
-
-### Erro de Validação
-Verifique se todos os campos obrigatórios estão sendo enviados:
-- `jogo`: string não vazia
-- `stake`: número positivo
-- `odd`: número maior que 1
-- `casa`: string não vazia
-- `mercado`: string não vazia
-- `esporte`: string não vazia
-
-## 📝 Scripts Disponíveis
-
-```bash
-npm run start          # Inicia o servidor
-npm run start:dev      # Servidor com hot reload
-npm run start:debug    # Servidor com debug
-npm run start:prod     # Servidor de produção
-npm run build          # Compila o projeto
-npm run test           # Executa os testes
-npm run test:e2e       # Testes end-to-end
-npm run lint           # Linting do código
-npm run format         # Formata o código
-```
-
-## 🔧 Configuração de Desenvolvimento
-
-### Estrutura de Arquivos
 ```
 src/
-├── aposta/           # Módulo de apostas
-│   ├── dto/         # Data Transfer Objects
-│   ├── aposta.controller.ts
-│   ├── aposta.service.ts
-│   ├── aposta.module.ts
-│   ├── db.ts        # Configuração do banco
-│   └── result-id.enum.ts
-├── telegram/         # Módulo do Telegram (futuro)
-├── app.module.ts     # Módulo principal
-└── main.ts          # Entry point
+├── auth/            # login, JWT strategy, Telegram account linking
+├── bet/              # bet CRUD, settlement, result-status DTOs
+├── house/             # bookmakers, balances, ranking
+├── transactions/      # deposits / withdrawals / adjustments
+├── dashboard/         # aggregate analytics
+├── users/             # user profile
+├── telegram/           # bot, LLM-based message parsing
+├── infra/
+│   ├── db/            # Kysely connection setup
+│   └── repository/    # one repository per aggregate, Kysely queries
+├── db_types/          # Kysely table type definitions
+└── common/            # shared decorators, utils (profit calc, date helpers)
 ```
 
-### Variáveis de Ambiente
-- `DB_USER`: Usuário do PostgreSQL
-- `DB_HOST`: Host do banco
-- `DB_NAME`: Nome do banco
-- `DB_PASSWORD`: Senha do banco
-- `DB_PORT`: Porta do banco
-- `PORT`: Porta da aplicação
+### Telegram bet-logging flow
 
-## 🚀 Deploy
+```mermaid
+sequenceDiagram
+    participant T as Tipster channel
+    participant B as Telegram bot
+    participant G as Groq LLM
+    participant A as API (Nest)
+    participant D as Database
 
-### Produção
+    T->>B: emoji-tagged tip message
+    B->>G: parse message (extract game, sport,<br/>market, odd, bookmaker hint, stake %)
+    G-->>B: structured JSON
+    B->>B: resolve bookmaker by fuzzy name match
+    B->>A: look up user's bankroll
+    A-->>B: bankroll value
+    B->>B: stake = bankroll × percent (capped by any stated limit)
+    B->>A: POST /bets
+    A->>D: insert bet + pending result
+    A-->>B: created bet
+    B-->>T: confirmation reply (game, time, odd, stake, bookmaker)
+```
+
+## Result statuses
+
+| Status | Profit calculation |
+|---|---|
+| Won | `stake × (odd − 1)` |
+| Lost | `-stake` |
+| Half-Won | `(stake / 2) × (odd − 1)` |
+| Half-Lost | `-(stake / 2)` |
+| Cashout | `cashoutValue − stake` |
+| Canceled | `0` |
+| Pending | `0` (awaiting settlement) |
+
+## API reference
+
+All endpoints are prefixed with the app's base URL; most require a `Bearer` JWT (see Swagger for the full contract).
+
+| Resource | Endpoints |
+|---|---|
+| Auth | `POST /auth/login`, `POST /auth/link-telegram`, `POST /auth/link-telegram/confirm` |
+| Users | `POST /users`, `GET /users/me`, `PATCH /users/me`, `DELETE /users/me/telegram` |
+| Bets | `POST /bets`, `GET /bets`, `PUT /bets/:id`, `PUT /bets/finalize/:id`, `PUT /bets/finalize-multiple`, `DELETE /bets/:id`, `DELETE /bets/delete-multiple`, `GET /bets/result-types` |
+| Bookmakers | `GET /house/all`, `GET /house/balances`, `GET /house/metrics`, `GET /house/ranking`, `GET /house/:id`, `POST /house` |
+| Transactions | `POST /transactions/new`, `GET /transactions/all`, `GET /transactions/types` |
+| Dashboard | `GET /dashboard/metrics`, `GET /dashboard/daily-summary`, `GET /dashboard/monthly-summary`, `GET /dashboard/date-range` |
+| Telegram webhook | `POST /telegram/:token` |
+
+Full interactive docs are served at `/api` once the app is running.
+
+## Getting started
+
+### Prerequisites
+
+- Node.js 18+
+- A PostgreSQL database
+- A Telegram bot token ([@BotFather](https://t.me/BotFather)) and a [Groq](https://groq.com) API key, if you want the bot running
+
+### Setup
+
 ```bash
-npm run build
-npm run start:prod
+npm install
+cp env.example .env   # then fill in the values below
+npm run start:dev
 ```
 
-### Docker (futuro)
-```dockerfile
-FROM node:18-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
-COPY dist ./dist
-EXPOSE 3000
-CMD ["npm", "run", "start:prod"]
-```
+### Environment variables
 
-## 🤝 Contribuição
+| Variable | Description |
+|---|---|
+| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | PostgreSQL connection |
+| `JWT_SECRET` | Signing secret for auth tokens |
+| `TELEGRAM_BOT_TOKEN` | Bot token from BotFather |
+| `APP_URL` | Public URL this app is reachable at (used to register the Telegram webhook) |
+| `API_URL` | Base URL the Telegram bot uses to call back into this API |
+| `GROQ_API_KEY` | Groq API key for parsing tip messages |
 
-1. Fork o projeto
-2. Crie uma branch para sua feature
-3. Commit suas mudanças
-4. Push para a branch
-5. Abra um Pull Request
+The database schema (tables, seed data for bookmakers and result statuses) lives in `src/infra/db/schema.sql`.
 
-## 📄 Licença
+### Scripts
 
-Este projeto está sob a licença MIT.
-
-## 🆘 Suporte
-
-Para suporte ou dúvidas:
-- Abra uma issue no GitHub
-- Verifique os logs da aplicação
-- Consulte a documentação da API
-
-# Meu Bot Telegram - Sistema de Apostas
-
-## Rotas do Dashboard
-
-### GET /dashboard/metrics
-Calcula métricas gerais do dashboard com filtro opcional por período.
-
-**Query Parameters:**
-- `startDate` (opcional): Data de início no formato ISO (ex: 2025-01-01T00:00:00.000Z)
-- `endDate` (opcional): Data de fim no formato ISO (ex: 2025-01-31T23:59:59.999Z)
-
-**Exemplo de uso:**
 ```bash
-# Todas as métricas
-GET /dashboard/metrics
-
-# Métricas de um período específico
-GET /dashboard/metrics?startDate=2025-01-01T00:00:00.000Z&endDate=2025-01-31T23:59:59.999Z
-
-# Métricas a partir de uma data
-GET /dashboard/metrics?startDate=2025-01-01T00:00:00.000Z
-
-# Métricas até uma data
-GET /dashboard/metrics?endDate=2025-01-31T23:59:59.999Z
+npm run start:dev      # dev server with hot reload
+npm run build           # compile
+npm run start:prod      # run the compiled build
+npm run test             # unit tests
+npm run test:e2e         # e2e tests
+npm run lint              # lint
 ```
 
-**Resposta:**
-```json
-{
-  "totalApostas": 10,
-  "apostasGanhas": 6,
-  "apostasPerdidas": 3,
-  "apostasPendentes": 1,
-  "apostasCanceladas": 0,
-  "totalInvestido": 500.00,
-  "totalRetorno": 750.00,
-  "lucroTotal": 250.00,
-  "roi": 50.00,
-  "taxaAcerto": 66.7
-}
-```
+## Status
 
-### GET /dashboard/chart-data
-Retorna dados para o gráfico de performance financeira.
-
-**Query Parameters:** Mesmos do endpoint `/metrics`
-
-**Resposta:**
-```json
-[
-  { "date": "Investido", "value": 500.00 },
-  { "date": "Retorno", "value": 750.00 },
-  { "date": "Lucro", "value": 250.00 }
-]
-```
-
-### GET /dashboard/performance-summary
-Retorna um resumo completo da performance com tendência.
-
-**Query Parameters:** Mesmos do endpoint `/metrics`
-
-**Resposta:**
-```json
-{
-  "period": "01/01/2025 a 31/01/2025",
-  "metrics": { ... },
-  "trend": "positive"
-}
-```
-
-## Lógica de Cálculo
-
-- **Apostas Pendentes e Canceladas**: Não são contabilizadas no `totalInvestido` nem no `totalRetorno`
-- **Apostas Ganhas**: Contam no `totalInvestido` e `totalRetorno` (stake × odd)
-- **Apostas Perdidas**: Contam apenas no `totalInvestido`
-- **ROI**: (lucroTotal / totalInvestido) × 100
-- **Taxa de Acerto**: (apostasGanhas / apostasFinalizadas) × 100
-
-## Filtros de Data
-
-- As datas são opcionais
-- Formato esperado: ISO 8601
-- Se nenhuma data for fornecida, considera todo o período
-- O filtro é aplicado no campo `bet_time` da tabela `bets`
+Personal project, actively developed. Not production-hardened for third-party use — showcased here as a portfolio piece.
