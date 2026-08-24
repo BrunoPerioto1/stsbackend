@@ -122,7 +122,7 @@ export class ApostaController {
     @Body() body: FinalizarApostaDto,
     @User('userId') userId: number,
   ) {
-    return this.apostaService.finalizeBet(id, body.resultId, userId);
+    return this.apostaService.finalizeBet(id, body.resultId, userId, body.cashoutValue);
   }
 
   @Delete('delete-multiple')

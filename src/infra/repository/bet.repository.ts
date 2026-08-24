@@ -82,6 +82,7 @@ export class BetRepository {
   resultId: ResultIdEnum,
   profit: number,
   userId: UserId,
+  cashoutValue?: number,
 ) {
   const result = await this.dbWrite.transaction().execute(async (trx) => {
     const updatedBetResult = await trx
@@ -101,6 +102,7 @@ export class BetRepository {
       .updateTable("bets")
       .set({
         profit,
+        cashoutValue: cashoutValue ?? null,
         updatedAt: new Date(),
       })
       .where("id", "=", betId)
@@ -190,6 +192,7 @@ export class BetRepository {
         "b.sport",
         "bh.name as houseName",
         "b.profit",
+        "b.cashoutValue",
         "b.betTime",
         "br.resultId",
         "r.name as resultName",

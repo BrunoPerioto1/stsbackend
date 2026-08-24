@@ -147,7 +147,7 @@ export class HouseRepository {
       )
       .innerJoin('betResults as br', 'br.betId', 'b.id')
       .where('bh.isActive', '=', true)
-      .where('br.resultId', 'in', [1, 2] as any)
+      .where('br.resultId', 'in', [1, 2, 4, 5, 6] as any)
       .$if(!!startDate, (qb) => qb.where('b.betTime', '>=', startDate!))
       .$if(!!endDate, (qb) => qb.where('b.betTime', '<=', endDate!))
       .groupBy(['bh.id', 'bh.name'])

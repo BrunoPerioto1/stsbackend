@@ -65,6 +65,7 @@ export class ApostaService {
     betId: number,
     resultId: ResultIdEnum,
     userId: number,
+    cashoutValue?: number,
   ) {
     const bet = await this.betRepository.findById(betId as BetId);
     if (!bet) {
@@ -72,10 +73,15 @@ export class ApostaService {
     }
     const resultIdEnum = resultId as ResultIdEnum;
 
+    if (resultIdEnum === ResultIdEnum.CASHOUT && cashoutValue == null) {
+      throw new BadRequestException('cashoutValue é obrigatório para finalizar como Cashout.');
+    }
+
     const profit = calculateProfit(
       resultIdEnum,
       Number(bet.stake),
       Number(bet.odd),
+      cashoutValue,
     );
 
     const updated = await this.betRepository.finalizeBet(
@@ -83,6 +89,7 @@ export class ApostaService {
       resultIdEnum,
       profit,
       userId as UserId,
+      cashoutValue,
     );
     if (!updated) {
       throw new NotFoundException(
@@ -97,6 +104,12 @@ export class ApostaService {
     resultId: ResultIdEnum,
     userId: number,
   ) {
+    if (resultId === ResultIdEnum.CASHOUT) {
+      throw new BadRequestException(
+        'Cashout precisa de um valor por aposta e não pode ser aplicado em lote. Finalize essas apostas individualmente.',
+      );
+    }
+
     const rows = await this.betRepository.findByIds(
       betIds as BetId[],
       userId as UserId,

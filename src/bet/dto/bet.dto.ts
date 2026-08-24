@@ -1,4 +1,4 @@
-import { IsNumber, IsString, IsPositive, IsNotEmpty, IsOptional, IsArray, ArrayNotEmpty, IsEnum, } from 'class-validator';
+import { IsNumber, IsString, IsPositive, IsNotEmpty, IsOptional, IsArray, ArrayNotEmpty, IsEnum, ValidateIf, } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Transform, Type } from 'class-transformer';
 import { ResultIdEnum } from './result-id.enum';
@@ -167,6 +167,14 @@ export class FinalizarApostaDto {
   })
   @IsEnum(ResultIdEnum)
   resultId: ResultIdEnum;
+
+  @ApiPropertyOptional({
+    description: 'Valor recebido no cash-out (obrigatório quando resultId = CASHOUT)',
+    example: 45.00,
+  })
+  @ValidateIf((dto) => dto.resultId === ResultIdEnum.CASHOUT)
+  @IsNumber()
+  cashoutValue?: number;
 }
 
 export class DeleteMultipleBetsDto {
@@ -230,6 +238,9 @@ export class BetItem {
 
   @ApiProperty({ description: 'Lucro ou prejuízo da aposta' })
   profit: number | null;
+
+  @ApiPropertyOptional({ description: 'Valor recebido no cash-out, quando aplicável', nullable: true })
+  cashoutValue?: number | null;
 
   @ApiProperty({ description: 'Data e hora da aposta' })
   betTime: Date;

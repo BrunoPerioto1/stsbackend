@@ -4,12 +4,19 @@ export function calculateProfit(
   resultId: ResultIdEnum,
   stake: number,
   odd: number,
+  cashoutValue?: number,
 ): number {
   switch (resultId) {
     case ResultIdEnum.WON:
       return stake * (odd - 1);
     case ResultIdEnum.LOST:
       return -stake;
+    case ResultIdEnum.HALF_WON:
+      return (stake / 2) * (odd - 1);
+    case ResultIdEnum.HALF_LOST:
+      return -(stake / 2);
+    case ResultIdEnum.CASHOUT:
+      return (cashoutValue ?? 0) - stake;
     case ResultIdEnum.CANCELED:
     case ResultIdEnum.PENDING:
       return 0;
