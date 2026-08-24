@@ -12,6 +12,7 @@ import { BetId, NewBet, UpdateBet } from "../../db_types/Bet";
 import { ResultId } from "../../db_types/Results";
 import { NewBetResult } from "../../db_types/BetsResults";
 import type { Database } from "../db/database.types";
+import { endOfDay } from "../../common/utils/bet.utils";
 
 export interface FilterGetBets {
   betId?: BetId;
@@ -200,7 +201,7 @@ export class BetRepository {
       .$if(isNotEmpty(betId), (qb) => qb.where("b.id", "=", betId!))
       .$if(isNotEmpty(userId), (qb) => qb.where("b.userId", "=", userId!))
       .$if(isNotEmpty(startDate), (qb) => qb.where("b.betTime", ">=", startDate!))
-      .$if(isNotEmpty(endDate), (qb) => qb.where("b.betTime", "<=", endDate!))
+      .$if(isNotEmpty(endDate), (qb) => qb.where("b.betTime", "<=", endOfDay(endDate!)))
       .$if(isNotEmpty(resultId), (qb) => qb.where("br.resultId", "=", resultId!))
       .$if(isNotEmpty(q), (qb) =>
         qb.where((eb) =>
@@ -288,7 +289,7 @@ export class BetRepository {
       .$if(isNotEmpty(betId), (qb) => qb.where("b.id", "=", betId!))
       .$if(isNotEmpty(userId), (qb) => qb.where("b.userId", "=", userId!))
       .$if(isNotEmpty(startDate), (qb) => qb.where("b.betTime", ">=", startDate!))
-      .$if(isNotEmpty(endDate), (qb) => qb.where("b.betTime", "<=", endDate!))
+      .$if(isNotEmpty(endDate), (qb) => qb.where("b.betTime", "<=", endOfDay(endDate!)))
       .$if(isNotEmpty(resultId), (qb) => qb.where("br.resultId", "=", resultId!))
       .$if(isNotEmpty(q), (qb) =>
         qb.where((eb) =>

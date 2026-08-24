@@ -6,6 +6,7 @@ import { DATABASE_READ_CONNECTION } from '../db/db.module';
 import { BettingHouseId } from '../../db_types/BettingHouse';
 import { UserId } from '../../db_types/Users';
 import { isNotEmpty } from 'class-validator';
+import { endOfDay } from '../../common/utils/bet.utils';
 
 export interface FilterDashboard {
   startDate?: string;
@@ -39,7 +40,7 @@ async findDailySummary(filters: FilterDashboard) {
       qb.where("b.betTime", ">=", new Date(startDate!)),
     )
     .$if(isNotEmpty(endDate), (qb) =>
-      qb.where("b.betTime", "<=", new Date(endDate!)),
+      qb.where("b.betTime", "<=", endOfDay(new Date(endDate!))),
     )
     .select(({ fn, ref }) => [
       fn<Date>("date", [ref("b.betTime")]).as("date"),
@@ -65,7 +66,7 @@ async findMonthlySummary(filters: FilterDashboard) {
       qb.where("b.betTime", ">=", new Date(startDate!)),
     )
     .$if(isNotEmpty(endDate), (qb) =>
-      qb.where("b.betTime", "<=", new Date(endDate!)),
+      qb.where("b.betTime", "<=", endOfDay(new Date(endDate!))),
     )
     .select(({ fn, ref }) => [
       fn<Date>("date_trunc", ["month" as any, ref("b.betTime")]).as("month"),
@@ -103,7 +104,7 @@ async findDashboardMetrics(filters: FilterDashboard) {
       qb.where("b.betTime", ">=", new Date(startDate!)),
     )
     .$if(isNotEmpty(endDate), (qb) =>
-      qb.where("b.betTime", "<=", new Date(endDate!)),
+      qb.where("b.betTime", "<=", endOfDay(new Date(endDate!))),
     )
     .select((eb) => [
       eb.fn.count("b.id").as("totalBets"),

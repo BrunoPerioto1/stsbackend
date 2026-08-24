@@ -25,6 +25,12 @@ export function calculateProfit(
   }
 }
 
+export function endOfDay(date: Date): Date {
+  const d = new Date(date);
+  d.setUTCHours(23, 59, 59, 999);
+  return d;
+}
+
 export function formatPeriod(startDate?: string, endDate?: string): string {
   if (!startDate && !endDate) {
     return 'Todo o período';
