@@ -28,6 +28,11 @@ function extractLimitFromText(text: string): number | null {
   return Number.isFinite(val) && val > 0 ? val : null;
 }
 
+function isAvisoMessage(text: string): boolean {
+  if (!text) return false;
+  return /\b(SOBRECARGA|AVISO)\b/i.test(text);
+}
+
 function extractOddFromText(text: string): number | null {
   if (!text) return null;
   const m = text.match(/🏷\s*([\d]+(?:[.,][\d]+)?)/);
@@ -59,18 +64,25 @@ const UNLINKED_INSTRUCTIONS =
   '3️⃣ Copie o código que aparecer\n' +
   '4️⃣ Volte aqui e envie: /vincular CODIGO';
 
-function extractPercentAfterStopEmoji(text: string): number | null {
+function extractPercent(text: string): number | null {
   if (!text) return null;
 
-  const percentRegex = /🛑[^0-9]{0,15}(\d{1,3}(?:[.,]\d{1,2})?)\s*%?/i;
-  const m = text.match(percentRegex);
+  const stopEmojiRegex = /🛑[^0-9]{0,15}(\d{1,3}(?:[.,]\d{1,2})?)\s*%?/i;
+  let m = text.match(stopEmojiRegex);
+
+  if (!m) {
+    // Formato de SOBRECARGA/AVISO: sem emoji, o percentual vem sozinho
+    // numa linha própria (ex.: "0,34%").
+    const standaloneLineRegex = /(?:^|\n)[ \t]*(\d{1,3}(?:[.,]\d{1,2})?)[ \t]*%[ \t]*(?:\n|$)/;
+    m = text.match(standaloneLineRegex);
+  }
   if (!m) return null;
-  
+
   const raw = m[1];
-  const normalized = raw.includes(',') 
-    ? raw.replace(/\./g, '').replace(',', '.') 
-    : raw; 
-  
+  const normalized = raw.includes(',')
+    ? raw.replace(/\./g, '').replace(',', '.')
+    : raw;
+
   const val = Number(normalized);
   return Number.isFinite(val) && val >= 0 ? val : null;
 }
@@ -241,7 +253,8 @@ export class TelegramService implements OnModuleInit {
       if (this.tipsGroupChatId && ctx.chat.id === this.tipsGroupChatId) {
         const msg = ctx.message as any;
         const text = msg.text ?? msg.caption;
-        if (text) await this.handleTipsMessage(text, ctx.chat.id, msg.message_id);
+        const hasMedia = !!msg.photo;
+        if (text) await this.handleTipsMessage(text, ctx.chat.id, msg.message_id, hasMedia);
         return;
       }
 
@@ -434,22 +447,51 @@ export class TelegramService implements OnModuleInit {
   // Fan-out: dado o texto de uma tip postada no grupo Tips (chatId/messageId
   // dessa mensagem), extrai a %, e manda uma cópia com botão próprio de
   // Planilhar para cada usuário vinculado cujo filtro de % é satisfeito.
-  private async handleTipsMessage(text: string, chatId: number, messageId: number) {
-    const percent = extractPercentAfterStopEmoji(text);
-    if (percent === null) return;
+  // Mensagens de SOBRECARGA/AVISO passam mesmo sem % (mas sem recomendação,
+  // já que não há % pra converter pela banca do usuário). Quando há %, cada
+  // cópia leva sua própria "Recomendação de aposta" (banca do usuário × % da
+  // tip, limitada pelo 🚦/limite do texto) — por isso não dá pra usar
+  // copyMessage puro em mensagens de texto (a API só permite sobrescrever
+  // caption em mensagens de mídia).
+  private async handleTipsMessage(text: string, chatId: number, messageId: number, hasMedia: boolean) {
+    const percent = extractPercent(text);
+    const isAviso = isAvisoMessage(text);
+    if (percent === null && !isAviso) return;
 
     const users = await this.usersService.getUsersForTipsFanout();
+    const limit = extractLimitFromText(text);
 
     for (const user of users) {
-      if (user.minPercentFilter !== null && percent < Number(user.minPercentFilter)) continue;
+      if (percent !== null && user.minPercentFilter !== null && percent < Number(user.minPercentFilter)) continue;
 
       const stillMember = await this.isTipsGroupMember(user.telegramUserId as number);
       if (!stillMember) continue;
 
+      let outgoingText = text;
+      if (percent !== null) {
+        const userStake = await this.usersService.getUserStake(user.id);
+        let recommendedStake = (percent / 100) * userStake;
+        if (limit !== null) recommendedStake = Math.min(recommendedStake, limit);
+
+        const recommendationValue = recommendedStake.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+        outgoingText = `${text}\n\n🎯 Recomendação de aposta: R$ ${recommendationValue}`;
+      }
+
       try {
-        await this.bot.telegram.copyMessage(user.telegramUserId as number, chatId, messageId, {
-          reply_markup: this.tipsCopyKeyboard(),
-        });
+        if (outgoingText !== text && hasMedia) {
+          await this.bot.telegram.copyMessage(user.telegramUserId as number, chatId, messageId, {
+            caption: outgoingText,
+            reply_markup: this.tipsCopyKeyboard(),
+          });
+        } else if (outgoingText !== text) {
+          await this.bot.telegram.sendMessage(user.telegramUserId as number, outgoingText, {
+            reply_markup: this.tipsCopyKeyboard(),
+          });
+        } else {
+          await this.bot.telegram.copyMessage(user.telegramUserId as number, chatId, messageId, {
+            reply_markup: this.tipsCopyKeyboard(),
+          });
+        }
       } catch (err) {
         console.error(`⚠️ Não foi possível enviar tip para o usuário (telegramUserId=${user.telegramUserId}):`, err);
       }
@@ -482,7 +524,7 @@ export class TelegramService implements OnModuleInit {
       const market = String(jsonResult.market ?? '').trim();
       const sport = String(jsonResult.sport ?? '').trim();
 
-      const percent = extractPercentAfterStopEmoji(userMessage);
+      const percent = extractPercent(userMessage);
       const user = await this.usersService.findByTelegramUserId(ctx.from.id);
       if (!user) throw new Error('UNLINKED');
 
