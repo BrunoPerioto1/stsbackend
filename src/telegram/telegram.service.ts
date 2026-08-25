@@ -301,10 +301,14 @@ export class TelegramService implements OnModuleInit {
           await ctx.reply(`${preamble}<blockquote expandable>${escapeHtml(text)}</blockquote>`, {
             parse_mode: 'HTML',
             reply_markup: { force_reply: true },
+            link_preview_options: { is_disabled: true },
           });
         } catch (err) {
           console.error('⚠️ Falha ao mandar prompt de edição com blockquote, caindo pra texto simples:', err);
-          await ctx.reply(`${preamble}${text}`, { reply_markup: { force_reply: true } });
+          await ctx.reply(`${preamble}${text}`, {
+            reply_markup: { force_reply: true },
+            link_preview_options: { is_disabled: true },
+          });
         }
         return;
       }
