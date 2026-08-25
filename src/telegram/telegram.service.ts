@@ -28,6 +28,21 @@ function extractLimitFromText(text: string): number | null {
   return Number.isFinite(val) && val > 0 ? val : null;
 }
 
+function extractOddFromText(text: string): number | null {
+  if (!text) return null;
+  const m = text.match(/🏷\s*([\d]+(?:[.,][\d]+)?)/);
+  if (!m) return null;
+  const val = Number(m[1].replace(',', '.'));
+  return Number.isFinite(val) && val > 1 ? val : null;
+}
+
+// Cabeçalho do prompt de "Editar" — carrega o messageId + tipo (texto/mídia)
+// direto no texto da mensagem, sem precisar de estado em memória (o processo
+// roda em serverless, então nada garante que a mesma instância trate o clique
+// em Editar e a resposta com a nova odd).
+const EDIT_PROMPT_HEADER_RE = /^✏️ Editar aposta #(\d+)\|(t|p)\n/;
+const EDIT_PROMPT_DELIMITER = '———\n';
+
 const UNLINKED_INSTRUCTIONS =
   '❌ Sua conta não está vinculada.\n\n' +
   'Pra vincular:\n' +
@@ -223,34 +238,150 @@ export class TelegramService implements OnModuleInit {
       }
 
       const msg = ctx.message as any;
+
+      // Resposta a um prompt de "✏️ Editar" (força reply no Telegram)?
+      const replyToText = msg.reply_to_message?.text as string | undefined;
+      const headerMatch = replyToText?.match(EDIT_PROMPT_HEADER_RE);
+      if (headerMatch && replyToText) {
+        await this.handleEditReply(ctx, replyToText, headerMatch, msg.text ?? '');
+        return;
+      }
+
       const userMessage = msg.text ?? msg.caption;
       if (!userMessage) return;
 
       await this.processBetText(ctx, userMessage);
     });
 
-    // Clique em "📊 Planilhar" na cópia individual recebida em DM
+    // Cliques nos botões da cópia individual recebida em DM: Planilhar,
+    // Editar e Aposta Caiu — cada um age só na mensagem de quem clicou.
     this.bot.on('callback_query', async (ctx) => {
       const query = ctx.callbackQuery as any;
-      if (query.data !== 'planilhar') return;
+      const msg = query.message;
+      const text: string | undefined = msg?.text ?? msg?.caption;
+      const isMedia = !!msg?.photo;
 
-      const text = query.message?.text ?? query.message?.caption;
-      if (!text) {
-        await ctx.answerCbQuery('❌ Não consegui ler o texto da mensagem.');
+      if (query.data === 'planilhar') {
+        if (!text) {
+          await ctx.answerCbQuery('❌ Não consegui ler o texto da mensagem.');
+          return;
+        }
+        try {
+          await this.processBetText(ctx, text);
+          await ctx.editMessageReplyMarkup({
+            inline_keyboard: [[{ text: '✅ Planilhado', callback_data: 'done' }]],
+          });
+          await ctx.answerCbQuery('✅ Planilhado!');
+        } catch (err) {
+          console.error('❌ Erro ao planilhar via callback:', err);
+          await ctx.answerCbQuery('❌ Erro ao planilhar. Veja o chat para detalhes.');
+        }
         return;
       }
 
-      try {
-        await this.processBetText(ctx, text);
-        await ctx.editMessageReplyMarkup({
-          inline_keyboard: [[{ text: '✅ Planilhado', callback_data: 'done' }]],
-        });
-        await ctx.answerCbQuery('✅ Planilhado!');
-      } catch (err) {
-        console.error('❌ Erro ao planilhar via callback:', err);
-        await ctx.answerCbQuery('❌ Erro ao planilhar. Veja o chat para detalhes.');
+      if (query.data === 'editar') {
+        if (!text) {
+          await ctx.answerCbQuery('❌ Não consegui ler o texto da mensagem.');
+          return;
+        }
+        const currentOdd = extractOddFromText(text);
+        const currentLimit = extractLimitFromText(text);
+        const prompt =
+          `✏️ Editar aposta #${msg.message_id}|${isMedia ? 'p' : 't'}\n` +
+          `Odd atual: ${currentOdd ?? '?'} · Limite atual: ${currentLimit ?? '?'}\n` +
+          `Manda a nova odd e o novo limite nesse formato: 3.50 60\n` +
+          EDIT_PROMPT_DELIMITER +
+          text;
+        await ctx.answerCbQuery();
+        await ctx.reply(prompt, { reply_markup: { force_reply: true } });
+        return;
+      }
+
+      if (query.data === 'aposta_caiu') {
+        if (!text) {
+          await ctx.answerCbQuery('❌ Não consegui ler o texto da mensagem.');
+          return;
+        }
+        if (text.startsWith('❌ APOSTA CAIU')) {
+          await ctx.answerCbQuery('Já marcado.');
+          return;
+        }
+        const novoTexto = `❌ APOSTA CAIU\n\n${text}`;
+        try {
+          if (isMedia) await ctx.editMessageCaption(novoTexto, { reply_markup: { inline_keyboard: [[{ text: '↩️ Voltar', callback_data: 'voltar' }]] } });
+          else await ctx.editMessageText(novoTexto, { reply_markup: { inline_keyboard: [[{ text: '↩️ Voltar', callback_data: 'voltar' }]] } });
+          await ctx.answerCbQuery('❌ Marcado como aposta caiu!');
+        } catch (err) {
+          console.error('❌ Erro ao marcar aposta caiu:', err);
+          await ctx.answerCbQuery('❌ Erro ao marcar.');
+        }
+        return;
+      }
+
+      if (query.data === 'voltar') {
+        if (!text) {
+          await ctx.answerCbQuery();
+          return;
+        }
+        const restaurado = text.replace(/^❌ APOSTA CAIU\n\n/, '');
+        try {
+          if (isMedia) await ctx.editMessageCaption(restaurado, { reply_markup: this.tipsCopyKeyboard() });
+          else await ctx.editMessageText(restaurado, { reply_markup: this.tipsCopyKeyboard() });
+          await ctx.answerCbQuery('↩️ Voltando');
+        } catch (err) {
+          console.error('❌ Erro ao voltar:', err);
+          await ctx.answerCbQuery('❌ Erro ao voltar.');
+        }
+        return;
       }
     });
+  }
+
+  private tipsCopyKeyboard() {
+    return {
+      inline_keyboard: [
+        [{ text: '📊 Planilhar', callback_data: 'planilhar' }],
+        [{ text: '✏️ Editar', callback_data: 'editar' }, { text: '❌ Aposta Caiu', callback_data: 'aposta_caiu' }],
+      ],
+    };
+  }
+
+  // Resposta (reply) a um prompt de "✏️ Editar": extrai a odd/limite novos e
+  // o texto original (embutido no próprio prompt) e edita só essa mensagem.
+  private async handleEditReply(ctx: any, promptText: string, headerMatch: RegExpMatchArray, replyText: string) {
+    const originalMessageId = Number(headerMatch[1]);
+    const isMedia = headerMatch[2] === 'p';
+    const originalText = promptText.split(EDIT_PROMPT_DELIMITER)[1];
+    if (!originalText) {
+      await ctx.reply('❌ Não consegui recuperar o texto original. Clica em Editar de novo.');
+      return;
+    }
+
+    const parts = replyText.trim().split(/\s+/);
+    const novaOdd = parseFloat((parts[0] ?? '').replace(',', '.'));
+    const novoLimite = parts[1] ? parseFloat(parts[1].replace(',', '.')) : null;
+
+    if (!Number.isFinite(novaOdd) || novaOdd <= 1) {
+      await ctx.reply('❌ Odd inválida. Manda: ODD LIMITE (ex.: 3.50 60)');
+      return;
+    }
+
+    let novoTexto = originalText.replace(/🏷\s*([\d]+(?:[.,][\d]+)?)/, `🏷 ${novaOdd.toFixed(2)}`);
+    if (novoLimite !== null && Number.isFinite(novoLimite)) {
+      novoTexto = novoTexto.replace(/(🚦[^\n]*R\$\s*)([\d.,]+)/, `$1${novoLimite.toFixed(2)}`);
+    }
+
+    try {
+      if (isMedia) {
+        await ctx.telegram.editMessageCaption(ctx.chat.id, originalMessageId, undefined, novoTexto);
+      } else {
+        await ctx.telegram.editMessageText(ctx.chat.id, originalMessageId, undefined, novoTexto);
+      }
+      await ctx.reply('✅ Aposta atualizada!');
+    } catch (err) {
+      console.error('❌ Erro ao editar aposta individual:', err);
+      await ctx.reply('❌ Erro ao atualizar. Tenta de novo.');
+    }
   }
 
   // Fan-out: dado o texto de uma tip postada no grupo Tips (chatId/messageId
@@ -270,9 +401,7 @@ export class TelegramService implements OnModuleInit {
 
       try {
         await this.bot.telegram.copyMessage(user.telegramUserId as number, chatId, messageId, {
-          reply_markup: {
-            inline_keyboard: [[{ text: '📊 Planilhar', callback_data: 'planilhar' }]],
-          },
+          reply_markup: this.tipsCopyKeyboard(),
         });
       } catch (err) {
         console.error(`⚠️ Não foi possível enviar tip para o usuário (telegramUserId=${user.telegramUserId}):`, err);
