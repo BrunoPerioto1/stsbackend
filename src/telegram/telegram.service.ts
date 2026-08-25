@@ -209,11 +209,17 @@ export class TelegramService implements OnModuleInit {
       }
     });
 
-    // Mensagens do grupo Tips: fan-out por usuário conforme filtro de %
-    // DMs livres: processa como aposta direto (fluxo original)
+    // DMs livres: processa como aposta direto (fluxo original).
+    // Mensagens do grupo Tips NÃO chegam aqui na prática: o Telegram não
+    // entrega pro bot updates de mensagens postadas por outro bot (é o
+    // bot.js quem posta lá) — o fan-out real é acionado via HTTP, veja
+    // handleTipsMessage() e TelegramController.handleTipsFanout. Mantido
+    // como fallback inofensivo caso algum humano digite direto no grupo.
     this.bot.on('message', async (ctx) => {
       if (this.tipsGroupChatId && ctx.chat.id === this.tipsGroupChatId) {
-        await this.handleTipsGroupMessage(ctx);
+        const msg = ctx.message as any;
+        const text = msg.text ?? msg.caption;
+        if (text) await this.handleTipsMessage(text, ctx.chat.id, msg.message_id);
         return;
       }
 
@@ -248,14 +254,13 @@ export class TelegramService implements OnModuleInit {
     });
   }
 
-  // Fan-out: pega a mensagem postada no grupo Tips, extrai a %, e manda uma
-  // cópia com botão próprio de Planilhar para cada usuário vinculado cujo
-  // filtro de porcentagem mínima é satisfeito.
-  private async handleTipsGroupMessage(ctx: any) {
-    const msg = ctx.message;
-    const text = msg.text ?? msg.caption;
-    if (!text) return;
-
+  // Fan-out: dado o texto de uma tip postada no grupo Tips (chatId/messageId
+  // dessa mensagem), extrai a %, e manda uma cópia com botão próprio de
+  // Planilhar para cada usuário vinculado cujo filtro de % é satisfeito.
+  // Chamado via HTTP (TelegramController.handleTipsFanout) pelo bot.js logo
+  // após ele postar a mensagem — não pelo listener de update do Telegraf,
+  // já que o Telegram não entrega pro bot mensagens postadas por outro bot.
+  async handleTipsMessage(text: string, chatId: number, messageId: number) {
     const percent = extractPercentAfterStopEmoji(text);
     if (percent === null) return;
 
@@ -264,11 +269,11 @@ export class TelegramService implements OnModuleInit {
     for (const user of users) {
       if (user.minPercentFilter !== null && percent < Number(user.minPercentFilter)) continue;
 
-      const stillMember = await this.isTipsGroupMember(ctx, user.telegramUserId as number);
+      const stillMember = await this.isTipsGroupMember(user.telegramUserId as number);
       if (!stillMember) continue;
 
       try {
-        await ctx.telegram.copyMessage(user.telegramUserId, ctx.chat.id, msg.message_id, {
+        await this.bot.telegram.copyMessage(user.telegramUserId as number, chatId, messageId, {
           reply_markup: {
             inline_keyboard: [[{ text: '📊 Planilhar', callback_data: 'planilhar' }]],
           },
@@ -281,9 +286,10 @@ export class TelegramService implements OnModuleInit {
 
   // Só manda tip pra quem ainda está no grupo Tips — evita continuar mandando
   // DM pra quem já vinculou a conta um dia mas saiu do grupo depois.
-  private async isTipsGroupMember(ctx: any, telegramUserId: number): Promise<boolean> {
+  private async isTipsGroupMember(telegramUserId: number): Promise<boolean> {
+    if (!this.tipsGroupChatId) return true;
     try {
-      const member = await ctx.telegram.getChatMember(this.tipsGroupChatId, telegramUserId);
+      const member = await this.bot.telegram.getChatMember(this.tipsGroupChatId, telegramUserId);
       return member.status !== 'left' && member.status !== 'kicked';
     } catch (err) {
       console.error(`⚠️ Não foi possível checar membro do grupo Tips (telegramUserId=${telegramUserId}):`, err);
