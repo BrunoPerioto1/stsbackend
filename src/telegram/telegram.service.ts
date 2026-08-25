@@ -67,14 +67,15 @@ const UNLINKED_INSTRUCTIONS =
 function extractPercent(text: string): number | null {
   if (!text) return null;
 
-  const stopEmojiRegex = /🛑[^0-9]{0,15}(\d{1,3}(?:[.,]\d{1,2})?)\s*%?/i;
-  let m = text.match(stopEmojiRegex);
+  // O emoji usado antes do percentual varia por ADM/fonte (🛑, 🔴, etc.) e o
+  // formato SOBRECARGA/AVISO nem tem emoji — então não fixa em nenhum
+  // específico: aceita qualquer linha que seja só "[algo curto] número%".
+  const standaloneLineRegex = /^[^\n%\d]{0,6}(\d{1,3}(?:[.,]\d{1,2})?)[ \t]*%[ \t]*$/m;
+  let m = text.match(standaloneLineRegex);
 
   if (!m) {
-    // Formato de SOBRECARGA/AVISO: sem emoji, o percentual vem sozinho
-    // numa linha própria (ex.: "0,34%").
-    const standaloneLineRegex = /(?:^|\n)[ \t]*(\d{1,3}(?:[.,]\d{1,2})?)[ \t]*%[ \t]*(?:\n|$)/;
-    m = text.match(standaloneLineRegex);
+    // Último recurso: pega o primeiro "número%" em qualquer lugar do texto.
+    m = text.match(/(\d{1,3}(?:[.,]\d{1,2})?)\s*%/);
   }
   if (!m) return null;
 
