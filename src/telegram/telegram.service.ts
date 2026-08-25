@@ -39,9 +39,17 @@ function extractOddFromText(text: string): number | null {
 // Cabeçalho do prompt de "Editar" — carrega o messageId + tipo (texto/mídia)
 // direto no texto da mensagem, sem precisar de estado em memória (o processo
 // roda em serverless, então nada garante que a mesma instância trate o clique
-// em Editar e a resposta com a nova odd).
+// em Editar e a resposta com a nova odd). O texto original vem embutido logo
+// depois da primeira linha em branco — mandado num <blockquote expandable>
+// pra não poluir a tela, mas o conteúdo puro continua ali pra reconstruir.
 const EDIT_PROMPT_HEADER_RE = /^✏️ Editar aposta #(\d+)\|(t|p)\n/;
-const EDIT_PROMPT_DELIMITER = '———\n';
+const EDIT_PROMPT_INSTRUCTIONS =
+  'Digite a odd (se precisar mudar a odd) ou o limite (se precisar).\n' +
+  'Formato: odd 3.50  ·  limite 60  ·  ou os dois: 3.50 60';
+
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 
 const UNLINKED_INSTRUCTIONS =
   '❌ Sua conta não está vinculada.\n\n' +
@@ -286,14 +294,18 @@ export class TelegramService implements OnModuleInit {
         }
         const currentOdd = extractOddFromText(text);
         const currentLimit = extractLimitFromText(text);
-        const prompt =
-          `✏️ Editar aposta #${msg.message_id}|${isMedia ? 'p' : 't'}\n` +
-          `Odd atual: ${currentOdd ?? '?'} · Limite atual: ${currentLimit ?? '?'}\n` +
-          `Manda a nova odd e o novo limite nesse formato: 3.50 60\n` +
-          EDIT_PROMPT_DELIMITER +
-          text;
+        const header = `✏️ Editar aposta #${msg.message_id}|${isMedia ? 'p' : 't'}`;
+        const preamble = `${header}\nOdd atual: ${currentOdd ?? '?'} · Limite atual: ${currentLimit ?? '?'}\n${EDIT_PROMPT_INSTRUCTIONS}\n\n`;
         await ctx.answerCbQuery();
-        await ctx.reply(prompt, { reply_markup: { force_reply: true } });
+        try {
+          await ctx.reply(`${preamble}<blockquote expandable>${escapeHtml(text)}</blockquote>`, {
+            parse_mode: 'HTML',
+            reply_markup: { force_reply: true },
+          });
+        } catch (err) {
+          console.error('⚠️ Falha ao mandar prompt de edição com blockquote, caindo pra texto simples:', err);
+          await ctx.reply(`${preamble}${text}`, { reply_markup: { force_reply: true } });
+        }
         return;
       }
 
@@ -351,31 +363,62 @@ export class TelegramService implements OnModuleInit {
   private async handleEditReply(ctx: any, promptText: string, headerMatch: RegExpMatchArray, replyText: string) {
     const originalMessageId = Number(headerMatch[1]);
     const isMedia = headerMatch[2] === 'p';
-    const originalText = promptText.split(EDIT_PROMPT_DELIMITER)[1];
+    const sepIndex = promptText.indexOf('\n\n');
+    const originalText = sepIndex >= 0 ? promptText.slice(sepIndex + 2) : '';
     if (!originalText) {
       await ctx.reply('❌ Não consegui recuperar o texto original. Clica em Editar de novo.');
       return;
     }
 
-    const parts = replyText.trim().split(/\s+/);
-    const novaOdd = parseFloat((parts[0] ?? '').replace(',', '.'));
-    const novoLimite = parts[1] ? parseFloat(parts[1].replace(',', '.')) : null;
+    const raw = replyText.trim();
+    const lower = raw.toLowerCase();
+    let novaOdd: number | null = null;
+    let novoLimite: number | null = null;
 
-    if (!Number.isFinite(novaOdd) || novaOdd <= 1) {
-      await ctx.reply('❌ Odd inválida. Manda: ODD LIMITE (ex.: 3.50 60)');
+    if (lower.startsWith('odd')) {
+      novaOdd = parseFloat(raw.slice(3).trim().replace(',', '.'));
+    } else if (lower.startsWith('limite') || lower.startsWith('limit')) {
+      novoLimite = parseFloat(raw.replace(/^limite|^limit/i, '').trim().replace(',', '.'));
+    } else {
+      const parts = raw.split(/\s+/);
+      if (parts.length >= 2) {
+        novaOdd = parseFloat(parts[0].replace(',', '.'));
+        novoLimite = parseFloat(parts[1].replace(',', '.'));
+      } else if (parts.length === 1 && parts[0]) {
+        novaOdd = parseFloat(parts[0].replace(',', '.'));
+      }
+    }
+
+    if (novaOdd === null && novoLimite === null) {
+      await ctx.reply(`❌ Não entendi. ${EDIT_PROMPT_INSTRUCTIONS}`);
+      return;
+    }
+    if (novaOdd !== null && (!Number.isFinite(novaOdd) || novaOdd <= 1)) {
+      await ctx.reply('❌ Odd inválida.');
+      return;
+    }
+    if (novoLimite !== null && !Number.isFinite(novoLimite)) {
+      await ctx.reply('❌ Limite inválido.');
       return;
     }
 
-    let novoTexto = originalText.replace(/🏷\s*([\d]+(?:[.,][\d]+)?)/, `🏷 ${novaOdd.toFixed(2)}`);
-    if (novoLimite !== null && Number.isFinite(novoLimite)) {
+    let novoTexto = originalText;
+    if (novaOdd !== null) {
+      novoTexto = novoTexto.replace(/🏷\s*([\d]+(?:[.,][\d]+)?)/, `🏷 ${novaOdd.toFixed(2)}`);
+    }
+    if (novoLimite !== null) {
       novoTexto = novoTexto.replace(/(🚦[^\n]*R\$\s*)([\d.,]+)/, `$1${novoLimite.toFixed(2)}`);
     }
 
     try {
       if (isMedia) {
-        await ctx.telegram.editMessageCaption(ctx.chat.id, originalMessageId, undefined, novoTexto);
+        await ctx.telegram.editMessageCaption(ctx.chat.id, originalMessageId, undefined, novoTexto, {
+          reply_markup: this.tipsCopyKeyboard(),
+        });
       } else {
-        await ctx.telegram.editMessageText(ctx.chat.id, originalMessageId, undefined, novoTexto);
+        await ctx.telegram.editMessageText(ctx.chat.id, originalMessageId, undefined, novoTexto, {
+          reply_markup: this.tipsCopyKeyboard(),
+        });
       }
       await ctx.reply('✅ Aposta atualizada!');
     } catch (err) {
