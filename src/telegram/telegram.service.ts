@@ -28,6 +28,14 @@ function extractLimitFromText(text: string): number | null {
   return Number.isFinite(val) && val > 0 ? val : null;
 }
 
+const UNLINKED_INSTRUCTIONS =
+  '❌ Sua conta não está vinculada.\n\n' +
+  'Pra vincular:\n' +
+  '1️⃣ Entre em https://stsfront.vercel.app/login e faça login\n' +
+  '2️⃣ Vá em Perfil → clique em "Vincular Telegram"\n' +
+  '3️⃣ Copie o código que aparecer\n' +
+  '4️⃣ Volte aqui e envie: /vincular CODIGO';
+
 function extractPercentAfterStopEmoji(text: string): number | null {
   if (!text) return null;
 
@@ -89,7 +97,7 @@ export class TelegramService implements OnModuleInit {
     this.bot.command('start', async (ctx) => {
       await ctx.reply(
         '👋 Bem-vindo!\n\n' +
-          '1️⃣ Vincule sua conta: /vincular SEU_CODIGO (gerado no site)\n' +
+          '1️⃣ Vincule sua conta: faça login em https://stsfront.vercel.app/login → Perfil → "Vincular Telegram", copie o código e envie /vincular SEU_CODIGO\n' +
           '2️⃣ Defina sua banca: /stake VALOR\n' +
           '3️⃣ (Opcional) Defina o filtro de porcentagem mínima das tips que você quer receber: /filtro 1.5\n' +
           '   Use /filtro off para remover o filtro e receber todas as tips.\n\n' +
@@ -105,7 +113,7 @@ export class TelegramService implements OnModuleInit {
       try {
         const user = await this.usersService.findByTelegramUserId(telegramUserId);
         if (!user) {
-          await ctx.reply('❌ Usuário não vinculado. Use o comando /vincular primeiro.');
+          await ctx.reply(UNLINKED_INSTRUCTIONS);
           return;
         }
 
@@ -152,7 +160,7 @@ export class TelegramService implements OnModuleInit {
       try {
         const user = await this.usersService.findByTelegramUserId(ctx.from.id);
         if (!user) {
-          await ctx.reply('❌ Usuário não vinculado. Use o comando /vincular primeiro.');
+          await ctx.reply(UNLINKED_INSTRUCTIONS);
           return;
         }
 
@@ -283,7 +291,7 @@ export class TelegramService implements OnModuleInit {
 
       const percent = extractPercentAfterStopEmoji(userMessage);
       const user = await this.usersService.findByTelegramUserId(ctx.from.id);
-      if (!user) throw new Error('Usuário não vinculado. Use /vincular primeiro.');
+      if (!user) throw new Error('UNLINKED');
 
       const userStake = await this.usersService.getUserStake(user.id);
       let stake = percent !== null ? (percent / 100) * userStake : Number(jsonResult.stake);
@@ -330,7 +338,11 @@ export class TelegramService implements OnModuleInit {
       );
     } catch (err) {
       console.error('❌ Erro ao processar aposta:', err);
-      await ctx.reply(`❌ Erro ao processar aposta.\n${(err as Error).message}`);
+      if ((err as Error).message === 'UNLINKED') {
+        await ctx.reply(UNLINKED_INSTRUCTIONS);
+      } else {
+        await ctx.reply(`❌ Erro ao processar aposta.\n${(err as Error).message}`);
+      }
       throw err;
     }
   }
