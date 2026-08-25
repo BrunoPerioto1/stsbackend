@@ -264,6 +264,9 @@ export class TelegramService implements OnModuleInit {
     for (const user of users) {
       if (user.minPercentFilter !== null && percent < Number(user.minPercentFilter)) continue;
 
+      const stillMember = await this.isTipsGroupMember(ctx, user.telegramUserId as number);
+      if (!stillMember) continue;
+
       try {
         await ctx.telegram.copyMessage(user.telegramUserId, ctx.chat.id, msg.message_id, {
           reply_markup: {
@@ -273,6 +276,18 @@ export class TelegramService implements OnModuleInit {
       } catch (err) {
         console.error(`⚠️ Não foi possível enviar tip para o usuário (telegramUserId=${user.telegramUserId}):`, err);
       }
+    }
+  }
+
+  // Só manda tip pra quem ainda está no grupo Tips — evita continuar mandando
+  // DM pra quem já vinculou a conta um dia mas saiu do grupo depois.
+  private async isTipsGroupMember(ctx: any, telegramUserId: number): Promise<boolean> {
+    try {
+      const member = await ctx.telegram.getChatMember(this.tipsGroupChatId, telegramUserId);
+      return member.status !== 'left' && member.status !== 'kicked';
+    } catch (err) {
+      console.error(`⚠️ Não foi possível checar membro do grupo Tips (telegramUserId=${telegramUserId}):`, err);
+      return false;
     }
   }
 
