@@ -54,7 +54,7 @@ async findAllTransactions(userId: UserId, filter?: FilterGetTransactions) {
       qb.where("ht.createdAt", ">=", filter!.startDate!)
     )
     .$if(isNotEmpty(filter?.endDate), (qb) =>
-      qb.where("ht.createdAt", "<=", endOfDay(filter!.endDate!))
+      qb.where("ht.createdAt", "<", endOfDay(filter!.endDate!))
     )
     .orderBy("ht.createdAt", "desc")
     .execute();

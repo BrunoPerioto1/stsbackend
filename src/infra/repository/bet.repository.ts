@@ -201,7 +201,7 @@ export class BetRepository {
       .$if(isNotEmpty(betId), (qb) => qb.where("b.id", "=", betId!))
       .$if(isNotEmpty(userId), (qb) => qb.where("b.userId", "=", userId!))
       .$if(isNotEmpty(startDate), (qb) => qb.where("b.betTime", ">=", startDate!))
-      .$if(isNotEmpty(endDate), (qb) => qb.where("b.betTime", "<=", endOfDay(endDate!)))
+      .$if(isNotEmpty(endDate), (qb) => qb.where("b.betTime", "<", endOfDay(endDate!)))
       .$if(isNotEmpty(resultId), (qb) => qb.where("br.resultId", "=", resultId!))
       .$if(isNotEmpty(q), (qb) =>
         qb.where((eb) =>
@@ -289,7 +289,7 @@ export class BetRepository {
       .$if(isNotEmpty(betId), (qb) => qb.where("b.id", "=", betId!))
       .$if(isNotEmpty(userId), (qb) => qb.where("b.userId", "=", userId!))
       .$if(isNotEmpty(startDate), (qb) => qb.where("b.betTime", ">=", startDate!))
-      .$if(isNotEmpty(endDate), (qb) => qb.where("b.betTime", "<=", endOfDay(endDate!)))
+      .$if(isNotEmpty(endDate), (qb) => qb.where("b.betTime", "<", endOfDay(endDate!)))
       .$if(isNotEmpty(resultId), (qb) => qb.where("br.resultId", "=", resultId!))
       .$if(isNotEmpty(q), (qb) =>
         qb.where((eb) =>

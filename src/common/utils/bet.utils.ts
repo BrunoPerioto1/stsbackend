@@ -25,9 +25,19 @@ export function calculateProfit(
   }
 }
 
+const BR_UTC_OFFSET_HOURS = 3; // America/Sao_Paulo is fixed at UTC-3 (no DST since 2019)
+
+/**
+ * Given a Date representing a calendar day (as parsed from a "yyyy-MM-dd"
+ * string, i.e. UTC midnight of that day), returns the UTC instant of the
+ * start of the *next* day in America/Sao_Paulo. Use with an exclusive `<`
+ * comparison so the whole day — including bets placed late at night in
+ * Brazil time — is included in an "up to endDate" filter.
+ */
 export function endOfDay(date: Date): Date {
   const d = new Date(date);
-  d.setUTCHours(23, 59, 59, 999);
+  d.setUTCDate(d.getUTCDate() + 1);
+  d.setUTCHours(BR_UTC_OFFSET_HOURS, 0, 0, 0);
   return d;
 }
 

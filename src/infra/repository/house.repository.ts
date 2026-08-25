@@ -150,7 +150,7 @@ export class HouseRepository {
       .where('bh.isActive', '=', true)
       .where('br.resultId', 'in', [1, 2, 4, 5, 6] as any)
       .$if(!!startDate, (qb) => qb.where('b.betTime', '>=', startDate!))
-      .$if(!!endDate, (qb) => qb.where('b.betTime', '<=', endOfDay(endDate!)))
+      .$if(!!endDate, (qb) => qb.where('b.betTime', '<', endOfDay(endDate!)))
       .groupBy(['bh.id', 'bh.name'])
       .select((eb) => [
         'bh.id as houseId',
