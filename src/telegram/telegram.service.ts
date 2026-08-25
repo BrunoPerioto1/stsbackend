@@ -210,11 +210,10 @@ export class TelegramService implements OnModuleInit {
     });
 
     // DMs livres: processa como aposta direto (fluxo original).
-    // Mensagens do grupo Tips NÃO chegam aqui na prática: o Telegram não
-    // entrega pro bot updates de mensagens postadas por outro bot (é o
-    // bot.js quem posta lá) — o fan-out real é acionado via HTTP, veja
-    // handleTipsMessage() e TelegramController.handleTipsFanout. Mantido
-    // como fallback inofensivo caso algum humano digite direto no grupo.
+    // Mensagens do grupo Tips: só chegam aqui porque o betbpbot tem Bot-to-Bot
+    // Communication Mode ativado no BotFather (+ admin do grupo + Group
+    // Privacy off) — sem isso o Telegram não entrega updates de mensagens
+    // postadas por outro bot (é o bot.js quem posta lá).
     this.bot.on('message', async (ctx) => {
       if (this.tipsGroupChatId && ctx.chat.id === this.tipsGroupChatId) {
         const msg = ctx.message as any;
@@ -257,10 +256,7 @@ export class TelegramService implements OnModuleInit {
   // Fan-out: dado o texto de uma tip postada no grupo Tips (chatId/messageId
   // dessa mensagem), extrai a %, e manda uma cópia com botão próprio de
   // Planilhar para cada usuário vinculado cujo filtro de % é satisfeito.
-  // Chamado via HTTP (TelegramController.handleTipsFanout) pelo bot.js logo
-  // após ele postar a mensagem — não pelo listener de update do Telegraf,
-  // já que o Telegram não entrega pro bot mensagens postadas por outro bot.
-  async handleTipsMessage(text: string, chatId: number, messageId: number) {
+  private async handleTipsMessage(text: string, chatId: number, messageId: number) {
     const percent = extractPercentAfterStopEmoji(text);
     if (percent === null) return;
 
