@@ -87,6 +87,17 @@ export class UsersService {
         const stake = await this.usersRepository.getUserStake(userId as UserId);
         return stake ?? 2000; // Retorna 2000 como valor padrão se não encontrar
     }
+
+    async getUsersForTipsFanout() {
+        return this.usersRepository.findLinkedForTipsFanout();
+    }
+
+    async setMinPercentFilter(telegramUserId: number, value: number | null): Promise<boolean> {
+        if (value !== null && (!Number.isFinite(value) || value < 0)) {
+            throw new Error('Filtro de porcentagem inválido.');
+        }
+        return this.usersRepository.updateMinPercentFilter(telegramUserId, value);
+    }
 }
 
 

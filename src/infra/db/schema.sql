@@ -50,10 +50,14 @@ CREATE TABLE IF NOT EXISTS users (
     role_id INTEGER NOT NULL REFERENCES roles(id),
     telegram_user_id BIGINT,
     stake NUMERIC(12,2),          -- bankroll used to size Telegram-bot bets from a stated %
+    min_percent_filter NUMERIC(5,2), -- minimum tip % to forward from the Tips group; NULL = no filter
     last_login TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Idempotent for pre-existing databases created before this column was added.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS min_percent_filter NUMERIC(5,2);
 
 -- === Bookmakers =========================================================
 

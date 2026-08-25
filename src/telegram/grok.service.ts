@@ -45,10 +45,20 @@ export class GrokService {
 
   async resolveHouseId(message: string): Promise<number | null> {
     if (!message) return null;
-    const houseMatch = message.match(/🏠\s*(.+)/);
-    if (!houseMatch) return null;
 
-    const houseName = normalizeName(houseMatch[1]);
+    const houseMatch = message.match(/🏠\s*(.+)/);
+    let rawHouseName = houseMatch?.[1];
+
+    if (!rawHouseName) {
+      // Formato SOBRECARGA/AVISO: sem emoji — o nome da casa é a primeira
+      // linha não vazia logo após o cabeçalho SOBRECARGA/AVISO.
+      const lines = message.split('\n').map((l) => l.trim()).filter(Boolean);
+      const headerIndex = lines.findIndex((l) => /^(SOBRECARGA|AVISO)$/i.test(l));
+      if (headerIndex !== -1) rawHouseName = lines[headerIndex + 1];
+    }
+    if (!rawHouseName) return null;
+
+    const houseName = normalizeName(rawHouseName);
     if (!houseName) return null;
 
     const houses = await this.houseService.getAllHouses();
@@ -67,6 +77,18 @@ export class GrokService {
       return normalizedHouses[bestMatchIndex].id;
     }
 
+    // Fallback para nomes comerciais abreviados na mensagem (ex.: "SUPERBET"
+    // vs. cadastro "SUPERBET BRASIL") — o Dice coefficient despenca com a
+    // diferença de tamanho mesmo sendo claramente a mesma casa, então aceita
+    // quando um nome normalizado é prefixo do outro.
+    const prefixMatch = normalizedHouses.find(
+      (h) =>
+        h.normalized.length >= 4 &&
+        houseName.length >= 4 &&
+        (h.normalized.startsWith(houseName) || houseName.startsWith(h.normalized)),
+    );
+    if (prefixMatch) return prefixMatch.id;
+
     return null;
   }
 
@@ -75,14 +97,30 @@ export class GrokService {
 Receberá um texto e deve devolver APENAS um objeto JSON válido, sem explicações.
 NUNCA envolva o JSON em blocos de código (sem crases).
 
-Regras de parsing:
+A mensagem pode vir em um de dois formatos. Identifique qual é e extraia
+os campos de acordo.
 
-"houseId": use este valor: ${houseId ?? "null"}.
+FORMATO 1 (com emojis):
 "game": texto após 🆚.
 "sport": texto após ⚽️.
 "market": texto após 📌.
 "odd": número após 🏷.
 "free": true/false dependendo do 🆓.
+
+FORMATO 2 (alerta "SOBRECARGA" ou "AVISO", sem emojis — cada campo é uma
+linha própria, nesta ordem, começando logo após o cabeçalho SOBRECARGA/AVISO
+e a linha em branco seguinte):
+linha 1: nome da casa de apostas (ignore, o houseId já foi resolvido).
+linha 2: "game" (os times/confronto).
+linha 3: "sport" (o esporte).
+linha 4: "market" (o mercado da aposta).
+linha 5: "odd" (só o número).
+linha 6: "Limite da aposta: R$X" (ignore, calculado no servidor).
+linha 7: percentual sozinho, ex. "0,75%" (ignore, calculado no servidor).
+linha 8: valor em R$ (ignore, calculado no servidor).
+linha 9: "Sim" ou "Não" → "free": true se "Sim", false se "Não".
+
+"houseId": use este valor: ${houseId ?? "null"}.
 
 IMPORTANTE SOBRE STAKE:
 
@@ -90,8 +128,8 @@ NÃO calcule a stake.
 
 Extraia apenas:
 
-"percent": o número (%) após 🛑 (ex.: 5 para 5%).
-"limit": o valor numérico após 🚦, se existir (ex.: 20).
+"percent": o número (%) indicado na mensagem (ex.: 5 para 5%, tanto após 🛑 quanto numa linha sozinha tipo "0,75%").
+"limit": o valor numérico do limite da aposta, se existir (ex.: após 🚦 ou em "Limite da aposta: R$20").
 O cálculo da stake será feito no servidor.
 
 Mensagem:
