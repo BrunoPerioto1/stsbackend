@@ -114,4 +114,23 @@ async getUserStake(userId: UserId) {
 
   return result?.stake ?? null;
 }
+
+async findLinkedForTipsFanout() {
+  return this.dbRead
+    .selectFrom("users")
+    .select(["id", "telegramUserId", "minPercentFilter"])
+    .where("telegramUserId", "is not", null)
+    .execute();
+}
+
+async updateMinPercentFilter(telegramUserId: number, value: number | null) {
+  const updated = await this.dbWrite
+    .updateTable("users")
+    .set({ minPercentFilter: value, updatedAt: new Date() })
+    .where("telegramUserId", "=", telegramUserId)
+    .returning("id")
+    .executeTakeFirst();
+
+  return !!updated;
+}
 }
