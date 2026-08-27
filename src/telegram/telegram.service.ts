@@ -9,12 +9,14 @@ import { HouseService } from '../house/house.service';
 import {
   EDIT_PROMPT_HEADER_RE,
   EDIT_PROMPT_INSTRUCTIONS,
+  TIP_BOILERPLATE_PATTERNS,
   UNLINKED_INSTRUCTIONS,
   escapeHtml,
   extractLimitFromText,
   extractOddFromText,
   extractPercent,
   isAvisoMessage,
+  stripBoilerplateParagraphs,
 } from './tip-parsing.util';
 
 dotenv.config();
@@ -184,7 +186,8 @@ export class TelegramService implements OnModuleInit {
         const msg = ctx.message as any;
         const text = msg.text ?? msg.caption;
         const hasMedia = !!msg.photo;
-        if (text) await this.handleTipsMessage(text, ctx.chat.id, msg.message_id, hasMedia);
+        const entities = msg.entities ?? msg.caption_entities;
+        if (text) await this.handleTipsMessage(text, ctx.chat.id, msg.message_id, hasMedia, entities);
         return;
       }
 
@@ -382,10 +385,12 @@ export class TelegramService implements OnModuleInit {
   // Mensagens de SOBRECARGA/AVISO passam mesmo sem % (mas sem recomendação,
   // já que não há % pra converter pela banca do usuário). Quando há %, cada
   // cópia leva sua própria "Recomendação de aposta" (banca do usuário × % da
-  // tip, limitada pelo 🚦/limite do texto) — por isso não dá pra usar
-  // copyMessage puro em mensagens de texto (a API só permite sobrescrever
-  // caption em mensagens de mídia).
-  private async handleTipsMessage(text: string, chatId: number, messageId: number, hasMedia: boolean) {
+  // tip, limitada pelo 🚦/limite do texto), em negrito. `entities` são os
+  // links/formatação da mensagem original (ex.: "Clique AQUI" → text_link) —
+  // sempre reconstruímos o texto (tira boilerplate, acrescenta recomendação),
+  // então as entidades precisam ser realinhadas junto — senão a cópia perde
+  // todo link/formatação.
+  private async handleTipsMessage(text: string, chatId: number, messageId: number, hasMedia: boolean, entities?: any[]) {
     const percent = extractPercent(text);
     const isAviso = isAvisoMessage(text);
     console.log(`📨 handleTipsMessage: percent=${percent} isAviso=${isAviso} hasMedia=${hasMedia}`);
@@ -393,6 +398,7 @@ export class TelegramService implements OnModuleInit {
 
     const users = await this.usersService.getUsersForTipsFanout();
     const limit = extractLimitFromText(text);
+    const { text: baseText, entities: baseEntities } = stripBoilerplateParagraphs(text, entities, TIP_BOILERPLATE_PATTERNS);
 
     for (const user of users) {
       if (percent !== null && user.minPercentFilter !== null && percent < Number(user.minPercentFilter)) continue;
@@ -400,7 +406,8 @@ export class TelegramService implements OnModuleInit {
       const stillMember = await this.isTipsGroupMember(user.telegramUserId as number);
       if (!stillMember) continue;
 
-      let outgoingText = text;
+      let outgoingText = baseText;
+      let outgoingEntities: any = baseEntities;
       try {
         if (percent !== null) {
           const userStake = await this.usersService.getUserStake(user.id);
@@ -408,23 +415,26 @@ export class TelegramService implements OnModuleInit {
           if (limit !== null) recommendedStake = Math.min(recommendedStake, limit);
 
           const recommendationValue = recommendedStake.toFixed(2).replace('.', ',');
-          outgoingText = `${text}\n\n🎯 Recomendação de aposta: R$ ${recommendationValue}`;
+          const recommendationLine = `🎯 Recomendação de aposta: R$ ${recommendationValue}`;
+          outgoingText = `${baseText}\n\n${recommendationLine}`;
+          outgoingEntities = [
+            ...(baseEntities ?? []),
+            { type: 'bold', offset: baseText.length + 2, length: recommendationLine.length },
+          ];
           console.log(
             `🎯 Recomendação calculada (userId=${user.id}, telegramUserId=${user.telegramUserId}): banca=${userStake} percent=${percent} limit=${limit} -> R$${recommendationValue}`,
           );
         }
 
-        if (outgoingText !== text && hasMedia) {
+        if (hasMedia) {
           await this.bot.telegram.copyMessage(user.telegramUserId as number, chatId, messageId, {
             caption: outgoingText,
-            reply_markup: this.tipsCopyKeyboard(),
-          });
-        } else if (outgoingText !== text) {
-          await this.bot.telegram.sendMessage(user.telegramUserId as number, outgoingText, {
+            caption_entities: outgoingEntities,
             reply_markup: this.tipsCopyKeyboard(),
           });
         } else {
-          await this.bot.telegram.copyMessage(user.telegramUserId as number, chatId, messageId, {
+          await this.bot.telegram.sendMessage(user.telegramUserId as number, outgoingText, {
+            entities: outgoingEntities,
             reply_markup: this.tipsCopyKeyboard(),
           });
         }
