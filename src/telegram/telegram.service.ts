@@ -532,8 +532,10 @@ export class TelegramService implements OnModuleInit {
         timeZone: 'America/Sao_Paulo',
       });
 
+      const lucro = aposta.stake * aposta.odd - aposta.stake;
+
       await ctx.reply(
-        `✅ Aposta salva!\n\n🎮 Jogo: ${aposta.game}\n🕐 Horário: ${horario}\n💰 Stake: R$ ${aposta.stake}\n📈 Odd: ${aposta.odd}\n🏆 Mercado: ${aposta.market}\n⚽ Esporte: ${aposta.sport}\n🏢 Casa: ${houseName}\n👤 Usuário: ${user.username}`,
+        `✅ Aposta salva!\n\n🎮 Jogo: ${aposta.game}\n🕐 Horário: ${horario}\n💰 Stake: R$ ${aposta.stake}\n📈 Odd: ${aposta.odd}\n🏆 Mercado: ${aposta.market}\n⚽ Esporte: ${aposta.sport}\n🏢 Casa: ${houseName}\n📊 Lucro potencial: R$ ${lucro.toFixed(2)}`,
         replyToMessageId ? { reply_parameters: { message_id: replyToMessageId } } : undefined,
       );
     } catch (err) {
