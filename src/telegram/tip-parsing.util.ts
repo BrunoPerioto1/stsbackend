@@ -29,6 +29,12 @@ export function extractOddFromText(text: string): number | null {
   return Number.isFinite(val) && val > 1 ? val : null;
 }
 
+export function extractHouseFromText(text: string): string | null {
+  if (!text) return null;
+  const m = text.match(/^🏠\s*(.+)$/m);
+  return m ? m[1].trim() : null;
+}
+
 export function extractPercent(text: string): number | null {
   if (!text) return null;
 
@@ -65,8 +71,8 @@ export function escapeHtml(text: string): string {
 // pra não poluir a tela, mas o conteúdo puro continua ali pra reconstruir.
 export const EDIT_PROMPT_HEADER_RE = /^✏️ Editar aposta #(\d+)\|(t|p)\n/;
 export const EDIT_PROMPT_INSTRUCTIONS =
-  'Digite a odd (se precisar mudar a odd) ou o limite (se precisar).\n' +
-  'Formato: odd 3.50  ·  limite 60  ·  ou os dois: 3.50 60';
+  'Digite a odd, o limite ou a casa (um de cada vez).\n' +
+  'Formato: odd 3.50  ·  limite 60  ·  casa Superbet Brasil  ·  ou odd + limite juntos: 3.50 60';
 
 export const UNLINKED_INSTRUCTIONS =
   '❌ Sua conta não está vinculada.\n\n' +

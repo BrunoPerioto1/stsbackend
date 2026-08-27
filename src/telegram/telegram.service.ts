@@ -12,6 +12,7 @@ import {
   TIP_BOILERPLATE_PATTERNS,
   UNLINKED_INSTRUCTIONS,
   escapeHtml,
+  extractHouseFromText,
   extractLimitFromText,
   extractOddFromText,
   extractPercent,
@@ -242,8 +243,9 @@ export class TelegramService implements OnModuleInit {
         }
         const currentOdd = extractOddFromText(text);
         const currentLimit = extractLimitFromText(text);
+        const currentHouse = extractHouseFromText(text);
         const header = `✏️ Editar aposta #${msg.message_id}|${isMedia ? 'p' : 't'}`;
-        const preamble = `${header}\nOdd atual: ${currentOdd ?? '?'} · Limite atual: ${currentLimit ?? '?'}\n${EDIT_PROMPT_INSTRUCTIONS}\n\n`;
+        const preamble = `${header}\nOdd atual: ${currentOdd ?? '?'} · Limite atual: ${currentLimit ?? '?'} · Casa atual: ${currentHouse ?? '?'}\n${EDIT_PROMPT_INSTRUCTIONS}\n\n`;
         await ctx.answerCbQuery();
         try {
           await ctx.reply(`${preamble}<blockquote expandable>${escapeHtml(text)}</blockquote>`, {
@@ -326,8 +328,11 @@ export class TelegramService implements OnModuleInit {
     const lower = raw.toLowerCase();
     let novaOdd: number | null = null;
     let novoLimite: number | null = null;
+    let novaCasa: string | null = null;
 
-    if (lower.startsWith('odd')) {
+    if (lower.startsWith('casa')) {
+      novaCasa = raw.slice(4).trim();
+    } else if (lower.startsWith('odd')) {
       novaOdd = parseFloat(raw.slice(3).trim().replace(',', '.'));
     } else if (lower.startsWith('limite') || lower.startsWith('limit')) {
       novoLimite = parseFloat(raw.replace(/^limite|^limit/i, '').trim().replace(',', '.'));
@@ -341,7 +346,7 @@ export class TelegramService implements OnModuleInit {
       }
     }
 
-    if (novaOdd === null && novoLimite === null) {
+    if (novaOdd === null && novoLimite === null && !novaCasa) {
       await ctx.reply(`❌ Não entendi. ${EDIT_PROMPT_INSTRUCTIONS}`);
       return;
     }
@@ -353,6 +358,10 @@ export class TelegramService implements OnModuleInit {
       await ctx.reply('❌ Limite inválido.');
       return;
     }
+    if (novaCasa !== null && !novaCasa) {
+      await ctx.reply('❌ Nome da casa inválido.');
+      return;
+    }
 
     let novoTexto = originalText;
     if (novaOdd !== null) {
@@ -360,6 +369,9 @@ export class TelegramService implements OnModuleInit {
     }
     if (novoLimite !== null) {
       novoTexto = novoTexto.replace(/(🚦[^\n]*R\$\s*)([\d.,]+)/, `$1${novoLimite.toFixed(2)}`);
+    }
+    if (novaCasa) {
+      novoTexto = novoTexto.replace(/^🏠\s*.*$/m, `🏠 ${novaCasa}`);
     }
 
     try {
