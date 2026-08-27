@@ -181,9 +181,13 @@ export class TelegramService implements OnModuleInit {
     // Mensagens do grupo Tips: só chegam aqui porque o betbpbot (repasse) tem
     // Bot-to-Bot Communication Mode ativado no BotFather (+ admin do grupo +
     // Group Privacy off) — sem isso o Telegram não entrega updates de
-    // mensagens postadas por outro bot.
+    // mensagens postadas por outro bot. Privacy off também significa que o
+    // bot vê mensagens de humanos no grupo — por isso só processa como tip
+    // se quem mandou for um bot (evita alguém digitando "%5" ser confundido
+    // com uma tip de verdade).
     this.bot.on('message', async (ctx) => {
       if (this.tipsGroupChatId && ctx.chat.id === this.tipsGroupChatId) {
+        if (!ctx.from?.is_bot) return;
         const msg = ctx.message as any;
         const text = msg.text ?? msg.caption;
         const hasMedia = !!msg.photo;
