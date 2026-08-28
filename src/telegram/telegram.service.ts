@@ -441,7 +441,7 @@ export class TelegramService implements OnModuleInit {
     };
   }
 
-  private static readonly PENDENTES_PAGE_SIZE = 3;
+  private static readonly PENDENTES_PAGE_SIZE = 2;
 
   // Resumo pro /pendentes: total de tips relevantes pro filtro do usuário,
   // quantas já viraram aposta, quantas foram marcadas como caiu, e a lista
