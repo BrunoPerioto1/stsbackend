@@ -16,6 +16,8 @@ import {
   extractGameFromText,
   extractHouseFromText,
   extractLimitFromText,
+  extractLinkFromText,
+  extractMarketFromText,
   extractOddFromText,
   extractPercent,
   isAvisoMessage,
@@ -90,7 +92,11 @@ export class TelegramService implements OnModuleInit {
           return;
         }
         const { text, keyboard } = await this.buildPendentesMessage(user);
-        await ctx.reply(text, keyboard ? { reply_markup: keyboard } : undefined);
+        await ctx.reply(text, {
+          parse_mode: 'HTML',
+          link_preview_options: { is_disabled: true },
+          reply_markup: keyboard,
+        });
       } catch (err) {
         console.error('❌ Erro ao buscar pendentes:', err);
         await ctx.reply('❌ Erro ao buscar tips pendentes. Tente novamente.');
@@ -244,7 +250,13 @@ export class TelegramService implements OnModuleInit {
       const msg = query.message;
       const text: string | undefined = msg?.text ?? msg?.caption;
       const isMedia = !!msg?.photo;
-      const { action, tipId } = parseCallbackAction(query.data as string);
+      const { action, args } = parseCallbackAction(query.data as string);
+      const tipId = args[0] ?? null;
+
+      if (action === 'noop') {
+        await ctx.answerCbQuery();
+        return;
+      }
 
       if (action === 'planilhar') {
         if (!text) {
@@ -339,15 +351,41 @@ export class TelegramService implements OnModuleInit {
         return;
       }
 
+      // Paginação da lista do /pendentes: só troca de página, sem mexer em
+      // nenhuma tip.
+      if (action === 'lista_pagina') {
+        const page = args[0] ?? 0;
+        const user = await this.usersService.findByTelegramUserId(ctx.from.id);
+        if (!user) {
+          await ctx.answerCbQuery('❌ Conta não vinculada.');
+          return;
+        }
+        try {
+          const { text: summaryText, keyboard } = await this.buildPendentesMessage(user, page);
+          await ctx.editMessageText(summaryText, {
+            parse_mode: 'HTML',
+            link_preview_options: { is_disabled: true },
+            reply_markup: keyboard,
+          });
+          await ctx.answerCbQuery();
+        } catch (err) {
+          console.error('❌ Erro ao trocar página de pendentes:', err);
+          await ctx.answerCbQuery('❌ Erro ao trocar página.');
+        }
+        return;
+      }
+
       // Botões da lista compacta do /pendentes — cada linha da lista tem seu
-      // próprio Planilhar/Caiu/Editar, e resolver um item atualiza a própria
-      // mensagem-lista em vez de gerar mensagem nova (é isso que evita
-      // poluir o chat de novo).
+      // próprio Planilhar/Caiu/Editar (com a página atual embutida em
+      // args[1], pra continuar na mesma página depois de resolver um item),
+      // e resolver um item atualiza a própria mensagem-lista em vez de gerar
+      // mensagem nova (é isso que evita poluir o chat de novo).
       if (action === 'lista_planilhar' || action === 'lista_caiu' || action === 'lista_editar') {
         if (tipId === null) {
           await ctx.answerCbQuery('❌ Referência inválida.');
           return;
         }
+        const page = args[1] ?? 0;
         const user = await this.usersService.findByTelegramUserId(ctx.from.id);
         if (!user) {
           await ctx.answerCbQuery('❌ Conta não vinculada.');
@@ -379,8 +417,12 @@ export class TelegramService implements OnModuleInit {
         }
 
         try {
-          const { text: summaryText, keyboard } = await this.buildPendentesMessage(user);
-          await ctx.editMessageText(summaryText, { reply_markup: keyboard });
+          const { text: summaryText, keyboard } = await this.buildPendentesMessage(user, page);
+          await ctx.editMessageText(summaryText, {
+            parse_mode: 'HTML',
+            link_preview_options: { is_disabled: true },
+            reply_markup: keyboard,
+          });
         } catch (err) {
           console.error('❌ Erro ao atualizar lista de pendentes:', err);
         }
@@ -399,10 +441,14 @@ export class TelegramService implements OnModuleInit {
     };
   }
 
+  private static readonly PENDENTES_PAGE_SIZE = 5;
+
   // Resumo pro /pendentes: total de tips relevantes pro filtro do usuário,
   // quantas já viraram aposta, quantas foram marcadas como caiu, e a lista
-  // (agrupada por dia) das que ainda não têm nenhuma das duas coisas.
-  private async buildPendentesMessage(user: { id: number; minPercentFilter?: number | null }) {
+  // (agrupada por dia, paginada) das que ainda não têm nenhuma das duas
+  // coisas — sem paginação isso vira uma parede de botões quando acumula
+  // muita pendente.
+  private async buildPendentesMessage(user: { id: number; minPercentFilter?: number | null }, page = 0) {
     const minPercentFilter = user.minPercentFilter != null ? Number(user.minPercentFilter) : null;
     const rows = await this.tipsService.getSummaryForUser(user.id, minPercentFilter);
     const planilhadas = rows.filter((r) => r.betId != null).length;
@@ -415,30 +461,55 @@ export class TelegramService implements OnModuleInit {
       return { text: `${header}\n\n🎉 Nada pendente!`, keyboard: undefined as any };
     }
 
+    const pageSize = TelegramService.PENDENTES_PAGE_SIZE;
+    const totalPages = Math.ceil(pendentes.length / pageSize);
+    const currentPage = Math.min(Math.max(page, 0), totalPages - 1);
+    const pageItems = pendentes.slice(currentPage * pageSize, currentPage * pageSize + pageSize);
+
     let listText = '';
     const keyboardRows: any[] = [];
     let lastDateLabel = '';
-    let counter = 0;
-    for (const tip of pendentes) {
+    for (const [i, tip] of pageItems.entries()) {
       const dateLabel = new Date(tip.createdAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
       if (dateLabel !== lastDateLabel) {
-        listText += `\n${dateLabel}:\n`;
+        listText += `\n<b>${dateLabel}</b>\n`;
         lastDateLabel = dateLabel;
       }
-      counter++;
+      const counter = currentPage * pageSize + i + 1;
       const time = new Date(tip.createdAt).toLocaleTimeString('pt-BR', {
         hour: '2-digit',
         minute: '2-digit',
         timeZone: 'America/Sao_Paulo',
       });
-      const house = extractHouseFromText(tip.text) ?? '?';
-      const game = extractGameFromText(tip.text) ?? '?';
+      const house = escapeHtml(extractHouseFromText(tip.text) ?? '?');
+      const game = escapeHtml(extractGameFromText(tip.text) ?? '?');
+      const market = extractMarketFromText(tip.text);
+      const odd = extractOddFromText(tip.text);
+      const link = extractLinkFromText(tip.text);
       const percentLabel = tip.percent !== null ? ` · ${Number(tip.percent).toFixed(2).replace('.', ',')}%` : '';
-      listText += `${counter}. ${time} · ${house} · ${game}${percentLabel}\n`;
+      const oddLabel = odd !== null ? ` · 🏷 ${odd.toFixed(2)}` : '';
+      listText += `${counter}. ${time} · ${house} · ${game}${oddLabel}${percentLabel}\n`;
+      if (market) listText += `   📌 ${escapeHtml(market)}\n`;
+      // Link como texto curto clicável (não a URL crua) — evita poluir a
+      // linha, e o link_preview_options: is_disabled no envio corta o card
+      // de prévia gigante que o Telegram gera pra URL solta no texto.
+      if (link) listText += `   🔗 <a href="${escapeHtml(link)}">Ver aposta</a>\n`;
       keyboardRows.push([
-        { text: '✅ Planilhar', callback_data: `lista_planilhar:${tip.id}` },
-        { text: '❌ Caiu', callback_data: `lista_caiu:${tip.id}` },
-        { text: '✏️ Editar', callback_data: `lista_editar:${tip.id}` },
+        { text: '✅ Planilhar', callback_data: `lista_planilhar:${tip.id}:${currentPage}` },
+        { text: '❌ Caiu', callback_data: `lista_caiu:${tip.id}:${currentPage}` },
+        { text: '✏️ Editar', callback_data: `lista_editar:${tip.id}:${currentPage}` },
+      ]);
+    }
+
+    if (totalPages > 1) {
+      keyboardRows.push([
+        currentPage > 0
+          ? { text: '◀️ Anterior', callback_data: `lista_pagina:${currentPage - 1}` }
+          : { text: ' ', callback_data: 'noop' },
+        { text: `${currentPage + 1}/${totalPages}`, callback_data: 'noop' },
+        currentPage < totalPages - 1
+          ? { text: 'Próxima ▶️', callback_data: `lista_pagina:${currentPage + 1}` }
+          : { text: ' ', callback_data: 'noop' },
       ]);
     }
 

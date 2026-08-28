@@ -41,13 +41,27 @@ export function extractGameFromText(text: string): string | null {
   return m ? m[1].trim() : null;
 }
 
-// Ação + id da tip a partir do callback_data de um botão (ex.: "planilhar:42"
-// -> { action: "planilhar", tipId: 42 }). Sem ":" (mensagens antigas, de
-// antes da tip ganhar id) cai em tipId null — o handler decide o que fazer.
-export function parseCallbackAction(data: string): { action: string; tipId: number | null } {
-  const [action, idRaw] = data.split(':');
-  const parsed = idRaw !== undefined ? Number(idRaw) : NaN;
-  return { action, tipId: Number.isFinite(parsed) ? parsed : null };
+export function extractMarketFromText(text: string): string | null {
+  if (!text) return null;
+  const m = text.match(/^📌\s*(.+)$/m);
+  return m ? m[1].trim() : null;
+}
+
+export function extractLinkFromText(text: string): string | null {
+  if (!text) return null;
+  const m = text.match(/https?:\/\/\S+/);
+  return m ? m[0] : null;
+}
+
+// Ação + args numéricos a partir do callback_data de um botão (ex.:
+// "lista_planilhar:42:1" -> { action: "lista_planilhar", args: [42, 1] }).
+// Cada handler sabe o que esperar em cada posição (tipId, página, etc.) —
+// callback_data sem ":" (mensagens antigas, de antes da tip ganhar id) cai
+// em args: [], então args[0] vira undefined e o handler trata como ausente.
+export function parseCallbackAction(data: string): { action: string; args: number[] } {
+  const [action, ...rest] = data.split(':');
+  const args = rest.map((p) => Number(p)).filter((n) => Number.isFinite(n));
+  return { action, args };
 }
 
 export function extractPercent(text: string): number | null {
