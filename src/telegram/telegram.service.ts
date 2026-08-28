@@ -388,7 +388,7 @@ export class TelegramService implements OnModuleInit {
           reply_markup: this.tipsCopyKeyboard(),
         });
       }
-      await ctx.reply('✅ Aposta atualizada!');
+      await ctx.reply('✅ Aposta atualizada!', { reply_parameters: { message_id: originalMessageId } });
     } catch (err) {
       console.error('❌ Erro ao editar aposta individual:', err);
       await ctx.reply('❌ Erro ao atualizar. Tenta de novo.');
@@ -432,11 +432,24 @@ export class TelegramService implements OnModuleInit {
 
           const recommendationValue = recommendedStake.toFixed(2).replace('.', ',');
           const recommendationLine = `🎯 Recomendação de aposta: R$ ${recommendationValue}`;
-          outgoingText = `${baseText}\n\n${recommendationLine}`;
           outgoingEntities = [
             ...(baseEntities ?? []),
             { type: 'bold', offset: baseText.length + 2, length: recommendationLine.length },
           ];
+
+          const odd = extractOddFromText(text);
+          if (odd !== null) {
+            const lucroValue = (recommendedStake * odd - recommendedStake).toFixed(2).replace('.', ',');
+            const lucroLine = `💰 Lucro potencial: R$ ${lucroValue}`;
+            outgoingText = `${baseText}\n\n${recommendationLine}\n${lucroLine}`;
+            outgoingEntities.push({
+              type: 'bold',
+              offset: baseText.length + 2 + recommendationLine.length + 1,
+              length: lucroLine.length,
+            });
+          } else {
+            outgoingText = `${baseText}\n\n${recommendationLine}`;
+          }
           console.log(
             `🎯 Recomendação calculada (userId=${user.id}, telegramUserId=${user.telegramUserId}): banca=${userStake} percent=${percent} limit=${limit} -> R$${recommendationValue}`,
           );
@@ -532,10 +545,8 @@ export class TelegramService implements OnModuleInit {
         timeZone: 'America/Sao_Paulo',
       });
 
-      const lucro = aposta.stake * aposta.odd - aposta.stake;
-
       await ctx.reply(
-        `✅ Aposta salva!\n\n🎮 Jogo: ${aposta.game}\n🕐 Horário: ${horario}\n💰 Stake: R$ ${aposta.stake}\n📈 Odd: ${aposta.odd}\n🏆 Mercado: ${aposta.market}\n⚽ Esporte: ${aposta.sport}\n🏢 Casa: ${houseName}\n📊 Lucro potencial: R$ ${lucro.toFixed(2)}`,
+        `✅ Aposta salva!\n\n🎮 Jogo: ${aposta.game}\n🕐 Horário: ${horario}\n💰 Stake: R$ ${aposta.stake}\n📈 Odd: ${aposta.odd}\n🏆 Mercado: ${aposta.market}\n⚽ Esporte: ${aposta.sport}\n🏢 Casa: ${houseName}`,
         replyToMessageId ? { reply_parameters: { message_id: replyToMessageId } } : undefined,
       );
     } catch (err) {
