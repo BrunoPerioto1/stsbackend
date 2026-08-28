@@ -17,13 +17,17 @@ import type { BetId, NewBet, UpdateBet } from '../db_types/Bet';
 import type { BettingHouseId } from '../db_types/BettingHouse';
 import type { UserId } from '../db_types/Users';
 import type { ResultId } from '../db_types/Results';
+import type { TipId } from '../db_types/Tips';
 
 @Injectable()
 export class ApostaService {
   constructor(private readonly betRepository: BetRepository) {}
 
 
-  async createBet(betData: CreateBetDto) {
+  // tipId é opcional e não faz parte do CreateBetDto público da API HTTP —
+  // só o TelegramService passa isso, pra ligar a aposta à tip do grupo que
+  // deu origem a ela (usado pelo /pendentes pra saber o que já foi tratado).
+  async createBet(betData: CreateBetDto, tipId?: number) {
     const newBet: NewBet = {
       game: betData.game,
       stake: betData.stake,
@@ -35,6 +39,7 @@ export class ApostaService {
         betData.houseId != null
           ? (betData.houseId as BettingHouseId)
           : null,
+      tipId: tipId != null ? (tipId as TipId) : null,
       betTime: betData.betTime ? new Date(betData.betTime) : undefined,
     };
 

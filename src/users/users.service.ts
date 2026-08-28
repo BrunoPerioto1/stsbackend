@@ -71,7 +71,13 @@ export class UsersService {
         await this.usersRepository.updateUser(userId as UserId, { telegramUserId: null });
     }
 
-    async findByTelegramUserId(telegramUserId: number): Promise<UserDto | null> {
+    // Tipo de retorno estendido com telegramUserId/minPercentFilter — a linha
+    // de base do UserDto (usado como resposta pública em /users/me) não
+    // declara esses campos, mas quem chama esse método específico (telegram
+    // service) precisa deles pra montar o fan-out de tips.
+    async findByTelegramUserId(
+        telegramUserId: number,
+    ): Promise<(UserDto & { telegramUserId: number | null; minPercentFilter: number | null }) | null> {
         const user = await this.usersRepository.findByTelegramUserId(telegramUserId);
         return user ?? null;
     }

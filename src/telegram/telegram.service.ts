@@ -6,17 +6,20 @@ import { ApostaService } from '../bet/bet.service';
 import { CreateBetDto } from '../bet/dto/bet.dto';
 import { UsersService } from '../users/users.service';
 import { HouseService } from '../house/house.service';
+import { TipsService } from '../tips/tips.service';
 import {
   EDIT_PROMPT_HEADER_RE,
   EDIT_PROMPT_INSTRUCTIONS,
   TIP_BOILERPLATE_PATTERNS,
   UNLINKED_INSTRUCTIONS,
   escapeHtml,
+  extractGameFromText,
   extractHouseFromText,
   extractLimitFromText,
   extractOddFromText,
   extractPercent,
   isAvisoMessage,
+  parseCallbackAction,
   stripBoilerplateParagraphs,
 } from './tip-parsing.util';
 
@@ -32,6 +35,7 @@ export class TelegramService implements OnModuleInit {
     private readonly apostaService: ApostaService,
     private readonly usersService: UsersService,
     private readonly houseService: HouseService,
+    private readonly tipsService: TipsService,
   ) {
     const token = process.env.TELEGRAM_BOT_TOKEN;
     if (!token) throw new Error('❌ TELEGRAM_BOT_TOKEN não definido no .env');
@@ -69,8 +73,28 @@ export class TelegramService implements OnModuleInit {
           '2️⃣ Defina sua banca: /stake VALOR\n' +
           '3️⃣ (Opcional) Defina o filtro de porcentagem mínima das tips que você quer receber: /filtro 1.5\n' +
           '   Use /filtro off para remover o filtro e receber todas as tips.\n\n' +
-          'Depois disso, as apostas do grupo Tips que baterem seu filtro chegam aqui, com um botão para planilhar.',
+          'Depois disso, as apostas do grupo Tips que baterem seu filtro chegam aqui, com um botão para planilhar.\n\n' +
+          '📋 Use /pendentes a qualquer momento pra ver quais tips ainda faltam planilhar.',
       );
+    });
+
+    // Comando /pendentes: resumo do que ainda falta planilhar (ou marcar
+    // como aposta caiu), sem limite de data — uma tip só sai da lista quando
+    // você resolve ela, senão ficaria perdida pra sempre se passasse batido
+    // no dia em que chegou.
+    this.bot.command('pendentes', async (ctx) => {
+      try {
+        const user = await this.usersService.findByTelegramUserId(ctx.from.id);
+        if (!user) {
+          await ctx.reply(UNLINKED_INSTRUCTIONS);
+          return;
+        }
+        const { text, keyboard } = await this.buildPendentesMessage(user);
+        await ctx.reply(text, keyboard ? { reply_markup: keyboard } : undefined);
+      } catch (err) {
+        console.error('❌ Erro ao buscar pendentes:', err);
+        await ctx.reply('❌ Erro ao buscar tips pendentes. Tente novamente.');
+      }
     });
 
     // Comando /filtro
@@ -220,14 +244,15 @@ export class TelegramService implements OnModuleInit {
       const msg = query.message;
       const text: string | undefined = msg?.text ?? msg?.caption;
       const isMedia = !!msg?.photo;
+      const { action, tipId } = parseCallbackAction(query.data as string);
 
-      if (query.data === 'planilhar') {
+      if (action === 'planilhar') {
         if (!text) {
           await ctx.answerCbQuery('❌ Não consegui ler o texto da mensagem.');
           return;
         }
         try {
-          await this.processBetText(ctx, text, msg.message_id);
+          await this.processBetText(ctx, text, msg.message_id, tipId ?? undefined);
           const novoTexto = `✅ PLANILHADO\n\n${text}`;
           const doneKeyboard = { inline_keyboard: [[{ text: '✅ Planilhado', callback_data: 'done' }]] };
           if (isMedia) await ctx.editMessageCaption(novoTexto, { reply_markup: doneKeyboard });
@@ -240,7 +265,7 @@ export class TelegramService implements OnModuleInit {
         return;
       }
 
-      if (query.data === 'editar') {
+      if (action === 'editar') {
         if (!text) {
           await ctx.answerCbQuery('❌ Não consegui ler o texto da mensagem.');
           return;
@@ -248,8 +273,8 @@ export class TelegramService implements OnModuleInit {
         const currentOdd = extractOddFromText(text);
         const currentLimit = extractLimitFromText(text);
         const currentHouse = extractHouseFromText(text);
-        const header = `✏️ Editar aposta #${msg.message_id}|${isMedia ? 'p' : 't'}`;
-        const preamble = `${header}\nOdd atual: ${currentOdd ?? '?'} · Limite atual: ${currentLimit ?? '?'} · Casa atual: ${currentHouse ?? '?'}\n${EDIT_PROMPT_INSTRUCTIONS}\n\n`;
+        const header = `✏️ Editar aposta #${msg.message_id}|${isMedia ? 'p' : 't'}|${tipId ?? ''}`;
+        const preamble = `${header}\n🏷 Odd atual: ${currentOdd ?? '?'}\n🚦 Limite atual: ${currentLimit ?? '?'}\n🏠 Casa atual: ${currentHouse ?? '?'}\n${EDIT_PROMPT_INSTRUCTIONS}\n\n`;
         await ctx.answerCbQuery();
         try {
           await ctx.reply(`${preamble}<blockquote expandable>${escapeHtml(text)}</blockquote>`, {
@@ -267,7 +292,7 @@ export class TelegramService implements OnModuleInit {
         return;
       }
 
-      if (query.data === 'aposta_caiu') {
+      if (action === 'aposta_caiu') {
         if (!text) {
           await ctx.answerCbQuery('❌ Não consegui ler o texto da mensagem.');
           return;
@@ -277,9 +302,14 @@ export class TelegramService implements OnModuleInit {
           return;
         }
         const novoTexto = `❌ APOSTA CAIU\n\n${text}`;
+        const voltarData = tipId !== null ? `voltar:${tipId}` : 'voltar';
         try {
-          if (isMedia) await ctx.editMessageCaption(novoTexto, { reply_markup: { inline_keyboard: [[{ text: '↩️ Voltar', callback_data: 'voltar' }]] } });
-          else await ctx.editMessageText(novoTexto, { reply_markup: { inline_keyboard: [[{ text: '↩️ Voltar', callback_data: 'voltar' }]] } });
+          if (isMedia) await ctx.editMessageCaption(novoTexto, { reply_markup: { inline_keyboard: [[{ text: '↩️ Voltar', callback_data: voltarData }]] } });
+          else await ctx.editMessageText(novoTexto, { reply_markup: { inline_keyboard: [[{ text: '↩️ Voltar', callback_data: voltarData }]] } });
+          if (tipId !== null) {
+            const user = await this.usersService.findByTelegramUserId(ctx.from.id);
+            if (user) await this.tipsService.dismissTip(tipId, user.id);
+          }
           await ctx.answerCbQuery('❌ Marcado como aposta caiu!');
         } catch (err) {
           console.error('❌ Erro ao marcar aposta caiu:', err);
@@ -288,15 +318,19 @@ export class TelegramService implements OnModuleInit {
         return;
       }
 
-      if (query.data === 'voltar') {
+      if (action === 'voltar') {
         if (!text) {
           await ctx.answerCbQuery();
           return;
         }
         const restaurado = text.replace(/^❌ APOSTA CAIU\n\n/, '');
         try {
-          if (isMedia) await ctx.editMessageCaption(restaurado, { reply_markup: this.tipsCopyKeyboard() });
-          else await ctx.editMessageText(restaurado, { reply_markup: this.tipsCopyKeyboard() });
+          if (isMedia) await ctx.editMessageCaption(restaurado, { reply_markup: this.tipsCopyKeyboard(tipId ?? undefined) });
+          else await ctx.editMessageText(restaurado, { reply_markup: this.tipsCopyKeyboard(tipId ?? undefined) });
+          if (tipId !== null) {
+            const user = await this.usersService.findByTelegramUserId(ctx.from.id);
+            if (user) await this.tipsService.undismissTip(tipId, user.id);
+          }
           await ctx.answerCbQuery('↩️ Voltando');
         } catch (err) {
           console.error('❌ Erro ao voltar:', err);
@@ -304,16 +338,129 @@ export class TelegramService implements OnModuleInit {
         }
         return;
       }
+
+      // Botões da lista compacta do /pendentes — cada linha da lista tem seu
+      // próprio Planilhar/Caiu/Editar, e resolver um item atualiza a própria
+      // mensagem-lista em vez de gerar mensagem nova (é isso que evita
+      // poluir o chat de novo).
+      if (action === 'lista_planilhar' || action === 'lista_caiu' || action === 'lista_editar') {
+        if (tipId === null) {
+          await ctx.answerCbQuery('❌ Referência inválida.');
+          return;
+        }
+        const user = await this.usersService.findByTelegramUserId(ctx.from.id);
+        if (!user) {
+          await ctx.answerCbQuery('❌ Conta não vinculada.');
+          return;
+        }
+
+        if (action === 'lista_editar') {
+          const sent = await this.resendTipCard(user, tipId);
+          await ctx.answerCbQuery(sent ? '📤 Reenviado! Edita por lá.' : '❌ Tip não encontrada.');
+          return;
+        }
+
+        if (action === 'lista_caiu') {
+          await this.tipsService.dismissTip(tipId, user.id);
+          await ctx.answerCbQuery('❌ Marcado como caiu.');
+        } else {
+          const tip = await this.tipsService.findById(tipId);
+          if (!tip) {
+            await ctx.answerCbQuery('❌ Tip não encontrada.');
+            return;
+          }
+          try {
+            await this.processBetText(ctx, tip.text, undefined, tipId);
+            await ctx.answerCbQuery('✅ Planilhado!');
+          } catch {
+            await ctx.answerCbQuery('❌ Erro ao planilhar. Veja a mensagem no chat.');
+            return;
+          }
+        }
+
+        try {
+          const { text: summaryText, keyboard } = await this.buildPendentesMessage(user);
+          await ctx.editMessageText(summaryText, { reply_markup: keyboard });
+        } catch (err) {
+          console.error('❌ Erro ao atualizar lista de pendentes:', err);
+        }
+        return;
+      }
     });
   }
 
-  private tipsCopyKeyboard() {
+  private tipsCopyKeyboard(tipId?: number) {
+    const suffix = tipId !== undefined ? `:${tipId}` : '';
     return {
       inline_keyboard: [
-        [{ text: '📊 Enviar ao Planilhador', callback_data: 'planilhar' }],
-        [{ text: '✏️ Editar', callback_data: 'editar' }, { text: '❌ Aposta Caiu', callback_data: 'aposta_caiu' }],
+        [{ text: '📊 Enviar ao Planilhador', callback_data: `planilhar${suffix}` }],
+        [{ text: '✏️ Editar', callback_data: `editar${suffix}` }, { text: '❌ Aposta Caiu', callback_data: `aposta_caiu${suffix}` }],
       ],
     };
+  }
+
+  // Resumo pro /pendentes: total de tips relevantes pro filtro do usuário,
+  // quantas já viraram aposta, quantas foram marcadas como caiu, e a lista
+  // (agrupada por dia) das que ainda não têm nenhuma das duas coisas.
+  private async buildPendentesMessage(user: { id: number; minPercentFilter?: number | null }) {
+    const minPercentFilter = user.minPercentFilter != null ? Number(user.minPercentFilter) : null;
+    const rows = await this.tipsService.getSummaryForUser(user.id, minPercentFilter);
+    const planilhadas = rows.filter((r) => r.betId != null).length;
+    const caiu = rows.filter((r) => r.betId == null && r.dismissalId != null).length;
+    const pendentes = rows.filter((r) => r.betId == null && r.dismissalId == null);
+
+    const header = `📊 Total: ${rows.length} | ✅ Planilhadas: ${planilhadas} | ❌ Caiu: ${caiu} | ⏳ Pendentes: ${pendentes.length}`;
+
+    if (pendentes.length === 0) {
+      return { text: `${header}\n\n🎉 Nada pendente!`, keyboard: undefined as any };
+    }
+
+    let listText = '';
+    const keyboardRows: any[] = [];
+    let lastDateLabel = '';
+    let counter = 0;
+    for (const tip of pendentes) {
+      const dateLabel = new Date(tip.createdAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+      if (dateLabel !== lastDateLabel) {
+        listText += `\n${dateLabel}:\n`;
+        lastDateLabel = dateLabel;
+      }
+      counter++;
+      const time = new Date(tip.createdAt).toLocaleTimeString('pt-BR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'America/Sao_Paulo',
+      });
+      const house = extractHouseFromText(tip.text) ?? '?';
+      const game = extractGameFromText(tip.text) ?? '?';
+      const percentLabel = tip.percent !== null ? ` · ${Number(tip.percent).toFixed(2).replace('.', ',')}%` : '';
+      listText += `${counter}. ${time} · ${house} · ${game}${percentLabel}\n`;
+      keyboardRows.push([
+        { text: '✅ Planilhar', callback_data: `lista_planilhar:${tip.id}` },
+        { text: '❌ Caiu', callback_data: `lista_caiu:${tip.id}` },
+        { text: '✏️ Editar', callback_data: `lista_editar:${tip.id}` },
+      ]);
+    }
+
+    return { text: `${header}\n${listText}`.trimEnd(), keyboard: { inline_keyboard: keyboardRows } };
+  }
+
+  // Reenvia uma única tip (a pedido do botão "✏️ Editar" da lista) como o
+  // card completo de sempre — reaproveita sendTipCopyToUser, então ganha o
+  // mesmo Planilhar/Editar/Aposta Caiu que a tip teria tido na hora que
+  // chegou no grupo.
+  private async resendTipCard(user: { id: number; telegramUserId: number | null }, tipId: number): Promise<boolean> {
+    const tip = await this.tipsService.findById(tipId);
+    if (!tip) return false;
+
+    const { text: baseText, entities: baseEntities } = stripBoilerplateParagraphs(
+      tip.text,
+      tip.entities ?? undefined,
+      TIP_BOILERPLATE_PATTERNS,
+    );
+    const limit = extractLimitFromText(tip.text);
+    await this.sendTipCopyToUser(user, tip, tip.chatId, tip.messageId, tip.hasMedia, baseText, baseEntities, tip.text, limit);
+    return true;
   }
 
   // Resposta (reply) a um prompt de "✏️ Editar": extrai a odd/limite novos e
@@ -321,6 +468,7 @@ export class TelegramService implements OnModuleInit {
   private async handleEditReply(ctx: any, promptText: string, headerMatch: RegExpMatchArray, replyText: string) {
     const originalMessageId = Number(headerMatch[1]);
     const isMedia = headerMatch[2] === 'p';
+    const tipId = headerMatch[3] ? Number(headerMatch[3]) : undefined;
     const sepIndex = promptText.indexOf('\n\n');
     const originalText = sepIndex >= 0 ? promptText.slice(sepIndex + 2) : '';
     if (!originalText) {
@@ -381,11 +529,11 @@ export class TelegramService implements OnModuleInit {
     try {
       if (isMedia) {
         await ctx.telegram.editMessageCaption(ctx.chat.id, originalMessageId, undefined, novoTexto, {
-          reply_markup: this.tipsCopyKeyboard(),
+          reply_markup: this.tipsCopyKeyboard(tipId),
         });
       } else {
         await ctx.telegram.editMessageText(ctx.chat.id, originalMessageId, undefined, novoTexto, {
-          reply_markup: this.tipsCopyKeyboard(),
+          reply_markup: this.tipsCopyKeyboard(tipId),
         });
       }
       await ctx.reply('✅ Aposta atualizada!', { reply_parameters: { message_id: originalMessageId } });
@@ -412,6 +560,16 @@ export class TelegramService implements OnModuleInit {
     console.log(`📨 handleTipsMessage: percent=${percent} isAviso=${isAviso} hasMedia=${hasMedia}`);
     if (percent === null && !isAviso) return;
 
+    const tip = await this.tipsService.recordTip({
+      chatId,
+      messageId,
+      text,
+      percent,
+      isAviso,
+      hasMedia,
+      entities: entities ?? null,
+    });
+
     const users = await this.usersService.getUsersForTipsFanout();
     const limit = extractLimitFromText(text);
     const { text: baseText, entities: baseEntities } = stripBoilerplateParagraphs(text, entities, TIP_BOILERPLATE_PATTERNS);
@@ -422,54 +580,78 @@ export class TelegramService implements OnModuleInit {
       const stillMember = await this.isTipsGroupMember(user.telegramUserId as number);
       if (!stillMember) continue;
 
-      let outgoingText = baseText;
-      let outgoingEntities: any = baseEntities;
-      try {
-        if (percent !== null) {
-          const userStake = await this.usersService.getUserStake(user.id);
-          let recommendedStake = (percent / 100) * userStake;
-          if (limit !== null) recommendedStake = Math.min(recommendedStake, limit);
+      await this.sendTipCopyToUser(user, tip, chatId, messageId, hasMedia, baseText, baseEntities, text, limit);
+    }
+  }
 
-          const recommendationValue = recommendedStake.toFixed(2).replace('.', ',');
-          const recommendationLine = `🎯 Recomendação de aposta: R$ ${recommendationValue}`;
-          outgoingEntities = [
-            ...(baseEntities ?? []),
-            { type: 'bold', offset: baseText.length + 2, length: recommendationLine.length },
-          ];
+  // Manda a cópia individual de uma tip (com recomendação de aposta calculada
+  // pra banca/filtro do usuário) — usado tanto pelo fan-out ao vivo quanto
+  // pelo reenvio avulso de um item do /pendentes (resendTipCard). `tip` só
+  // precisa de id e percent; texto/casa/odd sempre vêm recalculados a partir
+  // de baseText/originalText, nunca de campos extras da tip.
+  private async sendTipCopyToUser(
+    user: { id: number; telegramUserId: number | null },
+    tip: { id: number; percent: number | null },
+    chatId: number,
+    messageId: number,
+    hasMedia: boolean,
+    baseText: string,
+    baseEntities: any,
+    originalText: string,
+    limit: number | null,
+  ) {
+    let outgoingText = baseText;
+    let outgoingEntities: any = baseEntities;
+    // NUMERIC do Postgres volta como string via pg — mesmo pra uma tip que
+    // acabou de ser inserida com um number — então normaliza antes de fazer
+    // conta com isso (division/toFixed em cima de string não estoura, mas
+    // .toFixed(2) e comparações mais adiante esperam number de verdade).
+    const percent = tip.percent !== null ? Number(tip.percent) : null;
+    try {
+      if (percent !== null) {
+        const userStake = await this.usersService.getUserStake(user.id);
+        let recommendedStake = (percent / 100) * userStake;
+        if (limit !== null) recommendedStake = Math.min(recommendedStake, limit);
 
-          const odd = extractOddFromText(text);
-          if (odd !== null) {
-            const lucroValue = (recommendedStake * odd - recommendedStake).toFixed(2).replace('.', ',');
-            const lucroLine = `💰 Lucro potencial: R$ ${lucroValue}`;
-            outgoingText = `${baseText}\n\n${recommendationLine}\n${lucroLine}`;
-            outgoingEntities.push({
-              type: 'bold',
-              offset: baseText.length + 2 + recommendationLine.length + 1,
-              length: lucroLine.length,
-            });
-          } else {
-            outgoingText = `${baseText}\n\n${recommendationLine}`;
-          }
-          console.log(
-            `🎯 Recomendação calculada (userId=${user.id}, telegramUserId=${user.telegramUserId}): banca=${userStake} percent=${percent} limit=${limit} -> R$${recommendationValue}`,
-          );
-        }
+        const recommendationValue = recommendedStake.toFixed(2).replace('.', ',');
+        const recommendationLine = `🎯 Recomendação de aposta: R$ ${recommendationValue}`;
+        outgoingEntities = [
+          ...(baseEntities ?? []),
+          { type: 'bold', offset: baseText.length + 2, length: recommendationLine.length },
+        ];
 
-        if (hasMedia) {
-          await this.bot.telegram.copyMessage(user.telegramUserId as number, chatId, messageId, {
-            caption: outgoingText,
-            caption_entities: outgoingEntities,
-            reply_markup: this.tipsCopyKeyboard(),
+        const odd = extractOddFromText(originalText);
+        if (odd !== null) {
+          const lucroValue = (recommendedStake * odd - recommendedStake).toFixed(2).replace('.', ',');
+          const lucroLine = `💰 Lucro potencial: R$ ${lucroValue}`;
+          outgoingText = `${baseText}\n\n${recommendationLine}\n${lucroLine}`;
+          outgoingEntities.push({
+            type: 'bold',
+            offset: baseText.length + 2 + recommendationLine.length + 1,
+            length: lucroLine.length,
           });
         } else {
-          await this.bot.telegram.sendMessage(user.telegramUserId as number, outgoingText, {
-            entities: outgoingEntities,
-            reply_markup: this.tipsCopyKeyboard(),
-          });
+          outgoingText = `${baseText}\n\n${recommendationLine}`;
         }
-      } catch (err) {
-        console.error(`⚠️ Não foi possível enviar tip para o usuário (telegramUserId=${user.telegramUserId}):`, err);
+        console.log(
+          `🎯 Recomendação calculada (userId=${user.id}, telegramUserId=${user.telegramUserId}): banca=${userStake} percent=${percent} limit=${limit} -> R$${recommendationValue}`,
+        );
       }
+
+      if (hasMedia) {
+        await this.bot.telegram.copyMessage(user.telegramUserId as number, chatId, messageId, {
+          caption: outgoingText,
+          caption_entities: outgoingEntities,
+          reply_markup: this.tipsCopyKeyboard(tip.id),
+        });
+      } else {
+        await this.bot.telegram.sendMessage(user.telegramUserId as number, outgoingText, {
+          entities: outgoingEntities,
+          reply_markup: this.tipsCopyKeyboard(tip.id),
+        });
+      }
+    } catch (err) {
+      console.error(`⚠️ Não foi possível enviar tip para o usuário (telegramUserId=${user.telegramUserId}):`, err);
     }
   }
 
@@ -490,7 +672,7 @@ export class TelegramService implements OnModuleInit {
   // quanto pelo clique em "Enviar ao Planilhador" na cópia individual do
   // grupo Tips. Quando vem de um clique (replyToMessageId presente), a
   // confirmação sai como resposta à própria tip, em vez de mensagem solta.
-  private async processBetText(ctx: any, userMessage: string, replyToMessageId?: number) {
+  private async processBetText(ctx: any, userMessage: string, replyToMessageId?: number, tipId?: number) {
     try {
       const resolvedHouseId = await this.grokService.resolveHouseId(userMessage);
       const jsonResult = await this.grokService.parseBetMessage(userMessage, resolvedHouseId);
@@ -528,7 +710,7 @@ export class TelegramService implements OnModuleInit {
         sport,
       };
 
-      const aposta = await this.apostaService.createBet(apostaData);
+      const aposta = await this.apostaService.createBet(apostaData, tipId);
 
       let houseName = 'N/A';
       try {

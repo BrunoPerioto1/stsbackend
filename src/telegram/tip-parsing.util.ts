@@ -35,6 +35,21 @@ export function extractHouseFromText(text: string): string | null {
   return m ? m[1].trim() : null;
 }
 
+export function extractGameFromText(text: string): string | null {
+  if (!text) return null;
+  const m = text.match(/^🆚\s*(.+)$/m);
+  return m ? m[1].trim() : null;
+}
+
+// Ação + id da tip a partir do callback_data de um botão (ex.: "planilhar:42"
+// -> { action: "planilhar", tipId: 42 }). Sem ":" (mensagens antigas, de
+// antes da tip ganhar id) cai em tipId null — o handler decide o que fazer.
+export function parseCallbackAction(data: string): { action: string; tipId: number | null } {
+  const [action, idRaw] = data.split(':');
+  const parsed = idRaw !== undefined ? Number(idRaw) : NaN;
+  return { action, tipId: Number.isFinite(parsed) ? parsed : null };
+}
+
 export function extractPercent(text: string): number | null {
   if (!text) return null;
 
@@ -69,10 +84,13 @@ export function escapeHtml(text: string): string {
 // em Editar e a resposta com a nova odd). O texto original vem embutido logo
 // depois da primeira linha em branco — mandado num <blockquote expandable>
 // pra não poluir a tela, mas o conteúdo puro continua ali pra reconstruir.
-export const EDIT_PROMPT_HEADER_RE = /^✏️ Editar aposta #(\d+)\|(t|p)\n/;
+export const EDIT_PROMPT_HEADER_RE = /^✏️ Editar aposta #(\d+)\|(t|p)\|(\d*)\n/;
 export const EDIT_PROMPT_INSTRUCTIONS =
-  'Digite a odd, o limite ou a casa (um de cada vez).\n' +
-  'Formato: odd 3.50  ·  limite 60  ·  casa Superbet Brasil  ·  ou odd + limite juntos: 3.50 60';
+  'Digite o que quer mudar (um de cada vez):\n' +
+  '• odd 3.50\n' +
+  '• limite 60\n' +
+  '• casa Superbet Brasil\n' +
+  '• 3.50 60 (odd + limite juntos)';
 
 export const UNLINKED_INSTRUCTIONS =
   '❌ Sua conta não está vinculada.\n\n' +

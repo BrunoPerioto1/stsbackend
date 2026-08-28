@@ -6,9 +6,10 @@ import { HouseModule } from './house.module';
 import { DatabaseModule } from '../infra/db/db.module';
 import { UsersModule } from '../users/users.module';
 import { TelegramController } from '../telegram/telegram.controller';
+import { TipsModule } from './tips.module';
 
 @Module({
-  imports: [ApostaModule, HouseModule, DatabaseModule, UsersModule],
+  imports: [ApostaModule, HouseModule, DatabaseModule, UsersModule, TipsModule],
   controllers: [TelegramController],
   providers: [TelegramService, GrokService],
 })
