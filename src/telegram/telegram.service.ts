@@ -6,89 +6,21 @@ import { ApostaService } from '../bet/bet.service';
 import { CreateBetDto } from '../bet/dto/bet.dto';
 import { UsersService } from '../users/users.service';
 import { HouseService } from '../house/house.service';
+import {
+  EDIT_PROMPT_HEADER_RE,
+  EDIT_PROMPT_INSTRUCTIONS,
+  TIP_BOILERPLATE_PATTERNS,
+  UNLINKED_INSTRUCTIONS,
+  escapeHtml,
+  extractHouseFromText,
+  extractLimitFromText,
+  extractOddFromText,
+  extractPercent,
+  isAvisoMessage,
+  stripBoilerplateParagraphs,
+} from './tip-parsing.util';
 
 dotenv.config();
-
-function extractLimitFromText(text: string): number | null {
-  if (!text) return null;
-  const limitEmojiRegex = /🚦[^0-9]{0,15}([\d.,]+)/i;
-  const wordsRegex = /(limite|limit|max|máximo)[^0-9]{0,15}([\d.,]+)/i;
-  const m1 = text.match(limitEmojiRegex);
-  const m2 = text.match(wordsRegex);
-  const raw = (m1?.[1] || m2?.[2] || '').trim();
-  if (!raw) return null;
-  
- 
-  const normalized = raw.includes(',') 
-    ? raw.replace(/\./g, '').replace(',', '.') // Caso brasileiro
-    : raw; // Caso internacional
-  
-  const val = Number(normalized);
-  console.log(`Limite extraído: "${raw}" -> normalizado: "${normalized}" -> valor: ${val}`);
-  return Number.isFinite(val) && val > 0 ? val : null;
-}
-
-function isAvisoMessage(text: string): boolean {
-  if (!text) return false;
-  return /\b(SOBRECARGA|AVISO)\b/i.test(text);
-}
-
-function extractOddFromText(text: string): number | null {
-  if (!text) return null;
-  const m = text.match(/🏷\s*([\d]+(?:[.,][\d]+)?)/);
-  if (!m) return null;
-  const val = Number(m[1].replace(',', '.'));
-  return Number.isFinite(val) && val > 1 ? val : null;
-}
-
-// Cabeçalho do prompt de "Editar" — carrega o messageId + tipo (texto/mídia)
-// direto no texto da mensagem, sem precisar de estado em memória (o processo
-// roda em serverless, então nada garante que a mesma instância trate o clique
-// em Editar e a resposta com a nova odd). O texto original vem embutido logo
-// depois da primeira linha em branco — mandado num <blockquote expandable>
-// pra não poluir a tela, mas o conteúdo puro continua ali pra reconstruir.
-const EDIT_PROMPT_HEADER_RE = /^✏️ Editar aposta #(\d+)\|(t|p)\n/;
-const EDIT_PROMPT_INSTRUCTIONS =
-  'Digite a odd (se precisar mudar a odd) ou o limite (se precisar).\n' +
-  'Formato: odd 3.50  ·  limite 60  ·  ou os dois: 3.50 60';
-
-function escapeHtml(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-const UNLINKED_INSTRUCTIONS =
-  '❌ Sua conta não está vinculada.\n\n' +
-  'Pra vincular:\n' +
-  '1️⃣ Entre em https://stsfront.vercel.app/login e faça login\n' +
-  '2️⃣ Vá em Perfil → clique em "Vincular Telegram"\n' +
-  '3️⃣ Copie o código que aparecer\n' +
-  '4️⃣ Volte aqui e envie: /vincular CODIGO';
-
-function extractPercent(text: string): number | null {
-  if (!text) return null;
-
-  // O emoji usado antes do percentual varia por ADM/fonte (🛑, 🔴, etc.) e o
-  // formato SOBRECARGA/AVISO nem tem emoji — então não fixa em nenhum
-  // específico: aceita qualquer linha que seja só "[algo curto] número%".
-  const standaloneLineRegex = /^[^\n%\d]{0,6}(\d{1,3}(?:[.,]\d{1,2})?)[ \t]*%[ \t]*$/m;
-  let m = text.match(standaloneLineRegex);
-
-  if (!m) {
-    // Último recurso: pega o primeiro "número%" em qualquer lugar do texto.
-    m = text.match(/(\d{1,3}(?:[.,]\d{1,2})?)\s*%/);
-  }
-  if (!m) return null;
-
-  const raw = m[1];
-  const normalized = raw.includes(',')
-    ? raw.replace(/\./g, '').replace(',', '.')
-    : raw;
-
-  const val = Number(normalized);
-  return Number.isFinite(val) && val >= 0 ? val : null;
-}
-
-
 
 @Injectable()
 export class TelegramService implements OnModuleInit {
@@ -246,16 +178,21 @@ export class TelegramService implements OnModuleInit {
     });
 
     // DMs livres: processa como aposta direto (fluxo original).
-    // Mensagens do grupo Tips: só chegam aqui porque o betbpbot tem Bot-to-Bot
-    // Communication Mode ativado no BotFather (+ admin do grupo + Group
-    // Privacy off) — sem isso o Telegram não entrega updates de mensagens
-    // postadas por outro bot (é o bot.js quem posta lá).
+    // Mensagens do grupo Tips: só chegam aqui porque o betbpbot (repasse) tem
+    // Bot-to-Bot Communication Mode ativado no BotFather (+ admin do grupo +
+    // Group Privacy off) — sem isso o Telegram não entrega updates de
+    // mensagens postadas por outro bot. Privacy off também significa que o
+    // bot vê mensagens de humanos no grupo — por isso só processa como tip
+    // se quem mandou for um bot (evita alguém digitando "%5" ser confundido
+    // com uma tip de verdade).
     this.bot.on('message', async (ctx) => {
       if (this.tipsGroupChatId && ctx.chat.id === this.tipsGroupChatId) {
+        if (!ctx.from?.is_bot) return;
         const msg = ctx.message as any;
         const text = msg.text ?? msg.caption;
         const hasMedia = !!msg.photo;
-        if (text) await this.handleTipsMessage(text, ctx.chat.id, msg.message_id, hasMedia);
+        const entities = msg.entities ?? msg.caption_entities;
+        if (text) await this.handleTipsMessage(text, ctx.chat.id, msg.message_id, hasMedia, entities);
         return;
       }
 
@@ -275,8 +212,9 @@ export class TelegramService implements OnModuleInit {
       await this.processBetText(ctx, userMessage);
     });
 
-    // Cliques nos botões da cópia individual recebida em DM: Planilhar,
-    // Editar e Aposta Caiu — cada um age só na mensagem de quem clicou.
+    // Cliques nos botões da cópia individual recebida em DM: Enviar ao
+    // Planilhador, Editar e Aposta Caiu — cada um age só na mensagem de
+    // quem clicou.
     this.bot.on('callback_query', async (ctx) => {
       const query = ctx.callbackQuery as any;
       const msg = query.message;
@@ -289,10 +227,11 @@ export class TelegramService implements OnModuleInit {
           return;
         }
         try {
-          await this.processBetText(ctx, text);
-          await ctx.editMessageReplyMarkup({
-            inline_keyboard: [[{ text: '✅ Planilhado', callback_data: 'done' }]],
-          });
+          await this.processBetText(ctx, text, msg.message_id);
+          const novoTexto = `✅ PLANILHADO\n\n${text}`;
+          const doneKeyboard = { inline_keyboard: [[{ text: '✅ Planilhado', callback_data: 'done' }]] };
+          if (isMedia) await ctx.editMessageCaption(novoTexto, { reply_markup: doneKeyboard });
+          else await ctx.editMessageText(novoTexto, { reply_markup: doneKeyboard });
           await ctx.answerCbQuery('✅ Planilhado!');
         } catch (err) {
           console.error('❌ Erro ao planilhar via callback:', err);
@@ -308,8 +247,9 @@ export class TelegramService implements OnModuleInit {
         }
         const currentOdd = extractOddFromText(text);
         const currentLimit = extractLimitFromText(text);
+        const currentHouse = extractHouseFromText(text);
         const header = `✏️ Editar aposta #${msg.message_id}|${isMedia ? 'p' : 't'}`;
-        const preamble = `${header}\nOdd atual: ${currentOdd ?? '?'} · Limite atual: ${currentLimit ?? '?'}\n${EDIT_PROMPT_INSTRUCTIONS}\n\n`;
+        const preamble = `${header}\nOdd atual: ${currentOdd ?? '?'} · Limite atual: ${currentLimit ?? '?'} · Casa atual: ${currentHouse ?? '?'}\n${EDIT_PROMPT_INSTRUCTIONS}\n\n`;
         await ctx.answerCbQuery();
         try {
           await ctx.reply(`${preamble}<blockquote expandable>${escapeHtml(text)}</blockquote>`, {
@@ -370,7 +310,7 @@ export class TelegramService implements OnModuleInit {
   private tipsCopyKeyboard() {
     return {
       inline_keyboard: [
-        [{ text: '📊 Planilhar', callback_data: 'planilhar' }],
+        [{ text: '📊 Enviar ao Planilhador', callback_data: 'planilhar' }],
         [{ text: '✏️ Editar', callback_data: 'editar' }, { text: '❌ Aposta Caiu', callback_data: 'aposta_caiu' }],
       ],
     };
@@ -392,8 +332,11 @@ export class TelegramService implements OnModuleInit {
     const lower = raw.toLowerCase();
     let novaOdd: number | null = null;
     let novoLimite: number | null = null;
+    let novaCasa: string | null = null;
 
-    if (lower.startsWith('odd')) {
+    if (lower.startsWith('casa')) {
+      novaCasa = raw.slice(4).trim();
+    } else if (lower.startsWith('odd')) {
       novaOdd = parseFloat(raw.slice(3).trim().replace(',', '.'));
     } else if (lower.startsWith('limite') || lower.startsWith('limit')) {
       novoLimite = parseFloat(raw.replace(/^limite|^limit/i, '').trim().replace(',', '.'));
@@ -407,7 +350,7 @@ export class TelegramService implements OnModuleInit {
       }
     }
 
-    if (novaOdd === null && novoLimite === null) {
+    if (novaOdd === null && novoLimite === null && !novaCasa) {
       await ctx.reply(`❌ Não entendi. ${EDIT_PROMPT_INSTRUCTIONS}`);
       return;
     }
@@ -419,6 +362,10 @@ export class TelegramService implements OnModuleInit {
       await ctx.reply('❌ Limite inválido.');
       return;
     }
+    if (novaCasa !== null && !novaCasa) {
+      await ctx.reply('❌ Nome da casa inválido.');
+      return;
+    }
 
     let novoTexto = originalText;
     if (novaOdd !== null) {
@@ -426,6 +373,9 @@ export class TelegramService implements OnModuleInit {
     }
     if (novoLimite !== null) {
       novoTexto = novoTexto.replace(/(🚦[^\n]*R\$\s*)([\d.,]+)/, `$1${novoLimite.toFixed(2)}`);
+    }
+    if (novaCasa) {
+      novoTexto = novoTexto.replace(/^🏠\s*.*$/m, `🏠 ${novaCasa}`);
     }
 
     try {
@@ -438,7 +388,7 @@ export class TelegramService implements OnModuleInit {
           reply_markup: this.tipsCopyKeyboard(),
         });
       }
-      await ctx.reply('✅ Aposta atualizada!');
+      await ctx.reply('✅ Aposta atualizada!', { reply_parameters: { message_id: originalMessageId } });
     } catch (err) {
       console.error('❌ Erro ao editar aposta individual:', err);
       await ctx.reply('❌ Erro ao atualizar. Tenta de novo.');
@@ -451,16 +401,20 @@ export class TelegramService implements OnModuleInit {
   // Mensagens de SOBRECARGA/AVISO passam mesmo sem % (mas sem recomendação,
   // já que não há % pra converter pela banca do usuário). Quando há %, cada
   // cópia leva sua própria "Recomendação de aposta" (banca do usuário × % da
-  // tip, limitada pelo 🚦/limite do texto) — por isso não dá pra usar
-  // copyMessage puro em mensagens de texto (a API só permite sobrescrever
-  // caption em mensagens de mídia).
-  private async handleTipsMessage(text: string, chatId: number, messageId: number, hasMedia: boolean) {
+  // tip, limitada pelo 🚦/limite do texto), em negrito. `entities` são os
+  // links/formatação da mensagem original (ex.: "Clique AQUI" → text_link) —
+  // sempre reconstruímos o texto (tira boilerplate, acrescenta recomendação),
+  // então as entidades precisam ser realinhadas junto — senão a cópia perde
+  // todo link/formatação.
+  private async handleTipsMessage(text: string, chatId: number, messageId: number, hasMedia: boolean, entities?: any[]) {
     const percent = extractPercent(text);
     const isAviso = isAvisoMessage(text);
+    console.log(`📨 handleTipsMessage: percent=${percent} isAviso=${isAviso} hasMedia=${hasMedia}`);
     if (percent === null && !isAviso) return;
 
     const users = await this.usersService.getUsersForTipsFanout();
     const limit = extractLimitFromText(text);
+    const { text: baseText, entities: baseEntities } = stripBoilerplateParagraphs(text, entities, TIP_BOILERPLATE_PATTERNS);
 
     for (const user of users) {
       if (percent !== null && user.minPercentFilter !== null && percent < Number(user.minPercentFilter)) continue;
@@ -468,28 +422,48 @@ export class TelegramService implements OnModuleInit {
       const stillMember = await this.isTipsGroupMember(user.telegramUserId as number);
       if (!stillMember) continue;
 
-      let outgoingText = text;
-      if (percent !== null) {
-        const userStake = await this.usersService.getUserStake(user.id);
-        let recommendedStake = (percent / 100) * userStake;
-        if (limit !== null) recommendedStake = Math.min(recommendedStake, limit);
-
-        const recommendationValue = recommendedStake.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
-        outgoingText = `${text}\n\n🎯 Recomendação de aposta: R$ ${recommendationValue}`;
-      }
-
+      let outgoingText = baseText;
+      let outgoingEntities: any = baseEntities;
       try {
-        if (outgoingText !== text && hasMedia) {
+        if (percent !== null) {
+          const userStake = await this.usersService.getUserStake(user.id);
+          let recommendedStake = (percent / 100) * userStake;
+          if (limit !== null) recommendedStake = Math.min(recommendedStake, limit);
+
+          const recommendationValue = recommendedStake.toFixed(2).replace('.', ',');
+          const recommendationLine = `🎯 Recomendação de aposta: R$ ${recommendationValue}`;
+          outgoingEntities = [
+            ...(baseEntities ?? []),
+            { type: 'bold', offset: baseText.length + 2, length: recommendationLine.length },
+          ];
+
+          const odd = extractOddFromText(text);
+          if (odd !== null) {
+            const lucroValue = (recommendedStake * odd - recommendedStake).toFixed(2).replace('.', ',');
+            const lucroLine = `💰 Lucro potencial: R$ ${lucroValue}`;
+            outgoingText = `${baseText}\n\n${recommendationLine}\n${lucroLine}`;
+            outgoingEntities.push({
+              type: 'bold',
+              offset: baseText.length + 2 + recommendationLine.length + 1,
+              length: lucroLine.length,
+            });
+          } else {
+            outgoingText = `${baseText}\n\n${recommendationLine}`;
+          }
+          console.log(
+            `🎯 Recomendação calculada (userId=${user.id}, telegramUserId=${user.telegramUserId}): banca=${userStake} percent=${percent} limit=${limit} -> R$${recommendationValue}`,
+          );
+        }
+
+        if (hasMedia) {
           await this.bot.telegram.copyMessage(user.telegramUserId as number, chatId, messageId, {
             caption: outgoingText,
-            reply_markup: this.tipsCopyKeyboard(),
-          });
-        } else if (outgoingText !== text) {
-          await this.bot.telegram.sendMessage(user.telegramUserId as number, outgoingText, {
+            caption_entities: outgoingEntities,
             reply_markup: this.tipsCopyKeyboard(),
           });
         } else {
-          await this.bot.telegram.copyMessage(user.telegramUserId as number, chatId, messageId, {
+          await this.bot.telegram.sendMessage(user.telegramUserId as number, outgoingText, {
+            entities: outgoingEntities,
             reply_markup: this.tipsCopyKeyboard(),
           });
         }
@@ -513,8 +487,10 @@ export class TelegramService implements OnModuleInit {
   }
 
   // Parsing + criação da aposta. Reaproveitado tanto pelo texto livre em DM
-  // quanto pelo clique em "Planilhar" na cópia individual do grupo Tips.
-  private async processBetText(ctx: any, userMessage: string) {
+  // quanto pelo clique em "Enviar ao Planilhador" na cópia individual do
+  // grupo Tips. Quando vem de um clique (replyToMessageId presente), a
+  // confirmação sai como resposta à própria tip, em vez de mensagem solta.
+  private async processBetText(ctx: any, userMessage: string, replyToMessageId?: number) {
     try {
       const resolvedHouseId = await this.grokService.resolveHouseId(userMessage);
       const jsonResult = await this.grokService.parseBetMessage(userMessage, resolvedHouseId);
@@ -535,7 +511,7 @@ export class TelegramService implements OnModuleInit {
       const limit = extractLimitFromText(userMessage);
       if (limit !== null) stake = Math.min(stake, limit);
 
-      if (!Number.isFinite(houseId)) throw new Error('houseId inválido');
+      if (!Number.isFinite(houseId) || houseId <= 0) throw new Error('CASA_INVALIDA');
       if (!Number.isFinite(stake) || stake <= 0) throw new Error('stake inválida');
       if (!Number.isFinite(odd) || odd <= 1) throw new Error('odd inválida');
       if (!game) throw new Error('game vazio');
@@ -570,14 +546,21 @@ export class TelegramService implements OnModuleInit {
       });
 
       await ctx.reply(
-        `✅ Aposta salva!\n\n🎮 Jogo: ${aposta.game}\n🕐 Horário: ${horario}\n💰 Stake: R$ ${aposta.stake}\n📈 Odd: ${aposta.odd}\n🏆 Mercado: ${aposta.market}\n⚽ Esporte: ${aposta.sport}\n🏢 Casa: ${houseName}\n👤 Usuário: ${user.username}`,
+        `✅ Aposta salva!\n\n🎮 Jogo: ${aposta.game}\n🕐 Horário: ${horario}\n💰 Stake: R$ ${aposta.stake}\n📈 Odd: ${aposta.odd}\n🏆 Mercado: ${aposta.market}\n⚽ Esporte: ${aposta.sport}\n🏢 Casa: ${houseName}`,
+        replyToMessageId ? { reply_parameters: { message_id: replyToMessageId } } : undefined,
       );
     } catch (err) {
       console.error('❌ Erro ao processar aposta:', err);
+      const extra = replyToMessageId ? { reply_parameters: { message_id: replyToMessageId } } : undefined;
       if ((err as Error).message === 'UNLINKED') {
-        await ctx.reply(UNLINKED_INSTRUCTIONS);
+        await ctx.reply(UNLINKED_INSTRUCTIONS, extra);
+      } else if ((err as Error).message === 'CASA_INVALIDA') {
+        await ctx.reply(
+          '❌ Erro ao ler a casa de aposta. Por favor, remande a aposta aqui no chat trocando a casa por uma parecida.',
+          extra,
+        );
       } else {
-        await ctx.reply(`❌ Erro ao processar aposta.\n${(err as Error).message}`);
+        await ctx.reply(`❌ Erro ao processar aposta.\n${(err as Error).message}`, extra);
       }
       throw err;
     }

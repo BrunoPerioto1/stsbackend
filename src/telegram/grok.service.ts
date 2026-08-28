@@ -77,18 +77,6 @@ export class GrokService {
       return normalizedHouses[bestMatchIndex].id;
     }
 
-    // Fallback para nomes comerciais abreviados na mensagem (ex.: "SUPERBET"
-    // vs. cadastro "SUPERBET BRASIL") — o Dice coefficient despenca com a
-    // diferença de tamanho mesmo sendo claramente a mesma casa, então aceita
-    // quando um nome normalizado é prefixo do outro.
-    const prefixMatch = normalizedHouses.find(
-      (h) =>
-        h.normalized.length >= 4 &&
-        houseName.length >= 4 &&
-        (h.normalized.startsWith(houseName) || houseName.startsWith(h.normalized)),
-    );
-    if (prefixMatch) return prefixMatch.id;
-
     return null;
   }
 
