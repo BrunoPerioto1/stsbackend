@@ -105,7 +105,7 @@ export class TelegramService implements OnModuleInit {
 
     // Comando /site: link direto pro dashboard do app.
     this.bot.command('site', async (ctx) => {
-      await ctx.reply('📊 Dashboard: https://stsfront.vercel.app/dashboard');
+      await ctx.reply('📊 Site: https://stsfront.vercel.app');
     });
 
     // Comando /filtro
