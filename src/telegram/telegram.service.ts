@@ -103,6 +103,11 @@ export class TelegramService implements OnModuleInit {
       }
     });
 
+    // Comando /site: link direto pro dashboard do app.
+    this.bot.command('site', async (ctx) => {
+      await ctx.reply('📊 Dashboard: https://stsfront.vercel.app/dashboard');
+    });
+
     // Comando /filtro
     this.bot.command('filtro', async (ctx) => {
       const args = ctx.message.text.split(' ');
