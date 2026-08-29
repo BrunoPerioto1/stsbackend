@@ -6,6 +6,7 @@ import {
 } from '../db/db.module';
 import type { Database } from '../db/database.types';
 import type { NewTip, TipId } from '../../db_types/Tips';
+import type { NewTipDelivery } from '../../db_types/TipDeliveries';
 import type { UserId } from '../../db_types/Users';
 
 @Injectable()
@@ -93,5 +94,32 @@ export class TipsRepository {
       .where('tipId', '=', tipId)
       .where('userId', '=', userId)
       .execute();
+  }
+
+  // Guarda só a última cópia de DM mandada pra esse (tip, usuário) — se a tip
+  // for reenviada (botão Editar da lista), o registro anterior é substituído,
+  // já que só a cópia mais recente é a que ainda está visível pro usuário.
+  async upsertDelivery(delivery: NewTipDelivery) {
+    await this.dbWrite
+      .insertInto('tipDeliveries')
+      .values(delivery)
+      .onConflict((oc) =>
+        oc.columns(['tipId', 'userId']).doUpdateSet({
+          messageId: delivery.messageId,
+          hasMedia: delivery.hasMedia,
+          text: delivery.text,
+          entities: delivery.entities,
+        }),
+      )
+      .execute();
+  }
+
+  async findDelivery(tipId: TipId, userId: UserId) {
+    return this.dbRead
+      .selectFrom('tipDeliveries')
+      .selectAll()
+      .where('tipId', '=', tipId)
+      .where('userId', '=', userId)
+      .executeTakeFirst();
   }
 }

@@ -405,6 +405,7 @@ export class TelegramService implements OnModuleInit {
 
         if (action === 'lista_caiu') {
           await this.tipsService.dismissTip(tipId, user.id);
+          await this.markDeliveredMessage(user, tipId, 'caiu');
           await ctx.answerCbQuery('❌ Marcado como caiu.');
         } else {
           const tip = await this.tipsService.findById(tipId);
@@ -414,6 +415,7 @@ export class TelegramService implements OnModuleInit {
           }
           try {
             await this.processBetText(ctx, tip.text, undefined, tipId);
+            await this.markDeliveredMessage(user, tipId, 'planilhado');
             await ctx.answerCbQuery('✅ Planilhado!');
           } catch {
             await ctx.answerCbQuery('❌ Erro ao planilhar. Veja a mensagem no chat.');
@@ -714,20 +716,67 @@ export class TelegramService implements OnModuleInit {
         );
       }
 
-      if (hasMedia) {
-        await this.bot.telegram.copyMessage(user.telegramUserId as number, chatId, messageId, {
-          caption: outgoingText,
-          caption_entities: outgoingEntities,
-          reply_markup: this.tipsCopyKeyboard(tip.id),
+      const sent = hasMedia
+        ? await this.bot.telegram.copyMessage(user.telegramUserId as number, chatId, messageId, {
+            caption: outgoingText,
+            caption_entities: outgoingEntities,
+            reply_markup: this.tipsCopyKeyboard(tip.id),
+          })
+        : await this.bot.telegram.sendMessage(user.telegramUserId as number, outgoingText, {
+            entities: outgoingEntities,
+            reply_markup: this.tipsCopyKeyboard(tip.id),
+          });
+
+      // Guarda essa cópia (texto/entidades exatos) pra dar pra editar depois
+      // — é o que permite o /pendentes marcar "✅ PLANILHADO"/"❌ APOSTA CAIU"
+      // direto na mensagem que o usuário recebeu, mesmo resolvendo pela lista
+      // em vez de clicar na mensagem original.
+      await this.tipsService.saveDelivery({
+        tipId: tip.id,
+        userId: user.id,
+        messageId: sent.message_id,
+        hasMedia,
+        text: outgoingText,
+        entities: outgoingEntities ?? null,
+      });
+    } catch (err) {
+      console.error(`⚠️ Não foi possível enviar tip para o usuário (telegramUserId=${user.telegramUserId}):`, err);
+    }
+  }
+
+  // Edita a última cópia de DM conhecida pra essa (tip, usuário) — marca o
+  // mesmo banner "✅ PLANILHADO"/"❌ APOSTA CAIU" que já aparece quando se
+  // clica direto na mensagem, só que a partir da ação feita na lista do
+  // /pendentes. Sem delivery salva (tip antiga, de antes dessa mudança) não
+  // tem o que editar — segue sem erro, só não atualiza a mensagem original.
+  private async markDeliveredMessage(
+    user: { id: number; telegramUserId: number | null },
+    tipId: number,
+    kind: 'planilhado' | 'caiu',
+  ) {
+    if (!user.telegramUserId) return;
+    try {
+      const delivery = await this.tipsService.findDelivery(tipId, user.id);
+      if (!delivery) return;
+
+      const prefix = kind === 'caiu' ? '❌ APOSTA CAIU' : '✅ PLANILHADO';
+      const novoTexto = `${prefix}\n\n${delivery.text}`;
+      const keyboard =
+        kind === 'caiu'
+          ? { inline_keyboard: [[{ text: '↩️ Voltar', callback_data: `voltar:${tipId}` }]] }
+          : { inline_keyboard: [[{ text: '✅ Planilhado', callback_data: 'done' }]] };
+
+      if (delivery.hasMedia) {
+        await this.bot.telegram.editMessageCaption(user.telegramUserId, delivery.messageId, undefined, novoTexto, {
+          reply_markup: keyboard,
         });
       } else {
-        await this.bot.telegram.sendMessage(user.telegramUserId as number, outgoingText, {
-          entities: outgoingEntities,
-          reply_markup: this.tipsCopyKeyboard(tip.id),
+        await this.bot.telegram.editMessageText(user.telegramUserId, delivery.messageId, undefined, novoTexto, {
+          reply_markup: keyboard,
         });
       }
     } catch (err) {
-      console.error(`⚠️ Não foi possível enviar tip para o usuário (telegramUserId=${user.telegramUserId}):`, err);
+      console.error(`⚠️ Não foi possível atualizar a mensagem original da tip (tipId=${tipId}):`, err);
     }
   }
 
