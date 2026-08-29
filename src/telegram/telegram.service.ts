@@ -518,6 +518,20 @@ export class TelegramService implements OnModuleInit {
           ? { text: 'Próxima ▶️', callback_data: `lista_pagina:${currentPage + 1}` }
           : { text: ' ', callback_data: 'noop' },
       ]);
+
+      // Salto de 10 em 10 páginas — só aparece quando a lista é grande o
+      // suficiente pra valer a pena (senão Anterior/Próxima já resolve).
+      const jump = 10;
+      if (totalPages > jump) {
+        keyboardRows.push([
+          currentPage > 0
+            ? { text: `⏪ -${jump}`, callback_data: `lista_pagina:${Math.max(0, currentPage - jump)}` }
+            : { text: ' ', callback_data: 'noop' },
+          currentPage < totalPages - 1
+            ? { text: `+${jump} ⏩`, callback_data: `lista_pagina:${Math.min(totalPages - 1, currentPage + jump)}` }
+            : { text: ' ', callback_data: 'noop' },
+        ]);
+      }
     }
 
     return { text: `${header}\n${listText}`.trimEnd(), keyboard: { inline_keyboard: keyboardRows } };
