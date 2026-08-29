@@ -222,7 +222,9 @@ export class TelegramService implements OnModuleInit {
     // com uma tip de verdade).
     this.bot.on('message', async (ctx) => {
       if (this.tipsGroupChatId && ctx.chat.id === this.tipsGroupChatId) {
-        if (!ctx.from?.is_bot) return;
+        // TEMP: bloqueio de "só bot" removido pra testar mandando tip manualmente
+        // no grupo. Reativar (descomentar) antes de voltar pra produção normal.
+        // if (!ctx.from?.is_bot) return;
         const msg = ctx.message as any;
         const text = msg.text ?? msg.caption;
         const hasMedia = !!msg.photo;
