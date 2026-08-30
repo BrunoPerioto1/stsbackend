@@ -43,6 +43,8 @@ export class PendentesService {
       return { text: '🎉 Nada pendente!', keyboard: undefined as any };
     }
 
+    const header = `⏳ ${pendentes.length} pendente${pendentes.length === 1 ? '' : 's'}`;
+
     const pageSize = PendentesService.PAGE_SIZE;
     const totalPages = Math.ceil(pendentes.length / pageSize);
     const currentPage = Math.min(Math.max(page, 0), totalPages - 1);
@@ -119,6 +121,6 @@ export class PendentesService {
       }
     }
 
-    return { text: listText.trim(), keyboard: { inline_keyboard: keyboardRows } };
+    return { text: `${header}\n${listText}`.trim(), keyboard: { inline_keyboard: keyboardRows } };
   }
 }
