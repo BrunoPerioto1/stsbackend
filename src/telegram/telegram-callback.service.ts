@@ -190,7 +190,7 @@ export class TelegramCallbackService {
           return;
         }
         try {
-          await this.betTextService.processBetText(ctx, tip.text, undefined, tipId);
+          await this.betTextService.processBetText(ctx, tip.text, msg.message_id, tipId);
           await this.tipFanoutService.markDeliveredMessage(user, tipId, 'planilhado');
           await ctx.answerCbQuery('✅ Planilhado!');
         } catch {
