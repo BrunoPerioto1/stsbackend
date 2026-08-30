@@ -37,14 +37,10 @@ export class PendentesService {
   async buildMessage(user: { id: number; minPercentFilter?: number | null }, page = 0) {
     const minPercentFilter = user.minPercentFilter != null ? Number(user.minPercentFilter) : null;
     const rows = await this.tipsService.getSummaryForUser(user.id, minPercentFilter);
-    const planilhadas = rows.filter((r) => r.betId != null).length;
-    const caiu = rows.filter((r) => r.betId == null && r.dismissalId != null).length;
     const pendentes = rows.filter((r) => r.betId == null && r.dismissalId == null);
 
-    const header = `📊 ${rows.length} · ✅${planilhadas} · ❌${caiu} · ⏳${pendentes.length}`;
-
     if (pendentes.length === 0) {
-      return { text: `${header}\n\n🎉 Nada pendente!`, keyboard: undefined as any };
+      return { text: '🎉 Nada pendente!', keyboard: undefined as any };
     }
 
     const pageSize = PendentesService.PAGE_SIZE;
@@ -123,6 +119,6 @@ export class PendentesService {
       }
     }
 
-    return { text: `${header}\n${listText}`.trimEnd(), keyboard: { inline_keyboard: keyboardRows } };
+    return { text: listText.trim(), keyboard: { inline_keyboard: keyboardRows } };
   }
 }
