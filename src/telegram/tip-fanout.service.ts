@@ -58,10 +58,18 @@ export class TipFanoutService {
   // então as entidades precisam ser realinhadas junto — senão a cópia perde
   // todo link/formatação.
   async handleTipsMessage(text: string, chatId: number, messageId: number, hasMedia: boolean, entities?: any[]) {
-    const percent = extractPercent(text);
+    const rawPercent = extractPercent(text);
     const isAviso = isAvisoMessage(text);
-    console.log(`📨 handleTipsMessage: percent=${percent} isAviso=${isAviso} hasMedia=${hasMedia}`);
-    if (percent === null && !isAviso) return;
+    // AVISO/SOBRECARGA só tem o que planilhar quando é uma tip de verdade
+    // (com odd), não um comunicado puro ("envio finalizado, boa noite" etc.)
+    // — sem odd não tem como calcular nada, então nem mostra os botões nem
+    // finge que tem uma % válida (o "0.98%" que às vezes aparece solto numa
+    // frase de aviso não é uma recomendação real).
+    const hasOdd = extractOddFromText(text) !== null;
+    const showKeyboard = !isAviso || hasOdd;
+    const percent = showKeyboard ? rawPercent : null;
+    console.log(`📨 handleTipsMessage: percent=${percent} isAviso=${isAviso} hasMedia=${hasMedia} showKeyboard=${showKeyboard}`);
+    if (rawPercent === null && !isAviso) return;
 
     const tip = await this.tipsService.recordTip({
       chatId,
@@ -83,7 +91,7 @@ export class TipFanoutService {
       const stillMember = await this.isTipsGroupMember(user.telegramUserId as number);
       if (!stillMember) continue;
 
-      await this.sendTipCopyToUser(user, tip, chatId, messageId, hasMedia, baseText, baseEntities, text, limit);
+      await this.sendTipCopyToUser(user, tip, chatId, messageId, hasMedia, baseText, baseEntities, text, limit, showKeyboard);
     }
   }
 
@@ -102,6 +110,7 @@ export class TipFanoutService {
     baseEntities: any,
     originalText: string,
     limit: number | null,
+    showKeyboard = true,
   ) {
     let outgoingText = baseText;
     let outgoingEntities: any = baseEntities;
@@ -141,29 +150,34 @@ export class TipFanoutService {
         );
       }
 
+      const keyboard = showKeyboard ? this.tipsCopyKeyboard(tip.id) : undefined;
       const sent = hasMedia
         ? await this.bot.telegram.copyMessage(user.telegramUserId as number, chatId, messageId, {
             caption: outgoingText,
             caption_entities: outgoingEntities,
-            reply_markup: this.tipsCopyKeyboard(tip.id),
+            reply_markup: keyboard,
           })
         : await this.bot.telegram.sendMessage(user.telegramUserId as number, outgoingText, {
             entities: outgoingEntities,
-            reply_markup: this.tipsCopyKeyboard(tip.id),
+            reply_markup: keyboard,
           });
 
-      // Guarda essa cópia (texto/entidades exatos) pra dar pra editar depois
-      // — é o que permite o /pendentes marcar "✅ PLANILHADO"/"❌ APOSTA CAIU"
-      // direto na mensagem que o usuário recebeu, mesmo resolvendo pela lista
-      // em vez de clicar na mensagem original.
-      await this.tipsService.saveDelivery({
-        tipId: tip.id,
-        userId: user.id,
-        messageId: sent.message_id,
-        hasMedia,
-        text: outgoingText,
-        entities: outgoingEntities ?? null,
-      });
+      // Sem botão não tem o que resolver depois (nem Planilhar nem Caiu),
+      // então nem faz sentido guardar delivery pra essa cópia.
+      if (showKeyboard) {
+        // Guarda essa cópia (texto/entidades exatos) pra dar pra editar depois
+        // — é o que permite o /pendentes marcar "✅ PLANILHADO"/"❌ APOSTA CAIU"
+        // direto na mensagem que o usuário recebeu, mesmo resolvendo pela lista
+        // em vez de clicar na mensagem original.
+        await this.tipsService.saveDelivery({
+          tipId: tip.id,
+          userId: user.id,
+          messageId: sent.message_id,
+          hasMedia,
+          text: outgoingText,
+          entities: outgoingEntities ?? null,
+        });
+      }
     } catch (err) {
       console.error(`⚠️ Não foi possível enviar tip para o usuário (telegramUserId=${user.telegramUserId}):`, err);
     }
