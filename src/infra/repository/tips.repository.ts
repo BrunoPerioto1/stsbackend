@@ -66,6 +66,7 @@ export class TipsRepository {
         't.messageId',
         't.hasMedia',
         't.percent',
+        't.isAviso',
         't.createdAt',
         'b.id as betId',
         'd.id as dismissalId',

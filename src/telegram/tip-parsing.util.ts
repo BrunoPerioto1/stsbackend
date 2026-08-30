@@ -21,30 +21,46 @@ export function isAvisoMessage(text: string): boolean {
   return /\b(SOBRECARGA|AVISO)\b/i.test(text);
 }
 
+// Mensagens de SOBRECARGA/AVISO vêm num template diferente — texto puro,
+// sem 🏠/🆚/🏷 nenhum — mas sempre na mesma ordem depois da palavra-chave:
+// casa, jogo, esporte, mercado, odd. Serve de fallback pros extractors acima
+// quando o regex com emoji não bate.
+function getAvisoLines(text: string): string[] | null {
+  if (!isAvisoMessage(text)) return null;
+  const lines = text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const markerIndex = lines.findIndex((l) => /\b(SOBRECARGA|AVISO)\b/i.test(l));
+  if (markerIndex === -1) return null;
+  return lines.slice(markerIndex + 1);
+}
+
 export function extractOddFromText(text: string): number | null {
   if (!text) return null;
   const m = text.match(/🏷\s*([\d]+(?:[.,][\d]+)?)/);
-  if (!m) return null;
-  const val = Number(m[1].replace(',', '.'));
+  const raw = m?.[1] ?? getAvisoLines(text)?.[4];
+  if (!raw) return null;
+  const val = Number(raw.replace(',', '.'));
   return Number.isFinite(val) && val > 1 ? val : null;
 }
 
 export function extractHouseFromText(text: string): string | null {
   if (!text) return null;
   const m = text.match(/^🏠\s*(.+)$/m);
-  return m ? m[1].trim() : null;
+  return m ? m[1].trim() : (getAvisoLines(text)?.[0] ?? null);
 }
 
 export function extractGameFromText(text: string): string | null {
   if (!text) return null;
   const m = text.match(/^🆚\s*(.+)$/m);
-  return m ? m[1].trim() : null;
+  return m ? m[1].trim() : (getAvisoLines(text)?.[1] ?? null);
 }
 
 export function extractMarketFromText(text: string): string | null {
   if (!text) return null;
   const m = text.match(/^📌\s*(.+)$/m);
-  return m ? m[1].trim() : null;
+  return m ? m[1].trim() : (getAvisoLines(text)?.[3] ?? null);
 }
 
 export function extractLinkFromText(text: string): string | null {
