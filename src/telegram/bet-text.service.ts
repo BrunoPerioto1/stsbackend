@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { GrokService } from './grok.service';
-import { ApostaService } from '../bet/bet.service';
+import { BetService } from '../bet/bet.service';
 import { CreateBetDto } from '../bet/dto/bet.dto';
 import { UsersService } from '../users/users.service';
 import { HouseService } from '../house/house.service';
@@ -8,9 +8,11 @@ import { TipFanoutService } from './tip-fanout.service';
 import {
   EDIT_PROMPT_INSTRUCTIONS,
   UNLINKED_INSTRUCTIONS,
+} from './messages.const';
+import {
   extractLimitFromText,
   extractPercent,
-} from './tip-parsing.util';
+} from './utils/tip-extractors.util';
 
 // Transforma texto livre (DM ou tip) numa aposta salva, e trata o fluxo de
 // edição de odd/limite/casa que acontece antes disso (prompt de "✏️ Editar").
@@ -18,7 +20,7 @@ import {
 export class BetTextService {
   constructor(
     private readonly grokService: GrokService,
-    private readonly apostaService: ApostaService,
+    private readonly betService: BetService,
     private readonly usersService: UsersService,
     private readonly houseService: HouseService,
     private readonly tipFanoutService: TipFanoutService,
@@ -28,10 +30,19 @@ export class BetTextService {
   // quanto pelo clique em "Enviar ao Planilhador" na cópia individual do
   // grupo Tips. Quando vem de um clique (replyToMessageId presente), a
   // confirmação sai como resposta à própria tip, em vez de mensagem solta.
-  async processBetText(ctx: any, userMessage: string, replyToMessageId?: number, tipId?: number) {
+  async processBetText(
+    ctx: any,
+    userMessage: string,
+    replyToMessageId?: number,
+    tipId?: number,
+  ) {
     try {
-      const resolvedHouseId = await this.grokService.resolveHouseId(userMessage);
-      const jsonResult = await this.grokService.parseBetMessage(userMessage, resolvedHouseId);
+      const resolvedHouseId =
+        await this.grokService.resolveHouseId(userMessage);
+      const jsonResult = await this.grokService.parseBetMessage(
+        userMessage,
+        resolvedHouseId,
+      );
 
       const houseId = Number(jsonResult.houseId);
       const odd = Number(jsonResult.odd);
@@ -44,13 +55,18 @@ export class BetTextService {
       if (!user) throw new Error('UNLINKED');
 
       const userStake = await this.usersService.getUserStake(user.id);
-      let stake = percent !== null ? (percent / 100) * userStake : Number(jsonResult.stake);
+      let stake =
+        percent !== null
+          ? (percent / 100) * userStake
+          : Number(jsonResult.stake);
 
       const limit = extractLimitFromText(userMessage);
       if (limit !== null) stake = Math.min(stake, limit);
 
-      if (!Number.isFinite(houseId) || houseId <= 0) throw new Error('CASA_INVALIDA');
-      if (!Number.isFinite(stake) || stake <= 0) throw new Error('stake inválida');
+      if (!Number.isFinite(houseId) || houseId <= 0)
+        throw new Error('CASA_INVALIDA');
+      if (!Number.isFinite(stake) || stake <= 0)
+        throw new Error('stake inválida');
       if (!Number.isFinite(odd) || odd <= 1) throw new Error('odd inválida');
       if (!game) throw new Error('game vazio');
       if (!market) throw new Error('mercado vazio');
@@ -66,7 +82,7 @@ export class BetTextService {
         sport,
       };
 
-      const aposta = await this.apostaService.createBet(apostaData, tipId);
+      const aposta = await this.betService.createBet(apostaData, tipId);
 
       let houseName = 'N/A';
       try {
@@ -85,11 +101,15 @@ export class BetTextService {
 
       await ctx.reply(
         `✅ Aposta salva!\n\n🎮 Jogo: ${aposta.game}\n🕐 Horário: ${horario}\n💰 Stake: R$ ${aposta.stake}\n📈 Odd: ${aposta.odd}\n🏆 Mercado: ${aposta.market}\n⚽ Esporte: ${aposta.sport}\n🏢 Casa: ${houseName}`,
-        replyToMessageId ? { reply_parameters: { message_id: replyToMessageId } } : undefined,
+        replyToMessageId
+          ? { reply_parameters: { message_id: replyToMessageId } }
+          : undefined,
       );
     } catch (err) {
       console.error('❌ Erro ao processar aposta:', err);
-      const extra = replyToMessageId ? { reply_parameters: { message_id: replyToMessageId } } : undefined;
+      const extra = replyToMessageId
+        ? { reply_parameters: { message_id: replyToMessageId } }
+        : undefined;
       if ((err as Error).message === 'UNLINKED') {
         await ctx.reply(UNLINKED_INSTRUCTIONS, extra);
       } else if ((err as Error).message === 'CASA_INVALIDA') {
@@ -98,7 +118,10 @@ export class BetTextService {
           extra,
         );
       } else {
-        await ctx.reply(`❌ Erro ao processar aposta.\n${(err as Error).message}`, extra);
+        await ctx.reply(
+          `❌ Erro ao processar aposta.\n${(err as Error).message}`,
+          extra,
+        );
       }
       throw err;
     }
@@ -106,14 +129,21 @@ export class BetTextService {
 
   // Resposta (reply) a um prompt de "✏️ Editar": extrai a odd/limite novos e
   // o texto original (embutido no próprio prompt) e edita só essa mensagem.
-  async handleEditReply(ctx: any, promptText: string, headerMatch: RegExpMatchArray, replyText: string) {
+  async handleEditReply(
+    ctx: any,
+    promptText: string,
+    headerMatch: RegExpMatchArray,
+    replyText: string,
+  ) {
     const originalMessageId = Number(headerMatch[1]);
     const isMedia = headerMatch[2] === 'p';
     const tipId = headerMatch[3] ? Number(headerMatch[3]) : undefined;
     const sepIndex = promptText.indexOf('\n\n');
     const originalText = sepIndex >= 0 ? promptText.slice(sepIndex + 2) : '';
     if (!originalText) {
-      await ctx.reply('❌ Não consegui recuperar o texto original. Clica em Editar de novo.');
+      await ctx.reply(
+        '❌ Não consegui recuperar o texto original. Clica em Editar de novo.',
+      );
       return;
     }
 
@@ -128,7 +158,12 @@ export class BetTextService {
     } else if (lower.startsWith('odd')) {
       novaOdd = parseFloat(raw.slice(3).trim().replace(',', '.'));
     } else if (lower.startsWith('limite') || lower.startsWith('limit')) {
-      novoLimite = parseFloat(raw.replace(/^limite|^limit/i, '').trim().replace(',', '.'));
+      novoLimite = parseFloat(
+        raw
+          .replace(/^limite|^limit/i, '')
+          .trim()
+          .replace(',', '.'),
+      );
     } else {
       const parts = raw.split(/\s+/);
       if (parts.length >= 2) {
@@ -158,10 +193,16 @@ export class BetTextService {
 
     let novoTexto = originalText;
     if (novaOdd !== null) {
-      novoTexto = novoTexto.replace(/🏷\s*([\d]+(?:[.,][\d]+)?)/, `🏷 ${novaOdd.toFixed(2)}`);
+      novoTexto = novoTexto.replace(
+        /🏷\s*([\d]+(?:[.,][\d]+)?)/,
+        `🏷 ${novaOdd.toFixed(2)}`,
+      );
     }
     if (novoLimite !== null) {
-      novoTexto = novoTexto.replace(/(🚦[^\n]*R\$\s*)([\d.,]+)/, `$1${novoLimite.toFixed(2)}`);
+      novoTexto = novoTexto.replace(
+        /(🚦[^\n]*R\$\s*)([\d.,]+)/,
+        `$1${novoLimite.toFixed(2)}`,
+      );
     }
     if (novaCasa) {
       novoTexto = novoTexto.replace(/^🏠\s*.*$/m, `🏠 ${novaCasa}`);
@@ -169,15 +210,29 @@ export class BetTextService {
 
     try {
       if (isMedia) {
-        await ctx.telegram.editMessageCaption(ctx.chat.id, originalMessageId, undefined, novoTexto, {
-          reply_markup: this.tipFanoutService.tipsCopyKeyboard(tipId),
-        });
+        await ctx.telegram.editMessageCaption(
+          ctx.chat.id,
+          originalMessageId,
+          undefined,
+          novoTexto,
+          {
+            reply_markup: this.tipFanoutService.tipsCopyKeyboard(tipId),
+          },
+        );
       } else {
-        await ctx.telegram.editMessageText(ctx.chat.id, originalMessageId, undefined, novoTexto, {
-          reply_markup: this.tipFanoutService.tipsCopyKeyboard(tipId),
-        });
+        await ctx.telegram.editMessageText(
+          ctx.chat.id,
+          originalMessageId,
+          undefined,
+          novoTexto,
+          {
+            reply_markup: this.tipFanoutService.tipsCopyKeyboard(tipId),
+          },
+        );
       }
-      await ctx.reply('✅ Aposta atualizada!', { reply_parameters: { message_id: originalMessageId } });
+      await ctx.reply('✅ Aposta atualizada!', {
+        reply_parameters: { message_id: originalMessageId },
+      });
     } catch (err) {
       console.error('❌ Erro ao editar aposta individual:', err);
       await ctx.reply('❌ Erro ao atualizar. Tenta de novo.');

@@ -1,16 +1,27 @@
 import { Injectable } from '@nestjs/common';
 import { TipsService } from '../tips/tips.service';
+import { escapeHtml } from './utils/tip-text.util';
 import {
-  escapeHtml,
   extractGameFromText,
   extractHouseFromText,
   extractLimitFromText,
   extractLinkFromText,
   extractMarketFromText,
   extractOddFromText,
-} from './tip-parsing.util';
+} from './utils/tip-extractors.util';
 
-const KEYCAP_DIGITS = ['0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
+const KEYCAP_DIGITS = [
+  '0️⃣',
+  '1️⃣',
+  '2️⃣',
+  '3️⃣',
+  '4️⃣',
+  '5️⃣',
+  '6️⃣',
+  '7️⃣',
+  '8️⃣',
+  '9️⃣',
+];
 
 function toKeycapNumber(n: number): string {
   return String(n)
@@ -20,7 +31,9 @@ function toKeycapNumber(n: number): string {
 }
 
 function formatCompactMoney(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace('.', ',');
+  return Number.isInteger(value)
+    ? String(value)
+    : value.toFixed(2).replace('.', ',');
 }
 
 // Monta o resumo + lista paginada do /pendentes: total de tips relevantes
@@ -34,10 +47,19 @@ export class PendentesService {
 
   constructor(private readonly tipsService: TipsService) {}
 
-  async buildMessage(user: { id: number; minPercentFilter?: number | null }, page = 0) {
-    const minPercentFilter = user.minPercentFilter != null ? Number(user.minPercentFilter) : null;
-    const rows = await this.tipsService.getSummaryForUser(user.id, minPercentFilter);
-    const pendentes = rows.filter((r) => r.betId == null && r.dismissalId == null);
+  async buildMessage(
+    user: { id: number; minPercentFilter?: number | null },
+    page = 0,
+  ) {
+    const minPercentFilter =
+      user.minPercentFilter != null ? Number(user.minPercentFilter) : null;
+    const rows = await this.tipsService.getSummaryForUser(
+      user.id,
+      minPercentFilter,
+    );
+    const pendentes = rows.filter(
+      (r) => r.betId == null && r.dismissalId == null,
+    );
 
     if (pendentes.length === 0) {
       return { text: '🎉 Nada pendente!', keyboard: undefined as any };
@@ -48,7 +70,10 @@ export class PendentesService {
     const pageSize = PendentesService.PAGE_SIZE;
     const totalPages = Math.ceil(pendentes.length / pageSize);
     const currentPage = Math.min(Math.max(page, 0), totalPages - 1);
-    const pageItems = pendentes.slice(currentPage * pageSize, currentPage * pageSize + pageSize);
+    const pageItems = pendentes.slice(
+      currentPage * pageSize,
+      currentPage * pageSize + pageSize,
+    );
 
     let listText = '';
     const keyboardRows: any[] = [];
@@ -75,9 +100,13 @@ export class PendentesService {
       const odd = extractOddFromText(tip.text);
       const limit = extractLimitFromText(tip.text);
       const link = extractLinkFromText(tip.text);
-      const percentLabel = tip.percent !== null ? `${Number(tip.percent).toFixed(2).replace('.', ',')}%` : '?';
+      const percentLabel =
+        tip.percent !== null
+          ? `${Number(tip.percent).toFixed(2).replace('.', ',')}%`
+          : '?';
       const oddLabel = odd !== null ? ` | 🏷${odd.toFixed(2)}` : '';
-      const limitLabel = limit !== null ? ` | 🚦${formatCompactMoney(limit)}` : '';
+      const limitLabel =
+        limit !== null ? ` | 🚦${formatCompactMoney(limit)}` : '';
 
       listText += `${toKeycapNumber(counter)} ${time} | ${house} | ${game}${oddLabel}${limitLabel} | ${percentLabel}\n`;
       if (tip.isAviso) listText += `   ⚠️ SOBRECARGA\n`;
@@ -89,20 +118,35 @@ export class PendentesService {
       listText += '\n';
 
       keyboardRows.push([
-        { text: '✅ Planilhar', callback_data: `lista_planilhar:${tip.id}:${currentPage}` },
-        { text: '❌ Caiu', callback_data: `lista_caiu:${tip.id}:${currentPage}` },
-        { text: '✏️ Editar', callback_data: `lista_editar:${tip.id}:${currentPage}` },
+        {
+          text: '✅ Planilhar',
+          callback_data: `lista_planilhar:${tip.id}:${currentPage}`,
+        },
+        {
+          text: '❌ Caiu',
+          callback_data: `lista_caiu:${tip.id}:${currentPage}`,
+        },
+        {
+          text: '✏️ Editar',
+          callback_data: `lista_editar:${tip.id}:${currentPage}`,
+        },
       ]);
     }
 
     if (totalPages > 1) {
       keyboardRows.push([
         currentPage > 0
-          ? { text: '◀️ Anterior', callback_data: `lista_pagina:${currentPage - 1}` }
+          ? {
+              text: '◀️ Anterior',
+              callback_data: `lista_pagina:${currentPage - 1}`,
+            }
           : { text: ' ', callback_data: 'noop' },
         { text: `${currentPage + 1}/${totalPages}`, callback_data: 'noop' },
         currentPage < totalPages - 1
-          ? { text: 'Próxima ▶️', callback_data: `lista_pagina:${currentPage + 1}` }
+          ? {
+              text: 'Próxima ▶️',
+              callback_data: `lista_pagina:${currentPage + 1}`,
+            }
           : { text: ' ', callback_data: 'noop' },
       ]);
 
@@ -112,15 +156,24 @@ export class PendentesService {
       if (totalPages > jump) {
         keyboardRows.push([
           currentPage > 0
-            ? { text: `⏪ -${jump}`, callback_data: `lista_pagina:${Math.max(0, currentPage - jump)}` }
+            ? {
+                text: `⏪ -${jump}`,
+                callback_data: `lista_pagina:${Math.max(0, currentPage - jump)}`,
+              }
             : { text: ' ', callback_data: 'noop' },
           currentPage < totalPages - 1
-            ? { text: `+${jump} ⏩`, callback_data: `lista_pagina:${Math.min(totalPages - 1, currentPage + jump)}` }
+            ? {
+                text: `+${jump} ⏩`,
+                callback_data: `lista_pagina:${Math.min(totalPages - 1, currentPage + jump)}`,
+              }
             : { text: ' ', callback_data: 'noop' },
         ]);
       }
     }
 
-    return { text: `${header}\n${listText}`.trim(), keyboard: { inline_keyboard: keyboardRows } };
+    return {
+      text: `${header}\n${listText}`.trim(),
+      keyboard: { inline_keyboard: keyboardRows },
+    };
   }
 }

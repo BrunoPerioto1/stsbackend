@@ -6,7 +6,7 @@ import { BotCommandsService } from './bot-commands.service';
 import { BetTextService } from './bet-text.service';
 import { TipFanoutService } from './tip-fanout.service';
 import { TelegramCallbackService } from './telegram-callback.service';
-import { EDIT_PROMPT_HEADER_RE } from './tip-parsing.util';
+import { EDIT_PROMPT_HEADER_RE } from './messages.const';
 
 dotenv.config();
 
@@ -42,7 +42,9 @@ export class TelegramService implements OnModuleInit {
 
   private registerHandlers() {
     this.bot.command('start', (ctx) => this.botCommands.handleStart(ctx));
-    this.bot.command('pendentes', (ctx) => this.botCommands.handlePendentes(ctx));
+    this.bot.command('pendentes', (ctx) =>
+      this.botCommands.handlePendentes(ctx),
+    );
     this.bot.command('site', (ctx) => this.botCommands.handleSite(ctx));
     this.bot.command('filtro', (ctx) => this.botCommands.handleFiltro(ctx));
     this.bot.command('stake', (ctx) => this.botCommands.handleStake(ctx));
@@ -64,7 +66,14 @@ export class TelegramService implements OnModuleInit {
         const text = msg.text ?? msg.caption;
         const hasMedia = !!msg.photo;
         const entities = msg.entities ?? msg.caption_entities;
-        if (text) await this.tipFanoutService.handleTipsMessage(text, ctx.chat.id, msg.message_id, hasMedia, entities);
+        if (text)
+          await this.tipFanoutService.handleTipsMessage(
+            text,
+            ctx.chat.id,
+            msg.message_id,
+            hasMedia,
+            entities,
+          );
         return;
       }
 
@@ -72,7 +81,12 @@ export class TelegramService implements OnModuleInit {
       const replyToText = msg.reply_to_message?.text as string | undefined;
       const headerMatch = replyToText?.match(EDIT_PROMPT_HEADER_RE);
       if (headerMatch && replyToText) {
-        await this.betTextService.handleEditReply(ctx, replyToText, headerMatch, msg.text ?? '');
+        await this.betTextService.handleEditReply(
+          ctx,
+          replyToText,
+          headerMatch,
+          msg.text ?? '',
+        );
         return;
       }
 

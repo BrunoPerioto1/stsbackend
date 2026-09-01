@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { PendentesService } from './pendentes.service';
-import { UNLINKED_INSTRUCTIONS } from './tip-parsing.util';
+import { UNLINKED_INSTRUCTIONS } from './messages.const';
 
 // Os comandos "simples" do bot — cada um só conversa com o usuário que
 // chamou, sem envolver fan-out de tips nem callback_query.
@@ -66,21 +66,29 @@ export class BotCommandsService {
       if (args.length !== 2 || args[1].toLowerCase() === 'off') {
         if (args.length === 2 && args[1].toLowerCase() === 'off') {
           await this.usersService.setMinPercentFilter(telegramUserId, null);
-          await ctx.reply('✅ Filtro removido. Você vai receber todas as tips do grupo.');
+          await ctx.reply(
+            '✅ Filtro removido. Você vai receber todas as tips do grupo.',
+          );
           return;
         }
-        await ctx.reply('❌ Formato incorreto. Use: /filtro VALOR (ex.: /filtro 1.5) ou /filtro off');
+        await ctx.reply(
+          '❌ Formato incorreto. Use: /filtro VALOR (ex.: /filtro 1.5) ou /filtro off',
+        );
         return;
       }
 
       const value = Number(args[1].replace(',', '.'));
       if (!Number.isFinite(value) || value < 0) {
-        await ctx.reply('❌ Valor inválido. Informe um número maior ou igual a zero.');
+        await ctx.reply(
+          '❌ Valor inválido. Informe um número maior ou igual a zero.',
+        );
         return;
       }
 
       await this.usersService.setMinPercentFilter(telegramUserId, value);
-      await ctx.reply(`✅ Filtro definido: só chegam tips com porcentagem >= ${value}%`);
+      await ctx.reply(
+        `✅ Filtro definido: só chegam tips com porcentagem >= ${value}%`,
+      );
     } catch (error) {
       console.error('Erro ao atualizar filtro:', error);
       await ctx.reply('❌ Erro ao atualizar seu filtro. Tente novamente.');
@@ -90,7 +98,9 @@ export class BotCommandsService {
   async handleStake(ctx: any) {
     const args = ctx.message.text.split(' ');
     if (args.length !== 2) {
-      await ctx.reply('❌ Formato incorreto. Use: /stake VALOR\nExemplo: /stake 2000');
+      await ctx.reply(
+        '❌ Formato incorreto. Use: /stake VALOR\nExemplo: /stake 2000',
+      );
       return;
     }
 
@@ -109,7 +119,9 @@ export class BotCommandsService {
 
       await this.usersService.updateUserStake(user.id, value);
 
-      await ctx.reply(`✅ Banca definida: R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+      await ctx.reply(
+        `✅ Banca definida: R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+      );
     } catch (error) {
       console.error('Erro ao atualizar stake:', error);
       await ctx.reply('❌ Erro ao atualizar sua banca. Tente novamente.');

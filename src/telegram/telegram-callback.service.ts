@@ -4,14 +4,14 @@ import { TipsService } from '../tips/tips.service';
 import { BetTextService } from './bet-text.service';
 import { TipFanoutService } from './tip-fanout.service';
 import { PendentesService } from './pendentes.service';
+import { EDIT_PROMPT_INSTRUCTIONS } from './messages.const';
+import { escapeHtml } from './utils/tip-text.util';
 import {
-  EDIT_PROMPT_INSTRUCTIONS,
-  escapeHtml,
   extractHouseFromText,
   extractLimitFromText,
   extractOddFromText,
-  parseCallbackAction,
-} from './tip-parsing.util';
+} from './utils/tip-extractors.util';
+import { parseCallbackAction } from './utils/callback-parsing.util';
 
 // Dispatcher de callback_query: os botões da cópia individual (Planilhar /
 // Editar / Aposta Caiu / Voltar) e os da lista compacta do /pendentes
@@ -27,7 +27,7 @@ export class TelegramCallbackService {
   ) {}
 
   async handle(ctx: any) {
-    const query = ctx.callbackQuery as any;
+    const query = ctx.callbackQuery;
     const msg = query.message;
     const text: string | undefined = msg?.text ?? msg?.caption;
     const isMedia = !!msg?.photo;
@@ -45,15 +45,28 @@ export class TelegramCallbackService {
         return;
       }
       try {
-        await this.betTextService.processBetText(ctx, text, msg.message_id, tipId ?? undefined);
+        await this.betTextService.processBetText(
+          ctx,
+          text,
+          msg.message_id,
+          tipId ?? undefined,
+        );
         const novoTexto = `✅ PLANILHADO\n\n${text}`;
-        const doneKeyboard = { inline_keyboard: [[{ text: '✅ Planilhado', callback_data: 'done' }]] };
-        if (isMedia) await ctx.editMessageCaption(novoTexto, { reply_markup: doneKeyboard });
-        else await ctx.editMessageText(novoTexto, { reply_markup: doneKeyboard });
+        const doneKeyboard = {
+          inline_keyboard: [[{ text: '✅ Planilhado', callback_data: 'done' }]],
+        };
+        if (isMedia)
+          await ctx.editMessageCaption(novoTexto, {
+            reply_markup: doneKeyboard,
+          });
+        else
+          await ctx.editMessageText(novoTexto, { reply_markup: doneKeyboard });
         await ctx.answerCbQuery('✅ Planilhado!');
       } catch (err) {
         console.error('❌ Erro ao planilhar via callback:', err);
-        await ctx.answerCbQuery('❌ Erro ao planilhar. Veja o chat para detalhes.');
+        await ctx.answerCbQuery(
+          '❌ Erro ao planilhar. Veja o chat para detalhes.',
+        );
       }
       return;
     }
@@ -70,13 +83,19 @@ export class TelegramCallbackService {
       const preamble = `${header}\n🏷 Odd atual: ${currentOdd ?? '?'}\n🚦 Limite atual: ${currentLimit ?? '?'}\n🏠 Casa atual: ${currentHouse ?? '?'}\n${EDIT_PROMPT_INSTRUCTIONS}\n\n`;
       await ctx.answerCbQuery();
       try {
-        await ctx.reply(`${preamble}<blockquote expandable>${escapeHtml(text)}</blockquote>`, {
-          parse_mode: 'HTML',
-          reply_markup: { force_reply: true },
-          link_preview_options: { is_disabled: true },
-        });
+        await ctx.reply(
+          `${preamble}<blockquote expandable>${escapeHtml(text)}</blockquote>`,
+          {
+            parse_mode: 'HTML',
+            reply_markup: { force_reply: true },
+            link_preview_options: { is_disabled: true },
+          },
+        );
       } catch (err) {
-        console.error('⚠️ Falha ao mandar prompt de edição com blockquote, caindo pra texto simples:', err);
+        console.error(
+          '⚠️ Falha ao mandar prompt de edição com blockquote, caindo pra texto simples:',
+          err,
+        );
         await ctx.reply(`${preamble}${text}`, {
           reply_markup: { force_reply: true },
           link_preview_options: { is_disabled: true },
@@ -97,10 +116,26 @@ export class TelegramCallbackService {
       const novoTexto = `❌ APOSTA CAIU\n\n${text}`;
       const voltarData = tipId !== null ? `voltar:${tipId}` : 'voltar';
       try {
-        if (isMedia) await ctx.editMessageCaption(novoTexto, { reply_markup: { inline_keyboard: [[{ text: '↩️ Voltar', callback_data: voltarData }]] } });
-        else await ctx.editMessageText(novoTexto, { reply_markup: { inline_keyboard: [[{ text: '↩️ Voltar', callback_data: voltarData }]] } });
+        if (isMedia)
+          await ctx.editMessageCaption(novoTexto, {
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '↩️ Voltar', callback_data: voltarData }],
+              ],
+            },
+          });
+        else
+          await ctx.editMessageText(novoTexto, {
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '↩️ Voltar', callback_data: voltarData }],
+              ],
+            },
+          });
         if (tipId !== null) {
-          const user = await this.usersService.findByTelegramUserId(ctx.from.id);
+          const user = await this.usersService.findByTelegramUserId(
+            ctx.from.id,
+          );
           if (user) await this.tipsService.dismissTip(tipId, user.id);
         }
         await ctx.answerCbQuery('❌ Marcado como aposta caiu!');
@@ -118,10 +153,22 @@ export class TelegramCallbackService {
       }
       const restaurado = text.replace(/^❌ APOSTA CAIU\n\n/, '');
       try {
-        if (isMedia) await ctx.editMessageCaption(restaurado, { reply_markup: this.tipFanoutService.tipsCopyKeyboard(tipId ?? undefined) });
-        else await ctx.editMessageText(restaurado, { reply_markup: this.tipFanoutService.tipsCopyKeyboard(tipId ?? undefined) });
+        if (isMedia)
+          await ctx.editMessageCaption(restaurado, {
+            reply_markup: this.tipFanoutService.tipsCopyKeyboard(
+              tipId ?? undefined,
+            ),
+          });
+        else
+          await ctx.editMessageText(restaurado, {
+            reply_markup: this.tipFanoutService.tipsCopyKeyboard(
+              tipId ?? undefined,
+            ),
+          });
         if (tipId !== null) {
-          const user = await this.usersService.findByTelegramUserId(ctx.from.id);
+          const user = await this.usersService.findByTelegramUserId(
+            ctx.from.id,
+          );
           if (user) await this.tipsService.undismissTip(tipId, user.id);
         }
         await ctx.answerCbQuery('↩️ Voltando');
@@ -142,7 +189,8 @@ export class TelegramCallbackService {
         return;
       }
       try {
-        const { text: summaryText, keyboard } = await this.pendentesService.buildMessage(user, page);
+        const { text: summaryText, keyboard } =
+          await this.pendentesService.buildMessage(user, page);
         await ctx.editMessageText(summaryText, {
           parse_mode: 'HTML',
           link_preview_options: { is_disabled: true },
@@ -161,7 +209,11 @@ export class TelegramCallbackService {
     // args[1], pra continuar na mesma página depois de resolver um item),
     // e resolver um item atualiza a própria mensagem-lista em vez de gerar
     // mensagem nova (é isso que evita poluir o chat de novo).
-    if (action === 'lista_planilhar' || action === 'lista_caiu' || action === 'lista_editar') {
+    if (
+      action === 'lista_planilhar' ||
+      action === 'lista_caiu' ||
+      action === 'lista_editar'
+    ) {
       if (tipId === null) {
         await ctx.answerCbQuery('❌ Referência inválida.');
         return;
@@ -175,7 +227,9 @@ export class TelegramCallbackService {
 
       if (action === 'lista_editar') {
         const sent = await this.tipFanoutService.resendTipCard(user, tipId);
-        await ctx.answerCbQuery(sent ? '📤 Reenviado! Edita por lá.' : '❌ Tip não encontrada.');
+        await ctx.answerCbQuery(
+          sent ? '📤 Reenviado! Edita por lá.' : '❌ Tip não encontrada.',
+        );
         return;
       }
 
@@ -190,17 +244,29 @@ export class TelegramCallbackService {
           return;
         }
         try {
-          await this.betTextService.processBetText(ctx, tip.text, msg.message_id, tipId);
-          await this.tipFanoutService.markDeliveredMessage(user, tipId, 'planilhado');
+          await this.betTextService.processBetText(
+            ctx,
+            tip.text,
+            msg.message_id,
+            tipId,
+          );
+          await this.tipFanoutService.markDeliveredMessage(
+            user,
+            tipId,
+            'planilhado',
+          );
           await ctx.answerCbQuery('✅ Planilhado!');
         } catch {
-          await ctx.answerCbQuery('❌ Erro ao planilhar. Veja a mensagem no chat.');
+          await ctx.answerCbQuery(
+            '❌ Erro ao planilhar. Veja a mensagem no chat.',
+          );
           return;
         }
       }
 
       try {
-        const { text: summaryText, keyboard } = await this.pendentesService.buildMessage(user, page);
+        const { text: summaryText, keyboard } =
+          await this.pendentesService.buildMessage(user, page);
         await ctx.editMessageText(summaryText, {
           parse_mode: 'HTML',
           link_preview_options: { is_disabled: true },

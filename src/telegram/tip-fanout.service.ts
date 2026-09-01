@@ -4,13 +4,15 @@ import { TELEGRAM_BOT } from './telegram-bot.provider';
 import { UsersService } from '../users/users.service';
 import { TipsService } from '../tips/tips.service';
 import {
-  TIP_BOILERPLATE_PATTERNS,
   extractLimitFromText,
   extractOddFromText,
   extractPercent,
   isAvisoMessage,
+} from './utils/tip-extractors.util';
+import {
+  TIP_BOILERPLATE_PATTERNS,
   stripBoilerplateParagraphs,
-} from './tip-parsing.util';
+} from './utils/tip-text.util';
 
 // Tudo que envolve entregar uma tip pro DM individual de cada usuário: o
 // fan-out ao vivo (quando a tip chega no grupo), o reenvio avulso de um item
@@ -26,9 +28,14 @@ export class TipFanoutService {
     private readonly tipsService: TipsService,
   ) {
     const tipsGroupChatId = Number(process.env.TIPS_GROUP_CHAT_ID);
-    this.tipsGroupChatId = Number.isFinite(tipsGroupChatId) && tipsGroupChatId !== 0 ? tipsGroupChatId : null;
+    this.tipsGroupChatId =
+      Number.isFinite(tipsGroupChatId) && tipsGroupChatId !== 0
+        ? tipsGroupChatId
+        : null;
     if (!this.tipsGroupChatId) {
-      console.warn('⚠️  TIPS_GROUP_CHAT_ID não definido — o fan-out multiusuário do grupo Tips ficará desativado.');
+      console.warn(
+        '⚠️  TIPS_GROUP_CHAT_ID não definido — o fan-out multiusuário do grupo Tips ficará desativado.',
+      );
     }
   }
 
@@ -40,8 +47,16 @@ export class TipFanoutService {
     const suffix = tipId !== undefined ? `:${tipId}` : '';
     return {
       inline_keyboard: [
-        [{ text: '📊 Enviar ao Planilhador', callback_data: `planilhar${suffix}` }],
-        [{ text: '✏️ Editar', callback_data: `editar${suffix}` }, { text: '❌ Aposta Caiu', callback_data: `aposta_caiu${suffix}` }],
+        [
+          {
+            text: '📊 Enviar ao Planilhador',
+            callback_data: `planilhar${suffix}`,
+          },
+        ],
+        [
+          { text: '✏️ Editar', callback_data: `editar${suffix}` },
+          { text: '❌ Aposta Caiu', callback_data: `aposta_caiu${suffix}` },
+        ],
       ],
     };
   }
@@ -57,7 +72,13 @@ export class TipFanoutService {
   // sempre reconstruímos o texto (tira boilerplate, acrescenta recomendação),
   // então as entidades precisam ser realinhadas junto — senão a cópia perde
   // todo link/formatação.
-  async handleTipsMessage(text: string, chatId: number, messageId: number, hasMedia: boolean, entities?: any[]) {
+  async handleTipsMessage(
+    text: string,
+    chatId: number,
+    messageId: number,
+    hasMedia: boolean,
+    entities?: any[],
+  ) {
     const rawPercent = extractPercent(text);
     const isAviso = isAvisoMessage(text);
     // AVISO/SOBRECARGA só tem o que planilhar quando é uma tip de verdade
@@ -68,7 +89,9 @@ export class TipFanoutService {
     const hasOdd = extractOddFromText(text) !== null;
     const showKeyboard = !isAviso || hasOdd;
     const percent = showKeyboard ? rawPercent : null;
-    console.log(`📨 handleTipsMessage: percent=${percent} isAviso=${isAviso} hasMedia=${hasMedia} showKeyboard=${showKeyboard}`);
+    console.log(
+      `📨 handleTipsMessage: percent=${percent} isAviso=${isAviso} hasMedia=${hasMedia} showKeyboard=${showKeyboard}`,
+    );
     if (rawPercent === null && !isAviso) return;
 
     const tip = await this.tipsService.recordTip({
@@ -83,15 +106,34 @@ export class TipFanoutService {
 
     const users = await this.usersService.getUsersForTipsFanout();
     const limit = extractLimitFromText(text);
-    const { text: baseText, entities: baseEntities } = stripBoilerplateParagraphs(text, entities, TIP_BOILERPLATE_PATTERNS);
+    const { text: baseText, entities: baseEntities } =
+      stripBoilerplateParagraphs(text, entities, TIP_BOILERPLATE_PATTERNS);
 
     for (const user of users) {
-      if (percent !== null && user.minPercentFilter !== null && percent < Number(user.minPercentFilter)) continue;
+      if (
+        percent !== null &&
+        user.minPercentFilter !== null &&
+        percent < Number(user.minPercentFilter)
+      )
+        continue;
 
-      const stillMember = await this.isTipsGroupMember(user.telegramUserId as number);
+      const stillMember = await this.isTipsGroupMember(
+        user.telegramUserId as number,
+      );
       if (!stillMember) continue;
 
-      await this.sendTipCopyToUser(user, tip, chatId, messageId, hasMedia, baseText, baseEntities, text, limit, showKeyboard);
+      await this.sendTipCopyToUser(
+        user,
+        tip,
+        chatId,
+        messageId,
+        hasMedia,
+        baseText,
+        baseEntities,
+        text,
+        limit,
+        showKeyboard,
+      );
     }
   }
 
@@ -123,18 +165,27 @@ export class TipFanoutService {
       if (percent !== null) {
         const userStake = await this.usersService.getUserStake(user.id);
         let recommendedStake = (percent / 100) * userStake;
-        if (limit !== null) recommendedStake = Math.min(recommendedStake, limit);
+        if (limit !== null)
+          recommendedStake = Math.min(recommendedStake, limit);
 
-        const recommendationValue = recommendedStake.toFixed(2).replace('.', ',');
+        const recommendationValue = recommendedStake
+          .toFixed(2)
+          .replace('.', ',');
         const recommendationLine = `🎯 Recomendação de aposta: R$ ${recommendationValue}`;
         outgoingEntities = [
           ...(baseEntities ?? []),
-          { type: 'bold', offset: baseText.length + 2, length: recommendationLine.length },
+          {
+            type: 'bold',
+            offset: baseText.length + 2,
+            length: recommendationLine.length,
+          },
         ];
 
         const odd = extractOddFromText(originalText);
         if (odd !== null) {
-          const lucroValue = (recommendedStake * odd - recommendedStake).toFixed(2).replace('.', ',');
+          const lucroValue = (recommendedStake * odd - recommendedStake)
+            .toFixed(2)
+            .replace('.', ',');
           const lucroLine = `💰 Lucro potencial: R$ ${lucroValue}`;
           outgoingText = `${baseText}\n\n${recommendationLine}\n${lucroLine}`;
           outgoingEntities.push({
@@ -152,15 +203,24 @@ export class TipFanoutService {
 
       const keyboard = showKeyboard ? this.tipsCopyKeyboard(tip.id) : undefined;
       const sent = hasMedia
-        ? await this.bot.telegram.copyMessage(user.telegramUserId as number, chatId, messageId, {
-            caption: outgoingText,
-            caption_entities: outgoingEntities,
-            reply_markup: keyboard,
-          })
-        : await this.bot.telegram.sendMessage(user.telegramUserId as number, outgoingText, {
-            entities: outgoingEntities,
-            reply_markup: keyboard,
-          });
+        ? await this.bot.telegram.copyMessage(
+            user.telegramUserId as number,
+            chatId,
+            messageId,
+            {
+              caption: outgoingText,
+              caption_entities: outgoingEntities,
+              reply_markup: keyboard,
+            },
+          )
+        : await this.bot.telegram.sendMessage(
+            user.telegramUserId as number,
+            outgoingText,
+            {
+              entities: outgoingEntities,
+              reply_markup: keyboard,
+            },
+          );
 
       // Sem botão não tem o que resolver depois (nem Planilhar nem Caiu),
       // então nem faz sentido guardar delivery pra essa cópia.
@@ -179,7 +239,10 @@ export class TipFanoutService {
         });
       }
     } catch (err) {
-      console.error(`⚠️ Não foi possível enviar tip para o usuário (telegramUserId=${user.telegramUserId}):`, err);
+      console.error(
+        `⚠️ Não foi possível enviar tip para o usuário (telegramUserId=${user.telegramUserId}):`,
+        err,
+      );
     }
   }
 
@@ -187,17 +250,31 @@ export class TipFanoutService {
   // card completo de sempre — reaproveita sendTipCopyToUser, então ganha o
   // mesmo Planilhar/Editar/Aposta Caiu que a tip teria tido na hora que
   // chegou no grupo.
-  async resendTipCard(user: { id: number; telegramUserId: number | null }, tipId: number): Promise<boolean> {
+  async resendTipCard(
+    user: { id: number; telegramUserId: number | null },
+    tipId: number,
+  ): Promise<boolean> {
     const tip = await this.tipsService.findById(tipId);
     if (!tip) return false;
 
-    const { text: baseText, entities: baseEntities } = stripBoilerplateParagraphs(
-      tip.text,
-      tip.entities ?? undefined,
-      TIP_BOILERPLATE_PATTERNS,
-    );
+    const { text: baseText, entities: baseEntities } =
+      stripBoilerplateParagraphs(
+        tip.text,
+        tip.entities ?? undefined,
+        TIP_BOILERPLATE_PATTERNS,
+      );
     const limit = extractLimitFromText(tip.text);
-    await this.sendTipCopyToUser(user, tip, tip.chatId, tip.messageId, tip.hasMedia, baseText, baseEntities, tip.text, limit);
+    await this.sendTipCopyToUser(
+      user,
+      tip,
+      tip.chatId,
+      tip.messageId,
+      tip.hasMedia,
+      baseText,
+      baseEntities,
+      tip.text,
+      limit,
+    );
     return true;
   }
 
@@ -220,20 +297,43 @@ export class TipFanoutService {
       const novoTexto = `${prefix}\n\n${delivery.text}`;
       const keyboard =
         kind === 'caiu'
-          ? { inline_keyboard: [[{ text: '↩️ Voltar', callback_data: `voltar:${tipId}` }]] }
-          : { inline_keyboard: [[{ text: '✅ Planilhado', callback_data: 'done' }]] };
+          ? {
+              inline_keyboard: [
+                [{ text: '↩️ Voltar', callback_data: `voltar:${tipId}` }],
+              ],
+            }
+          : {
+              inline_keyboard: [
+                [{ text: '✅ Planilhado', callback_data: 'done' }],
+              ],
+            };
 
       if (delivery.hasMedia) {
-        await this.bot.telegram.editMessageCaption(user.telegramUserId, delivery.messageId, undefined, novoTexto, {
-          reply_markup: keyboard,
-        });
+        await this.bot.telegram.editMessageCaption(
+          user.telegramUserId,
+          delivery.messageId,
+          undefined,
+          novoTexto,
+          {
+            reply_markup: keyboard,
+          },
+        );
       } else {
-        await this.bot.telegram.editMessageText(user.telegramUserId, delivery.messageId, undefined, novoTexto, {
-          reply_markup: keyboard,
-        });
+        await this.bot.telegram.editMessageText(
+          user.telegramUserId,
+          delivery.messageId,
+          undefined,
+          novoTexto,
+          {
+            reply_markup: keyboard,
+          },
+        );
       }
     } catch (err) {
-      console.error(`⚠️ Não foi possível atualizar a mensagem original da tip (tipId=${tipId}):`, err);
+      console.error(
+        `⚠️ Não foi possível atualizar a mensagem original da tip (tipId=${tipId}):`,
+        err,
+      );
     }
   }
 
@@ -242,10 +342,16 @@ export class TipFanoutService {
   private async isTipsGroupMember(telegramUserId: number): Promise<boolean> {
     if (!this.tipsGroupChatId) return true;
     try {
-      const member = await this.bot.telegram.getChatMember(this.tipsGroupChatId, telegramUserId);
+      const member = await this.bot.telegram.getChatMember(
+        this.tipsGroupChatId,
+        telegramUserId,
+      );
       return member.status !== 'left' && member.status !== 'kicked';
     } catch (err) {
-      console.error(`⚠️ Não foi possível checar membro do grupo Tips (telegramUserId=${telegramUserId}):`, err);
+      console.error(
+        `⚠️ Não foi possível checar membro do grupo Tips (telegramUserId=${telegramUserId}):`,
+        err,
+      );
       return false;
     }
   }

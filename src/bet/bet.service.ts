@@ -20,9 +20,8 @@ import type { ResultId } from '../db_types/Results';
 import type { TipId } from '../db_types/Tips';
 
 @Injectable()
-export class ApostaService {
+export class BetService {
   constructor(private readonly betRepository: BetRepository) {}
-
 
   // tipId é opcional e não faz parte do CreateBetDto público da API HTTP —
   // só o TelegramService passa isso, pra ligar a aposta à tip do grupo que
@@ -36,9 +35,7 @@ export class ApostaService {
       sport: betData.sport,
       userId: betData.userId as UserId,
       houseId:
-        betData.houseId != null
-          ? (betData.houseId as BettingHouseId)
-          : null,
+        betData.houseId != null ? (betData.houseId as BettingHouseId) : null,
       tipId: tipId != null ? (tipId as TipId) : null,
       betTime: betData.betTime ? new Date(betData.betTime) : undefined,
     };
@@ -76,10 +73,12 @@ export class ApostaService {
     if (!bet) {
       throw new NotFoundException(`Bet with ID ${betId} not found`);
     }
-    const resultIdEnum = resultId as ResultIdEnum;
+    const resultIdEnum = resultId;
 
     if (resultIdEnum === ResultIdEnum.CASHOUT && cashoutValue == null) {
-      throw new BadRequestException('cashoutValue é obrigatório para finalizar como Cashout.');
+      throw new BadRequestException(
+        'cashoutValue é obrigatório para finalizar como Cashout.',
+      );
     }
 
     const profit = calculateProfit(
@@ -104,11 +103,7 @@ export class ApostaService {
     return updated;
   }
 
-  async finalizeMany(
-    betIds: number[],
-    resultId: ResultIdEnum,
-    userId: number,
-  ) {
+  async finalizeMany(betIds: number[], resultId: ResultIdEnum, userId: number) {
     if (resultId === ResultIdEnum.CASHOUT) {
       throw new BadRequestException(
         'Cashout precisa de um valor por aposta e não pode ser aplicado em lote. Finalize essas apostas individualmente.',
@@ -136,12 +131,12 @@ export class ApostaService {
       userId as UserId,
     );
 
-  return { 
-    success: true, 
-    updatedCount: updatedBets.length, 
-    results: updatedBets 
-  };
-}
+    return {
+      success: true,
+      updatedCount: updatedBets.length,
+      results: updatedBets,
+    };
+  }
 
   async findBets(filters: BetFilterDto): Promise<PaginatedBetsResponseDto> {
     if (
@@ -202,7 +197,7 @@ export class ApostaService {
     };
   }
 
-  async getResultTypes(){
+  async getResultTypes() {
     return this.betRepository.resultTypes();
-}
+  }
 }
