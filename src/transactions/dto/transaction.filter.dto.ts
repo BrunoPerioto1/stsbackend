@@ -1,22 +1,27 @@
-import { IsOptional, IsDateString, IsNumber } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsDateString, IsInt } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class TransactionFilterDto {
-    @IsOptional()
-    @IsDateString()
-    startDate?: string;
+  @ApiPropertyOptional({ description: 'Data inicial do período', type: String, example: '2025-09-03' })
+  @IsOptional()
+  @IsDateString()
+  startDate?: string;
 
-    @IsOptional()
-    @IsDateString()
-    endDate?: string;
+  @ApiPropertyOptional({ description: 'Data final do período', type: String, example: '2025-09-04' })
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
 
-    @IsOptional()
-    @Type(() => Number)
-    @IsNumber()
-    houseId?: number;
-
+  @ApiPropertyOptional({ description: 'ID da casa de apostas para filtro', type: Number, example: 1 })
   @IsOptional()
   @Type(() => Number)
-  @IsNumber()
+  @IsInt()
+  houseId?: number;
+
+  @ApiPropertyOptional({ description: 'ID do usuário dono das transações', type: Number, example: 42 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
   userId?: number;
 }

@@ -1,16 +1,16 @@
-import { IsOptional, IsNumber, IsString } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsInt, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 import { BettingHouseId } from '../../db_types/BettingHouse';
 
 export class HouseFilterRequestDto {
-  @ApiProperty({ description: 'ID da casa de apostas para filtro', example: 1, required: false })
+  @ApiPropertyOptional({ description: 'ID da casa de apostas para filtro', type: Number, example: 1 })
   @IsOptional()
   @Type(() => Number)
-  @IsNumber()
+  @IsInt()
   houseId?: BettingHouseId;
 
-  @ApiProperty({ description: 'Nome da casa de apostas para filtro (busca parcial)', example: 'Bet365', required: false })
+  @ApiPropertyOptional({ description: 'Nome da casa de apostas para filtro (busca parcial)', type: String, example: 'Bet365' })
   @IsOptional()
   @IsString()
   houseName?: string;

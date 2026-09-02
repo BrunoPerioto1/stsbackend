@@ -2,28 +2,28 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateUserResponseDTO {
   @ApiProperty()
-  id: number;
+  id!: number;
 
   @ApiProperty()
-  username: string;
+  username!: string;
 
   @ApiProperty()
-  email: string;
+  email!: string;
 
   @ApiProperty({ required: false })
   fullName?: string | null;
 
   @ApiProperty()
-  isActive: boolean | null;
+  isActive!: boolean | null;
 
   @ApiProperty()
-  roleId: number;
+  roleId!: number;
 
   @ApiProperty()
-  createdAt: Date | null;
+  createdAt!: Date | null;
 
   @ApiProperty()
-  updatedAt: Date | null;
+  updatedAt!: Date | null;
 
   @ApiProperty({ required: false })
   lastLogin?: Date | null;

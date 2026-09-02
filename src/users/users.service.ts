@@ -56,6 +56,8 @@ export class UsersService {
         if (params.fullName !== undefined) fields.fullName = params.fullName;
         if (params.roleId !== undefined) fields.roleId = params.roleId as RoleId;
         if (params.password) fields.passwordHash = await bcrypt.hash(params.password, 10);
+        if (params.stake !== undefined) fields.stake = params.stake;
+        if (params.minPercentFilter !== undefined) fields.minPercentFilter = params.minPercentFilter;
 
         const updated = await this.usersRepository.updateUser(userId as UserId, fields);
         if (!updated) throw new BadRequestException('Erro ao atualizar usuário.');

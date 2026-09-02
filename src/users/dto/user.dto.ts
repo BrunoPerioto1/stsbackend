@@ -2,32 +2,38 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class UserDto {
   @ApiProperty()
-  id: number;
+  id!: number;
 
   @ApiProperty()
-  username: string;
+  username!: string;
 
   @ApiProperty()
-  email: string;
+  email!: string;
 
   @ApiProperty()
-  passwordHash: string;
+  passwordHash!: string;
 
   @ApiProperty({ nullable: true })
-  fullName: string | null;
+  fullName!: string | null;
 
   @ApiProperty({ nullable: true })
-  isActive: boolean | null;
+  isActive!: boolean | null;
 
   @ApiProperty()
-  roleId: number;
+  roleId!: number;
 
   @ApiProperty({ type: String, nullable: true })
-  createdAt: Date | null;
+  createdAt!: Date | null;
 
   @ApiProperty({ type: String, nullable: true })
-  updatedAt: Date | null;
+  updatedAt!: Date | null;
 
   @ApiProperty({ type: String, nullable: true })
-  lastLogin: Date | null;
+  lastLogin!: Date | null;
+
+  @ApiProperty({ type: Number, nullable: true })
+  stake!: number | null;
+
+  @ApiProperty({ type: Number, nullable: true })
+  minPercentFilter!: number | null;
 }

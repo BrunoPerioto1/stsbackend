@@ -12,7 +12,7 @@ export class CreateBetRequestDto {
   })
   @IsString()
   @IsNotEmpty()
-  game: string;
+  game!: string;
 
   @ApiProperty({
     description: 'Bet stake amount',
@@ -21,7 +21,7 @@ export class CreateBetRequestDto {
   })
   @IsNumber()
   @IsPositive()
-  stake: number;
+  stake!: number;
 
   @ApiProperty({
     description: 'Bet odds',
@@ -30,7 +30,7 @@ export class CreateBetRequestDto {
   })
   @IsNumber()
   @IsPositive()
-  odd: number;
+  odd!: number;
 
   @ApiProperty({
     description: 'Sportsbook ID',
@@ -48,7 +48,7 @@ export class CreateBetRequestDto {
   })
   @IsString()
   @IsNotEmpty()
-  market: string;
+  market!: string;
 
   @ApiProperty({
     description: 'Sport',
@@ -57,7 +57,7 @@ export class CreateBetRequestDto {
   })
   @IsString()
   @IsNotEmpty()
-  sport: string;
+  sport!: string;
 
   @ApiProperty({
     description: 'Bet date and time (optional)',
@@ -166,7 +166,7 @@ export class FinalizarApostaDto {
     required: true
   })
   @IsEnum(ResultIdEnum)
-  resultId: ResultIdEnum;
+  resultId!: ResultIdEnum;
 
   @ApiPropertyOptional({
     description: 'Valor recebido no cash-out (obrigatório quando resultId = CASHOUT)',
@@ -188,7 +188,7 @@ export class DeleteMultipleBetsDto {
   @ArrayNotEmpty()
   @IsNumber({}, { each: true })
   @Transform(({ value }) => Array.isArray(value) ? value.map(id => Number(id)) : value)
-  betIds: number[];
+  betIds!: number[];
 }
 export class FinalizarMultiplasDto {
   @ApiProperty({
@@ -201,7 +201,7 @@ export class FinalizarMultiplasDto {
   @ArrayNotEmpty()
   @IsNumber({}, { each: true })
   @Transform(({ value }) => Array.isArray(value) ? value.map(id => Number(id)) : value)
-  betIds: number[];
+  betIds!: number[];
 
   @ApiProperty({
     description: 'ID do resultado das apostas',
@@ -211,39 +211,39 @@ export class FinalizarMultiplasDto {
   })
   @IsEnum(ResultIdEnum)
   @Transform(({ value }) => Number(value))
-  resultId: ResultIdEnum;
+  resultId!: ResultIdEnum;
 }
 
 export class BetItem {
   @ApiProperty({ description: 'ID único da aposta' })
-  id: number;
+  id!: number;
 
   @ApiProperty({ description: 'Nome do jogo ou evento' })
-  game: string;
+  game!: string;
 
   @ApiProperty({ description: 'Valor apostado' })
-  stake: number;
+  stake!: number;
 
   @ApiProperty({ description: 'Cotação da aposta' })
-  odd: number;
+  odd!: number;
 
   @ApiProperty({ description: 'ID da casa de apostas', nullable: true })
-  houseId: number | null;
+  houseId!: number | null;
 
   @ApiProperty({ description: 'Mercado da aposta (ex: "Resultado Final", "Over/Under")' })
-  market: string;
+  market!: string;
 
   @ApiProperty({ description: 'Esporte da aposta (ex: "Futebol", "Tênis")' })
-  sport: string;
+  sport!: string;
 
   @ApiProperty({ description: 'Lucro ou prejuízo da aposta' })
-  profit: number | null;
+  profit!: number | null;
 
   @ApiPropertyOptional({ description: 'Valor recebido no cash-out, quando aplicável', nullable: true })
   cashoutValue?: number | null;
 
   @ApiProperty({ description: 'Data e hora da aposta' })
-  betTime: Date;
+  betTime!: Date;
 
   @ApiPropertyOptional({ description: 'ID do resultado da aposta' })
   resultId?: number;

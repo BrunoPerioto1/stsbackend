@@ -5,19 +5,19 @@ export class ErrorResponseDto {
     description: 'Código de status HTTP',
     example: 400
   })
-  statusCode: number;
+  statusCode!: number;
 
   @ApiProperty({
     description: 'Mensagem de erro',
     example: 'Saldo insuficiente para saque'
   })
-  message: string;
+  message!: string;
 
   @ApiProperty({
     description: 'Tipo de erro',
     example: 'Bad Request'
   })
-  error: string;
+  error!: string;
 }
 
 export class InsufficientBalanceErrorDto extends ErrorResponseDto {
@@ -25,11 +25,11 @@ export class InsufficientBalanceErrorDto extends ErrorResponseDto {
     description: 'Saldo atual da casa',
     example: 150.75
   })
-  currentBalance: number;
+  currentBalance!: number;
 
   @ApiProperty({
     description: 'Valor solicitado para saque',
     example: 200.00
   })
-  requestedAmount: number;
+  requestedAmount!: number;
 }
