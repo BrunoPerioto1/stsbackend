@@ -1,4 +1,4 @@
-import { IsNumber, IsString, IsOptional, IsBoolean } from "class-validator";
+import { IsNumber, IsString, IsOptional, IsBoolean, IsArray } from "class-validator";
 import { ApiProperty, OmitType, PickType } from "@nestjs/swagger";
 import { PartialType } from '@nestjs/mapped-types';
 
@@ -106,5 +106,10 @@ export class FindAllHousesDTO  {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  @ApiProperty({ description: "Apelidos/variações de nome reconhecidos pelo parser de apostas", example: ["Superbet Brasil"], required: false })
+  @IsOptional()
+  @IsArray()
+  aliases?: string[];
 }
 
