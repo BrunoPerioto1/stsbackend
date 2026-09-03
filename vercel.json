@@ -1,16 +1,11 @@
 {
-    "version":2,
+    "version": 2,
     "regions": ["gru1"],
-    "builds": [
+    "buildCommand": "npm run build",
+    "rewrites": [
         {
-            "src": "dist/main.js",
-            "use": "@vercel/node"
-        }
-    ],
-    "routes": [
-        {
-            "src": "/(.*)",
-            "dest": "dist/main.js"
+            "source": "/(.*)",
+            "destination": "/api/index"
         }
     ]
 }
