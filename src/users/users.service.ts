@@ -56,6 +56,8 @@ export class UsersService {
         if (params.fullName !== undefined) fields.fullName = params.fullName;
         if (params.roleId !== undefined) fields.roleId = params.roleId as RoleId;
         if (params.password) fields.passwordHash = await bcrypt.hash(params.password, 10);
+        if (params.stake !== undefined) fields.stake = params.stake;
+        if (params.minPercentFilter !== undefined) fields.minPercentFilter = params.minPercentFilter;
 
         const updated = await this.usersRepository.updateUser(userId as UserId, fields);
         if (!updated) throw new BadRequestException('Erro ao atualizar usuário.');
@@ -71,7 +73,13 @@ export class UsersService {
         await this.usersRepository.updateUser(userId as UserId, { telegramUserId: null });
     }
 
-    async findByTelegramUserId(telegramUserId: number): Promise<UserDto | null> {
+    // Tipo de retorno estendido com telegramUserId/minPercentFilter — a linha
+    // de base do UserDto (usado como resposta pública em /users/me) não
+    // declara esses campos, mas quem chama esse método específico (telegram
+    // service) precisa deles pra montar o fan-out de tips.
+    async findByTelegramUserId(
+        telegramUserId: number,
+    ): Promise<(UserDto & { telegramUserId: number | null; minPercentFilter: number | null }) | null> {
         const user = await this.usersRepository.findByTelegramUserId(telegramUserId);
         return user ?? null;
     }

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DashboardRepository } from '../infra/repository/dashboard.repository';
-import { DashboardQueryDto } from './dto/dashboard-query.dto';
+import { DashboardQueryDto, DashboardMetricsComparisonQueryDto } from './dto/dashboard-query.dto';
 import { UserId } from '../db_types/Users';
 
 @Injectable()
@@ -47,5 +47,23 @@ export class DashboardService {
       hitRate: totalBets   > 0 ? wonBets     / totalBets   : 0,
       roi:     totalStaked > 0 ? totalProfit / totalStaked : 0,
     };
+  }
+
+  // Métricas do período atual + anterior numa chamada só — evita o front
+  // bater duas vezes em /dashboard/metrics (uma pra cada período) e pagar
+  // dois round-trips de function pra só montar o "vs. período anterior".
+  async getDashboardMetricsComparison(userId: UserId, query: DashboardMetricsComparisonQueryDto) {
+    const { previousStartDate, previousEndDate, ...current } = query;
+
+    const [currentMetrics, previousMetrics] = await Promise.all([
+      this.getDashboardMetrics(userId, current),
+      this.getDashboardMetrics(userId, {
+        houseId: query.houseId,
+        startDate: previousStartDate,
+        endDate: previousEndDate,
+      }),
+    ]);
+
+    return { current: currentMetrics, previous: previousMetrics };
   }
 }

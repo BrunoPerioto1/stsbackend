@@ -10,33 +10,33 @@ export enum TransactionTypeEnum {
 export class TransactionTypeDto {
   @ApiProperty({ description: "ID do tipo de transação", example: 1 })
   @IsNumber()
-  id: number;
+  id!: number;
 
   @ApiProperty({ description: "Nome do tipo de transação", example: "DEPOSIT" })
   @IsString()
-  name: string;
+  name!: string;
 }
 
 export class GetTransactionDto {
   @ApiProperty({ description: "ID da transação", example: 123 })
   @IsNumber()
-  id: number;
+  id!: number;
 
   @ApiProperty({ description: "Nome da casa de apostas", example: "Bet365" })
   @IsString()
-  houseName: string;
+  houseName!: string;
 
   @ApiProperty({ description: "Tipo de transação", example: "DEPOSIT" })
   @IsString()
-  transactionType: string;
+  transactionType!: string;
 
   @ApiProperty({ description: "Valor da transação", example: 500.00 })
   @IsNumber()
-  value: number;
+  value!: number;
 
   @ApiProperty({ description: "Data de criação da transação", example: "2025-09-03T12:34:56.000Z" })
   @IsString()
-  createdAt: string;
+  createdAt!: string;
 }
 
 export class NewTransactionDto {
@@ -47,7 +47,7 @@ export class NewTransactionDto {
   })
   @IsNumber()
   @IsPositive()
-  houseId: number;
+  houseId!: number;
 
   @ApiProperty({
     description: 'ID do tipo de transação (1=Depósito, 2=Saque, 3=Ajuste)',
@@ -56,7 +56,7 @@ export class NewTransactionDto {
   })
   @IsNumber()
   @IsPositive()
-  transactionTypeId: number;
+  transactionTypeId!: number;
 
   @ApiProperty({
     description: 'Valor da transação',
@@ -64,7 +64,7 @@ export class NewTransactionDto {
     required: true
   })
   @IsNumber()
-  value: number;
+  value!: number;
 
   @ApiProperty({
     description: 'Descrição da transação',

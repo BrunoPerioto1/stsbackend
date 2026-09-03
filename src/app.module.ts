@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ApostaModule } from './module/bet.module';
+import { BetModule } from './module/bet.module';
 import { TelegramModule } from './module/telegram.module';
 import { HouseModule } from './module/house.module';
 import { DashboardModule } from './module/dashboard.module';
@@ -9,13 +9,13 @@ import { TelegramLinkModule } from './module/telegram-link.module';
 
 @Module({
   imports: [
-    ApostaModule, 
-    TelegramModule, 
-    HouseModule, 
-    DashboardModule, 
-    TransactionModule, 
+    BetModule,
+    TelegramModule,
+    HouseModule,
+    DashboardModule,
+    TransactionModule,
     AuthModule,
-    TelegramLinkModule
+    TelegramLinkModule,
   ],
   controllers: [],
   providers: [],

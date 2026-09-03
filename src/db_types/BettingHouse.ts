@@ -8,6 +8,7 @@ export default interface BettingHousesTable {
   isActive: ColumnType<boolean, boolean | undefined, boolean>;
   createdAt: ColumnType<Date, Date | undefined, never>;
   updatedAt: ColumnType<Date, Date | undefined, Date>;
+  aliases: ColumnType<string[], string[] | undefined, string[]>;
 }
 
 export type BettingHouse = Selectable<BettingHousesTable>;   // SELECT

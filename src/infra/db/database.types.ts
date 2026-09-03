@@ -8,6 +8,9 @@ import UsersTable from '../../db_types/Users';
 import TransactionTypesTable from '../../db_types/TransactionsTypes';
 import HouseBalancesTable from '../../db_types/HouseBalances';
 import HouseTransactionsTable from '../../db_types/HouseTransactions';
+import type TipsTable from '../../db_types/Tips';
+import type TipDismissalsTable from '../../db_types/TipDismissals';
+import type TipDeliveriesTable from '../../db_types/TipDeliveries';
 
 export interface Database {
   bets: BetsTable;
@@ -19,4 +22,7 @@ export interface Database {
   transactionTypes: TransactionTypesTable
   houseBalances: HouseBalancesTable
   houseTransactions: HouseTransactionsTable
+  tips: TipsTable
+  tipDismissals: TipDismissalsTable
+  tipDeliveries: TipDeliveriesTable
 }

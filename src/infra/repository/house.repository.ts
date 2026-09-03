@@ -26,7 +26,7 @@ export class HouseRepository {
   findAllHouses() {
     return this.dbRead
       .selectFrom('bettingHouses')
-      .select(['id', 'name', 'isActive as active'])
+      .select(['id', 'name', 'isActive as active', 'aliases'])
       .where('isActive', '=', true)
       .orderBy('name', 'asc')
       .execute();

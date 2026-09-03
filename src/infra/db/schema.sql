@@ -69,6 +69,11 @@ CREATE TABLE IF NOT EXISTS betting_houses (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Apelidos/variações de nome (ex.: "Superbet Brasil", "Pagol Bet") que o
+-- parser de apostas do Telegram deve reconhecer como a mesma casa — usado
+-- como candidato extra no fuzzy-match do GrokService além do próprio name.
+ALTER TABLE betting_houses ADD COLUMN IF NOT EXISTS aliases TEXT[] NOT NULL DEFAULT '{}';
+
 CREATE TABLE IF NOT EXISTS house_balances (
     id SERIAL PRIMARY KEY,
     house_id INTEGER NOT NULL REFERENCES betting_houses(id) ON DELETE CASCADE,

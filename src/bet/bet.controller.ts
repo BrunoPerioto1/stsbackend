@@ -18,27 +18,26 @@ import {
   ApiOperation,
   ApiResponse,
   ApiTags,
-  ApiQuery,
   ApiBearerAuth,
   ApiBadRequestResponse,
   ApiNotFoundResponse,
   ApiNoContentResponse,
 } from '@nestjs/swagger';
-import { ApostaService } from './bet.service';
+import { BetService } from './bet.service';
 import { CreateBetDto, DeleteMultipleBetsDto } from './dto/bet.dto';
 import { UpdateApostaDto } from '../bet/dto/bet.dto';
 import {
   FinalizarApostaDto,
   FinalizarMultiplasDto,
   BetItem,
-  PaginatedBetsResponseDto
+  PaginatedBetsResponseDto,
 } from './dto/bet.dto';
 import { BetFilterDto } from './dto/bet-filter.dto';
 
 @ApiTags('Apostas')
 @Controller('bets')
-export class ApostaController {
-  constructor(private readonly apostaService: ApostaService) {}
+export class BetController {
+  constructor(private readonly betService: BetService) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -53,35 +52,27 @@ export class ApostaController {
   })
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
-  async criar(@Body() apostaData: CreateBetDto, @User('userId') userId: number) {
-    return this.apostaService.createBet({ ...apostaData, userId });
+  async criar(
+    @Body() apostaData: CreateBetDto,
+    @User('userId') userId: number,
+  ) {
+    return this.betService.createBet({ ...apostaData, userId });
   }
 
   @Get()
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Lista e filtra as apostas (escopo do usuário)' })
-  @ApiQuery({ name: 'betId', required: false, type: Number, description: 'Filtra por ID da aposta.' })
-  @ApiQuery({ name: 'startDate', required: false, type: String, description: 'Filtra por data inicial (ex: 2025-09-03).' })
-  @ApiQuery({ name: 'endDate', required: false, type: String, description: 'Filtra por data final (ex: 2025-09-04).' })
-  @ApiQuery({ name: 'resultId', required: false, type: Number, description: 'Filtra por ID do resultado.' })
-  @ApiQuery({ name: 'q', required: false, type: String, description: 'Filtra por nome do mercado ou jogo.' })
-  @ApiQuery({ name: 'page', required: true, type: Number, description: 'Página atual para paginação (padrão: 1).' })
-  @ApiQuery({ name: 'perPage', required: true, type: Number, description: 'Itens por página para paginação (padrão: 30).' })
   @ApiResponse({
     status: HttpStatus.OK,
     description: 'Lista de apostas retornada com sucesso.',
     type: PaginatedBetsResponseDto,
   })
-  async findBets(@Query() filters: BetFilterDto, @User('userId') userId: number) {
-    // Converte page e perPage para números se estiverem definidos
-    if (filters.page !== undefined) {
-      filters.page = Number(filters.page);
-    }
-    if (filters.perPage !== undefined) {
-      filters.perPage = Number(filters.perPage);
-    }
-    return this.apostaService.findBets({ ...filters, userId });
+  async findBets(
+    @Query() filters: BetFilterDto,
+    @User('userId') userId: number,
+  ) {
+    return this.betService.findBets({ ...filters, userId });
   }
 
   @Put('finalize-multiple')
@@ -98,9 +89,12 @@ export class ApostaController {
   })
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
-  async finalizarMultiplas(@Body() body: FinalizarMultiplasDto, @User('userId') userId: number) {
+  async finalizarMultiplas(
+    @Body() body: FinalizarMultiplasDto,
+    @User('userId') userId: number,
+  ) {
     const { betIds, resultId } = body;
-    return this.apostaService.finalizeMany(betIds, resultId, userId);
+    return this.betService.finalizeMany(betIds, resultId, userId);
   }
 
   @Put('finalize/:id')
@@ -122,7 +116,12 @@ export class ApostaController {
     @Body() body: FinalizarApostaDto,
     @User('userId') userId: number,
   ) {
-    return this.apostaService.finalizeBet(id, body.resultId, userId, body.cashoutValue);
+    return this.betService.finalizeBet(
+      id,
+      body.resultId,
+      userId,
+      body.cashoutValue,
+    );
   }
 
   @Delete('delete-multiple')
@@ -136,14 +135,14 @@ export class ApostaController {
   })
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
-  async deletarMultiplas
-
-
-  (@Body() body: DeleteMultipleBetsDto, @User('userId') userId: number) {
-    return this.apostaService.deleteManyBets(body.betIds, userId);
+  async deletarMultiplas(
+    @Body() body: DeleteMultipleBetsDto,
+    @User('userId') userId: number,
+  ) {
+    return this.betService.deleteManyBets(body.betIds, userId);
   }
 
-    @Get('result-types')
+  @Get('result-types')
   @ApiOperation({ summary: 'Lista todos os tipos de resultados' })
   @ApiResponse({
     status: HttpStatus.OK,
@@ -151,7 +150,7 @@ export class ApostaController {
     type: [Object],
   })
   async getResultTypes() {
-    return this.apostaService.getResultTypes();
+    return this.betService.getResultTypes();
   }
 
   @Put(':id')
@@ -174,7 +173,7 @@ export class ApostaController {
     @Body() updateData: UpdateApostaDto,
     @User('userId') userId: number,
   ) {
-    return this.apostaService.updateBet(id, updateData, userId);
+    return this.betService.updateBet(id, updateData, userId);
   }
 
   @Delete(':id')
@@ -188,11 +187,10 @@ export class ApostaController {
   })
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
-  async deletar(@Param('id', ParseIntPipe) id: number, @User('userId') userId: number) {
-    return this.apostaService.deleteBet(id, userId);
+  async deletar(
+    @Param('id', ParseIntPipe) id: number,
+    @User('userId') userId: number,
+  ) {
+    return this.betService.deleteBet(id, userId);
   }
-
-
-
-
 }

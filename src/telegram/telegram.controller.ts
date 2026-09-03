@@ -1,4 +1,5 @@
 import { Controller, Post, Param, Req, Res } from '@nestjs/common';
+import { ApiExcludeController } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 import * as dotenv from 'dotenv';
 import { TelegramService } from './telegram.service';
@@ -6,6 +7,7 @@ import { TelegramService } from './telegram.service';
 dotenv.config();
 
 
+@ApiExcludeController()
 @Controller('telegram')
 export class TelegramController {
   constructor(private readonly telegramService: TelegramService) {}

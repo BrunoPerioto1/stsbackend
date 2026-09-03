@@ -1,6 +1,7 @@
 import type { ColumnType, Insertable, Selectable, Updateable } from "kysely";
 import type { BettingHouseId } from "./BettingHouse";
 import type { UserId } from "./Users";
+import type { TipId } from "./Tips";
 
 export type BetId = number & { __type: "BetId" };
 
@@ -15,6 +16,7 @@ export default interface BetsTable {
   profit: ColumnType<number | null, number | null, number | null>;
   cashoutValue: ColumnType<number | null, number | null, number | null>;
   userId: ColumnType<UserId | null, UserId | null | undefined, UserId | null>;
+  tipId: ColumnType<TipId | null, TipId | null | undefined, TipId | null>;
   betTime: ColumnType<Date, Date | undefined, Date>;
   createdAt: ColumnType<Date, Date | undefined, never>;
   updatedAt: ColumnType<Date, Date | undefined, Date>;

@@ -1,11 +1,11 @@
+import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  
+
   app.enableCors();
 
 
@@ -17,19 +17,22 @@ async function bootstrap() {
     }),
   );
 
-  // Configuração do Swagger
-  const config = new DocumentBuilder()
-    .setTitle('Bot Telegram - API de Apostas')
-    .setDescription('API para gerenciamento de apostas e casas de apostas')
-    .setVersion('1.0')
-    .addBearerAuth() 
-    .build();
-
-  const document = SwaggerModule.createDocument(app as any, config);
-  SwaggerModule.setup('api', app as any, document);
+  const isDev = process.env.NODE_ENV !== 'production';
+  // Import dinâmico: @scalar/nestjs-api-reference quebra o boot inteiro em
+  // produção (ERR_REQUIRE_ESM, seu .cjs faz require() de uma dependência ESM-only)
+  // — um `import` estático no topo do arquivo já dispara isso antes mesmo do
+  // `if (isDev)` rodar, então isolamos o require só pro caminho de dev.
+  if (isDev) {
+    try {
+      const { configureSwagger } = await import('./swagger');
+      configureSwagger(app);
+    } catch (err) {
+      console.error('⚠️  Falha ao carregar a documentação Swagger/Scalar:', err);
+    }
+  }
 
   await app.listen(4000);
   console.log('🚀 Application is running on: http://localhost:4000');
-  console.log('📚 Swagger documentation available at: http://localhost:4000/api');
+  if (isDev) console.log('📚 Swagger documentation available at: http://localhost:4000/doc');
 }
 bootstrap();
