@@ -244,10 +244,19 @@ export class TelegramCallbackService {
           return;
         }
         try {
+          // msg aqui é a mensagem-lista do /pendentes, não a tip entregue no
+          // DM do usuário — usa o messageId salvo em saveDelivery (a cópia
+          // individual que o usuário recebeu) pra confirmação sair como
+          // reply da aposta, e não da lista. Sem delivery salva (tip antiga),
+          // cai pro comportamento anterior em vez de não responder nada.
+          const delivery = await this.tipsService.findDelivery(
+            tipId,
+            user.id,
+          );
           await this.betTextService.processBetText(
             ctx,
             tip.text,
-            msg.message_id,
+            delivery?.messageId ?? msg.message_id,
             tipId,
           );
           await this.tipFanoutService.markDeliveredMessage(
