@@ -155,6 +155,8 @@ export class BetService {
       startDate: filters.startDate ? new Date(filters.startDate) : undefined,
       endDate: filters.endDate ? new Date(filters.endDate) : undefined,
       resultId: filters.resultId,
+      resultIds: filters.resultIds,
+      houseIds: filters.houseIds,
       q: filters.q,
       page: filters.page ?? 1,
       perPage: filters.perPage ?? 30,

@@ -10,9 +10,16 @@ import { isNotEmpty } from "class-validator";
 import { UserId } from "../../db_types/Users";
 import { BetId, NewBet, UpdateBet } from "../../db_types/Bet";
 import { ResultId } from "../../db_types/Results";
+import { BettingHouseId } from "../../db_types/BettingHouse";
 import { NewBetResult } from "../../db_types/BetsResults";
 import type { Database } from "../db/database.types";
 import { endOfDay } from "../../common/utils/bet.utils";
+
+// isNotEmpty (class-validator) considera [] "não vazio" — errado pro nosso
+// caso, onde array vazio deve equivaler a "filtro não aplicado".
+function hasItems<T>(arr: T[] | undefined): arr is T[] {
+  return Array.isArray(arr) && arr.length > 0;
+}
 
 export interface FilterGetBets {
   betId?: BetId;
@@ -20,6 +27,8 @@ export interface FilterGetBets {
   startDate?: Date;
   endDate?: Date;
   resultId?: ResultId;
+  resultIds?: ResultId[];
+  houseIds?: BettingHouseId[];
   q?: string;
   page?: number;
   perPage?: number;
@@ -176,7 +185,7 @@ export class BetRepository {
 }
 
   async findBets(filters: FilterGetBets) {
-    const { betId, userId, startDate, endDate, resultId, q, page, perPage } = filters;
+    const { betId, userId, startDate, endDate, resultId, resultIds, houseIds, q, page, perPage } = filters;
 
     return this.dbRead
       .selectFrom("bets as b")
@@ -202,7 +211,9 @@ export class BetRepository {
       .$if(isNotEmpty(userId), (qb) => qb.where("b.userId", "=", userId!))
       .$if(isNotEmpty(startDate), (qb) => qb.where("b.betTime", ">=", startDate!))
       .$if(isNotEmpty(endDate), (qb) => qb.where("b.betTime", "<", endOfDay(endDate!)))
-      .$if(isNotEmpty(resultId), (qb) => qb.where("br.resultId", "=", resultId!))
+      .$if(hasItems(resultIds), (qb) => qb.where("br.resultId", "in", resultIds!))
+      .$if(!hasItems(resultIds) && isNotEmpty(resultId), (qb) => qb.where("br.resultId", "=", resultId!))
+      .$if(hasItems(houseIds), (qb) => qb.where("b.houseId", "in", houseIds!))
       .$if(isNotEmpty(q), (qb) =>
         qb.where((eb) =>
           eb.or([
@@ -278,7 +289,7 @@ export class BetRepository {
   }
 
   async countBets(filters: FilterGetBets) {
-    const { betId, userId, startDate, endDate, resultId, q } = filters;
+    const { betId, userId, startDate, endDate, resultId, resultIds, houseIds, q } = filters;
 
     const result = await this.dbRead
       .selectFrom("bets as b")
@@ -290,7 +301,9 @@ export class BetRepository {
       .$if(isNotEmpty(userId), (qb) => qb.where("b.userId", "=", userId!))
       .$if(isNotEmpty(startDate), (qb) => qb.where("b.betTime", ">=", startDate!))
       .$if(isNotEmpty(endDate), (qb) => qb.where("b.betTime", "<", endOfDay(endDate!)))
-      .$if(isNotEmpty(resultId), (qb) => qb.where("br.resultId", "=", resultId!))
+      .$if(hasItems(resultIds), (qb) => qb.where("br.resultId", "in", resultIds!))
+      .$if(!hasItems(resultIds) && isNotEmpty(resultId), (qb) => qb.where("br.resultId", "=", resultId!))
+      .$if(hasItems(houseIds), (qb) => qb.where("b.houseId", "in", houseIds!))
       .$if(isNotEmpty(q), (qb) =>
         qb.where((eb) =>
           eb.or([

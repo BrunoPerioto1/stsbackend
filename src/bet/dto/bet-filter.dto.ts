@@ -1,6 +1,16 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsInt, IsDate, IsString, Min, Max } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
+
+function toNumberArray({ value }: { value: unknown }) {
+  if (typeof value !== 'string') return value;
+  return value
+    .split(',')
+    .map((v) => v.trim())
+    .filter((v) => v.length > 0)
+    .map(Number)
+    .filter((n) => !Number.isNaN(n));
+}
 
 export class BetFilterDto {
   @ApiPropertyOptional({ description: 'ID da aposta', type: Number, example: 123 })
@@ -26,6 +36,26 @@ export class BetFilterDto {
   @Type(() => Number)
   @IsInt()
   resultId?: number;
+
+  @ApiPropertyOptional({
+    description: 'IDs de resultado (múltipla seleção), separados por vírgula',
+    type: String,
+    example: '1,2',
+  })
+  @IsOptional()
+  @Transform(toNumberArray)
+  @IsInt({ each: true })
+  resultIds?: number[];
+
+  @ApiPropertyOptional({
+    description: 'IDs de casa de aposta (múltipla seleção), separados por vírgula',
+    type: String,
+    example: '3,7',
+  })
+  @IsOptional()
+  @Transform(toNumberArray)
+  @IsInt({ each: true })
+  houseIds?: number[];
 
   @ApiPropertyOptional({ description: 'Busca textual (jogo, mercado ou esporte)', type: String })
   @IsOptional()
