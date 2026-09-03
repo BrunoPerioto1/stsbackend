@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { BetModule } from './module/bet.module';
-// import { TelegramModule } from './module/telegram.module'; // desativado: exige TELEGRAM_BOT_TOKEN pra subir, sem isso o start:dev quebra
+import { TelegramModule } from './module/telegram.module';
 import { HouseModule } from './module/house.module';
 import { DashboardModule } from './module/dashboard.module';
 import { TransactionModule } from './module/transaction.module';
@@ -10,7 +10,7 @@ import { TelegramLinkModule } from './module/telegram-link.module';
 @Module({
   imports: [
     BetModule,
-    // TelegramModule,
+    TelegramModule,
     HouseModule,
     DashboardModule,
     TransactionModule,
