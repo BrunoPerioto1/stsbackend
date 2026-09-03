@@ -13,7 +13,7 @@ import { ResultId } from "../../db_types/Results";
 import { BettingHouseId } from "../../db_types/BettingHouse";
 import { NewBetResult } from "../../db_types/BetsResults";
 import type { Database } from "../db/database.types";
-import { endOfDay, startOfDay } from "../../common/utils/bet.utils";
+import { endOfDay } from "../../common/utils/bet.utils";
 
 // isNotEmpty (class-validator) considera [] "não vazio" — errado pro nosso
 // caso, onde array vazio deve equivaler a "filtro não aplicado".
@@ -209,7 +209,7 @@ export class BetRepository {
       ])
       .$if(isNotEmpty(betId), (qb) => qb.where("b.id", "=", betId!))
       .$if(isNotEmpty(userId), (qb) => qb.where("b.userId", "=", userId!))
-      .$if(isNotEmpty(startDate), (qb) => qb.where("b.betTime", ">=", startOfDay(startDate!)))
+      .$if(isNotEmpty(startDate), (qb) => qb.where("b.betTime", ">=", startDate!))
       .$if(isNotEmpty(endDate), (qb) => qb.where("b.betTime", "<", endOfDay(endDate!)))
       .$if(hasItems(resultIds), (qb) => qb.where("br.resultId", "in", resultIds!))
       .$if(!hasItems(resultIds) && isNotEmpty(resultId), (qb) => qb.where("br.resultId", "=", resultId!))
@@ -299,7 +299,7 @@ export class BetRepository {
       .select(({ fn }) => [fn.count("b.id").as("total")])
       .$if(isNotEmpty(betId), (qb) => qb.where("b.id", "=", betId!))
       .$if(isNotEmpty(userId), (qb) => qb.where("b.userId", "=", userId!))
-      .$if(isNotEmpty(startDate), (qb) => qb.where("b.betTime", ">=", startOfDay(startDate!)))
+      .$if(isNotEmpty(startDate), (qb) => qb.where("b.betTime", ">=", startDate!))
       .$if(isNotEmpty(endDate), (qb) => qb.where("b.betTime", "<", endOfDay(endDate!)))
       .$if(hasItems(resultIds), (qb) => qb.where("br.resultId", "in", resultIds!))
       .$if(!hasItems(resultIds) && isNotEmpty(resultId), (qb) => qb.where("br.resultId", "=", resultId!))

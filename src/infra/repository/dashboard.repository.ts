@@ -6,7 +6,7 @@ import { DATABASE_READ_CONNECTION } from '../db/db.module';
 import { BettingHouseId } from '../../db_types/BettingHouse';
 import { UserId } from '../../db_types/Users';
 import { isNotEmpty } from 'class-validator';
-import { endOfDay, startOfDay } from '../../common/utils/bet.utils';
+import { endOfDay } from '../../common/utils/bet.utils';
 
 export interface FilterDashboard {
   startDate?: string;
@@ -37,21 +37,18 @@ async findDailySummary(filters: FilterDashboard) {
       qb.where("b.houseId", "=", houseId!),
     )
     .$if(isNotEmpty(startDate), (qb) =>
-      qb.where("b.betTime", ">=", startOfDay(new Date(startDate!))),
+      qb.where("b.betTime", ">=", new Date(startDate!)),
     )
     .$if(isNotEmpty(endDate), (qb) =>
       qb.where("b.betTime", "<", endOfDay(new Date(endDate!))),
     )
     .select(({ fn, ref }) => [
-      // date() trunca no timezone da sessão do Postgres (UTC por padrão) — sem
-      // AT TIME ZONE, uma aposta feita às 22h em Brasília cai no dia seguinte
-      // (UTC), deslocando os buckets do gráfico por até 3h.
-      sql<Date>`date(${ref("b.betTime")} at time zone 'America/Sao_Paulo')`.as("date"),
+      fn<Date>("date", [ref("b.betTime")]).as("date"),
       fn.count("b.id").as("totalBets"),
       fn<number>("coalesce", [fn.sum<number>("b.profit"), sql.lit(0)]).as("profitDay"),
     ])
-    .groupBy(({ ref }) => sql`date(${ref("b.betTime")} at time zone 'America/Sao_Paulo')`)
-    .orderBy(({ ref }) => sql`date(${ref("b.betTime")} at time zone 'America/Sao_Paulo')`, "asc")
+    .groupBy(({ fn, ref }) => fn<Date>("date", [ref("b.betTime")]))
+    .orderBy(({ fn, ref }) => fn<Date>("date", [ref("b.betTime")]), "asc")
     .execute();
 }
 async findMonthlySummary(filters: FilterDashboard) {
@@ -66,18 +63,18 @@ async findMonthlySummary(filters: FilterDashboard) {
       qb.where("b.houseId", "=", houseId!),
     )
     .$if(isNotEmpty(startDate), (qb) =>
-      qb.where("b.betTime", ">=", startOfDay(new Date(startDate!))),
+      qb.where("b.betTime", ">=", new Date(startDate!)),
     )
     .$if(isNotEmpty(endDate), (qb) =>
       qb.where("b.betTime", "<", endOfDay(new Date(endDate!))),
     )
     .select(({ fn, ref }) => [
-      sql<Date>`date_trunc('month', ${ref("b.betTime")} at time zone 'America/Sao_Paulo')`.as("month"),
+      fn<Date>("date_trunc", ["month" as any, ref("b.betTime")]).as("month"),
       fn.count("b.id").as("totalBets"),
       fn<number>("coalesce", [fn.sum<number>("b.profit"), sql.lit(0)]).as("profitMonth"),
     ])
-    .groupBy(({ ref }) => sql`date_trunc('month', ${ref("b.betTime")} at time zone 'America/Sao_Paulo')`)
-    .orderBy(({ ref }) => sql`date_trunc('month', ${ref("b.betTime")} at time zone 'America/Sao_Paulo')`, "asc")
+    .groupBy(({ fn, ref }) => fn<Date>("date_trunc", ["month" as any, ref("b.betTime")]))
+    .orderBy(({ fn, ref }) => fn<Date>("date_trunc", ["month" as any, ref("b.betTime")]), "asc")
     .execute();
 }
 async findBetDateRange(userId: UserId) {
@@ -104,7 +101,7 @@ async findDashboardMetrics(filters: FilterDashboard) {
       qb.where("b.houseId", "=", houseId!),
     )
     .$if(isNotEmpty(startDate), (qb) =>
-      qb.where("b.betTime", ">=", startOfDay(new Date(startDate!))),
+      qb.where("b.betTime", ">=", new Date(startDate!)),
     )
     .$if(isNotEmpty(endDate), (qb) =>
       qb.where("b.betTime", "<", endOfDay(new Date(endDate!))),
