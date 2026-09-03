@@ -3,7 +3,7 @@ import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { DashboardService } from './dashboard.service';
-import { DashboardQueryDto } from './dto/dashboard-query.dto';
+import { DashboardQueryDto, DashboardMetricsComparisonQueryDto } from './dto/dashboard-query.dto';
 import { User } from '../common/decorators/user.decorator';
 import { UserId } from '../db_types/Users';
 
@@ -29,6 +29,16 @@ export class DashboardController {
     @User('userId') userId: UserId,
   ) {
     return this.dashboardService.getDashboardMetrics(userId, query);
+  }
+
+  @Get('metrics-comparison')
+  @ApiOperation({ summary: 'Obtém métricas do período atual e do período anterior, para comparação' })
+  @ApiResponse({ status: 200, description: 'Métricas de comparação retornadas com sucesso.' })
+  async getMetricsComparison(
+    @Query() query: DashboardMetricsComparisonQueryDto,
+    @User('userId') userId: UserId,
+  ) {
+    return this.dashboardService.getDashboardMetricsComparison(userId, query);
   }
 
   @Get('monthly-summary')
