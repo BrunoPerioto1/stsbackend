@@ -38,8 +38,4 @@ export class AuthService {
       access_token: this.jwtService.sign(payload),
     };
   }
-
-  async logout(user: any) {
-    return { message: `Logout realizado com sucesso para ${user.email}` };
-  }
 }

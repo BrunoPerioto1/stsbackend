@@ -4,7 +4,7 @@ import type { NewTip, TipId, TipEntity } from '../db_types/Tips';
 import type { NewTipDelivery } from '../db_types/TipDeliveries';
 import type { UserId } from '../db_types/Users';
 
-export interface RecordTipData {
+interface RecordTipData {
   chatId: number;
   messageId: number;
   text: string;
@@ -14,7 +14,7 @@ export interface RecordTipData {
   entities: TipEntity[] | null;
 }
 
-export interface SaveDeliveryData {
+interface SaveDeliveryData {
   tipId: number;
   userId: number;
   messageId: number;

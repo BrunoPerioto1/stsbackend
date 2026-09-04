@@ -17,7 +17,7 @@ const betTimeBr = sql`(${sql.ref('b.betTime')} AT TIME ZONE 'UTC') AT TIME ZONE 
 const betCalendarDateBr = sql<string>`to_char(${betTimeBr}, 'YYYY-MM-DD')`;
 const betCalendarMonthBr = sql<string>`to_char(date_trunc('month', ${betTimeBr}), 'YYYY-MM-DD')`;
 
-export interface FilterDashboard {
+interface FilterDashboard {
   startDate?: string;
   endDate?: string;
   houseId?: BettingHouseId;

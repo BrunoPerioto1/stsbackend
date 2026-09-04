@@ -8,7 +8,7 @@ import { Database } from '../db/database.types';
 import { isNotEmpty } from 'class-validator';
 import { endOfDay, startOfDay } from '../../common/utils/bet.utils';
 
-export interface FilterGetTransactions {
+interface FilterGetTransactions {
   houseId?: BettingHouseId;
   startDate?: Date;
   endDate?: Date;

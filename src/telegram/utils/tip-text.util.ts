@@ -13,7 +13,7 @@ export const TIP_BOILERPLATE_PATTERNS: RegExp[] = [
   /planilhar com shark track/i,
 ];
 
-export interface SimpleEntity {
+interface SimpleEntity {
   type: string;
   offset: number;
   length: number;

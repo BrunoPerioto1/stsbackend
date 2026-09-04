@@ -8,7 +8,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody } from '@nes
 import { ApiProperty } from '@nestjs/swagger';
 import { IsInt, IsNotEmpty, IsString } from 'class-validator';
 
-export class TelegramLinkRequest {
+class TelegramLinkRequest {
   @ApiProperty({
     description: 'Código de vinculação gerado',
     example: '550e8400-e29b-41d4-a716-446655440000'
@@ -25,7 +25,7 @@ export class TelegramLinkRequest {
   telegramUserId!: number;
 }
 
-export class TelegramLinkResponse {
+class TelegramLinkResponse {
   @ApiProperty({
     description: 'Indica se a operação foi bem sucedida'
   })
