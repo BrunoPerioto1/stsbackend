@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, Header } from '@nestjs/common';
 import {
   ApiOperation,
   ApiResponse,
@@ -45,6 +45,11 @@ export class HouseController {
   }
 
   @Get('all')
+  // Unica rota do controller sem guard, e o dado e global (a mesma lista pra
+  // todo mundo) — entao pode ir pro cache compartilhado da CDN sem risco de
+  // vazar dado de um usuario pro outro. As demais rotas sao por usuario e NAO
+  // podem receber cache publico.
+  @Header('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400')
   @ApiOperation({ summary: 'Lista todas as casas de apostas' })
   @ApiResponse({ status: 200, description: 'Lista de casas retornada com sucesso.' })
   getAllHouses() {
