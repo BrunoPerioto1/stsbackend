@@ -25,7 +25,7 @@ export class BetFilterDto {
   @Type(() => Date)
   startDate?: Date;
 
-  @ApiPropertyOptional({ description: 'Data de fim do período', example: '2024-01-31T23:59:59.000Z' })
+  @ApiPropertyOptional({ description: 'Data de fim do período mostrado', example: '2024-01-31T23:59:59.000Z' })
   @IsOptional()
   @IsDate()
   @Type(() => Date)

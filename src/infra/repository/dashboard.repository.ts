@@ -6,7 +6,16 @@ import { DATABASE_READ_CONNECTION } from '../db/db.module';
 import { BettingHouseId } from '../../db_types/BettingHouse';
 import { UserId } from '../../db_types/Users';
 import { isNotEmpty } from 'class-validator';
-import { endOfDay } from '../../common/utils/bet.utils';
+import { endOfDay, startOfDay } from '../../common/utils/bet.utils';
+
+// `bet_time` e' TIMESTAMP sem timezone guardando instante UTC, entao a conversao
+// precisa dos dois `AT TIME ZONE`: o primeiro rotula o valor como UTC, o segundo
+// o traz pro horario civil de Sao Paulo. E a referencia da coluna tem que sair de
+// `sql.ref` — dentro de um fragmento sql cru o CamelCasePlugin nao atua e o
+// Postgres rebaixaria `b.betTime` pra `b.bettime`, que nao existe.
+const betTimeBr = sql`(${sql.ref('b.betTime')} AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo'`;
+const betCalendarDateBr = sql<string>`to_char(${betTimeBr}, 'YYYY-MM-DD')`;
+const betCalendarMonthBr = sql<string>`to_char(date_trunc('month', ${betTimeBr}), 'YYYY-MM-DD')`;
 
 export interface FilterDashboard {
   startDate?: string;
@@ -37,18 +46,18 @@ async findDailySummary(filters: FilterDashboard) {
       qb.where("b.houseId", "=", houseId!),
     )
     .$if(isNotEmpty(startDate), (qb) =>
-      qb.where("b.betTime", ">=", new Date(startDate!)),
+      qb.where("b.betTime", ">=", startOfDay(new Date(startDate!))),
     )
     .$if(isNotEmpty(endDate), (qb) =>
       qb.where("b.betTime", "<", endOfDay(new Date(endDate!))),
     )
-    .select(({ fn, ref }) => [
-      fn<Date>("date", [ref("b.betTime")]).as("date"),
+    .select(({ fn }) => [
+      betCalendarDateBr.as("date"),
       fn.count("b.id").as("totalBets"),
       fn<number>("coalesce", [fn.sum<number>("b.profit"), sql.lit(0)]).as("profitDay"),
     ])
-    .groupBy(({ fn, ref }) => fn<Date>("date", [ref("b.betTime")]))
-    .orderBy(({ fn, ref }) => fn<Date>("date", [ref("b.betTime")]), "asc")
+    .groupBy(betCalendarDateBr)
+    .orderBy(betCalendarDateBr, "asc")
     .execute();
 }
 async findMonthlySummary(filters: FilterDashboard) {
@@ -63,18 +72,18 @@ async findMonthlySummary(filters: FilterDashboard) {
       qb.where("b.houseId", "=", houseId!),
     )
     .$if(isNotEmpty(startDate), (qb) =>
-      qb.where("b.betTime", ">=", new Date(startDate!)),
+      qb.where("b.betTime", ">=", startOfDay(new Date(startDate!))),
     )
     .$if(isNotEmpty(endDate), (qb) =>
       qb.where("b.betTime", "<", endOfDay(new Date(endDate!))),
     )
-    .select(({ fn, ref }) => [
-      fn<Date>("date_trunc", ["month" as any, ref("b.betTime")]).as("month"),
+    .select(({ fn }) => [
+      betCalendarMonthBr.as("month"),
       fn.count("b.id").as("totalBets"),
       fn<number>("coalesce", [fn.sum<number>("b.profit"), sql.lit(0)]).as("profitMonth"),
     ])
-    .groupBy(({ fn, ref }) => fn<Date>("date_trunc", ["month" as any, ref("b.betTime")]))
-    .orderBy(({ fn, ref }) => fn<Date>("date_trunc", ["month" as any, ref("b.betTime")]), "asc")
+    .groupBy(betCalendarMonthBr)
+    .orderBy(betCalendarMonthBr, "asc")
     .execute();
 }
 async findBetDateRange(userId: UserId) {
@@ -101,7 +110,7 @@ async findDashboardMetrics(filters: FilterDashboard) {
       qb.where("b.houseId", "=", houseId!),
     )
     .$if(isNotEmpty(startDate), (qb) =>
-      qb.where("b.betTime", ">=", new Date(startDate!)),
+      qb.where("b.betTime", ">=", startOfDay(new Date(startDate!))),
     )
     .$if(isNotEmpty(endDate), (qb) =>
       qb.where("b.betTime", "<", endOfDay(new Date(endDate!))),
