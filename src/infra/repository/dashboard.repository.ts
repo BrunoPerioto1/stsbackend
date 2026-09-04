@@ -8,8 +8,14 @@ import { UserId } from '../../db_types/Users';
 import { isNotEmpty } from 'class-validator';
 import { endOfDay, startOfDay } from '../../common/utils/bet.utils';
 
-const betCalendarDateBr = sql<string>`to_char(b.betTime AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD')`;
-const betCalendarMonthBr = sql<string>`to_char(date_trunc('month', b.betTime AT TIME ZONE 'America/Sao_Paulo'), 'YYYY-MM-DD')`;
+// `bet_time` e' TIMESTAMP sem timezone guardando instante UTC, entao a conversao
+// precisa dos dois `AT TIME ZONE`: o primeiro rotula o valor como UTC, o segundo
+// o traz pro horario civil de Sao Paulo. E a referencia da coluna tem que sair de
+// `sql.ref` — dentro de um fragmento sql cru o CamelCasePlugin nao atua e o
+// Postgres rebaixaria `b.betTime` pra `b.bettime`, que nao existe.
+const betTimeBr = sql`(${sql.ref('b.betTime')} AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo'`;
+const betCalendarDateBr = sql<string>`to_char(${betTimeBr}, 'YYYY-MM-DD')`;
+const betCalendarMonthBr = sql<string>`to_char(date_trunc('month', ${betTimeBr}), 'YYYY-MM-DD')`;
 
 export interface FilterDashboard {
   startDate?: string;
