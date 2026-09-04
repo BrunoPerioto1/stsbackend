@@ -41,6 +41,20 @@ export function endOfDay(date: Date): Date {
   return d;
 }
 
+/**
+ * Given a Date representing a calendar day (as parsed from a "yyyy-MM-dd"
+ * string, i.e. UTC midnight of that day), returns the UTC instant of the
+ * start of *that same* day in America/Sao_Paulo. Use with an inclusive `>=`
+ * comparison — without this, a raw UTC-midnight Date is 3h ahead of local
+ * midnight, so it wrongly captures bets placed the previous night (21h-23h59
+ * BRT) in Brazil.
+ */
+export function startOfDay(date: Date): Date {
+  const d = new Date(date);
+  d.setUTCHours(BR_UTC_OFFSET_HOURS, 0, 0, 0);
+  return d;
+}
+
 export function formatPeriod(startDate?: string, endDate?: string): string {
   if (!startDate && !endDate) {
     return 'Todo o período';
