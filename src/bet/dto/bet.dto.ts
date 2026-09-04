@@ -257,7 +257,7 @@ export class PaginatedBetsResponseDto {
   @ApiPropertyOptional({ description: "Número total de páginas", example: 10 })
   totalPages?: number;
 
-  @ApiProperty({ description: "Total de registros", example: 125 })
+  @ApiProperty({ description: "Total de registros da consulta", example: 125 })
   total?: number;
 
   @ApiPropertyOptional({
