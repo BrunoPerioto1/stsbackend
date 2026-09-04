@@ -52,9 +52,41 @@ export class BetService {
   }
 
   async updateBet(betId: number, updateData: UpdateApostaDto, userId: number) {
+    // O profit e derivado de (resultId, stake, odd, cashoutValue). Ate aqui o
+    // update gravava os campos novos e deixava o profit antigo, entao editar a
+    // stake/odd de uma aposta ja liquidada mantinha o lucro velho no banco —
+    // em qualquer status liquidado, nao so em GANHA. Recalcula quando a edicao
+    // toca algum desses campos e a aposta ja tem resultado.
+    // O UpdateApostaDto nao expoe cashoutValue (so o finalizeBet define esse
+    // valor), entao a edicao so pode mexer em stake/odd.
+    const touchesProfitInput =
+      updateData.stake !== undefined || updateData.odd !== undefined;
+
+    const patch: UpdateBet = { ...(updateData as UpdateBet) };
+
+    if (touchesProfitInput) {
+      const current = await this.betRepository.findById(betId as BetId);
+      if (!current) {
+        throw new NotFoundException(`Bet with ID ${betId} not found`);
+      }
+      if (current.resultId != null) {
+        const stake = updateData.stake ?? Number(current.stake);
+        const odd = updateData.odd ?? Number(current.odd);
+        const cashoutValue =
+          current.cashoutValue == null ? undefined : Number(current.cashoutValue);
+
+        patch.profit = calculateProfit(
+          current.resultId as ResultIdEnum,
+          Number(stake),
+          Number(odd),
+          cashoutValue,
+        );
+      }
+    }
+
     const updated = await this.betRepository.update(
       betId as BetId,
-      updateData as UpdateBet,
+      patch,
       userId as UserId,
     );
     if (!updated) {

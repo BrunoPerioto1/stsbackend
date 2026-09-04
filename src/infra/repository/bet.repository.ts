@@ -229,11 +229,15 @@ export class BetRepository {
       .execute();
   }
 
+  // Traz tambem resultId/cashoutValue porque o profit e funcao de
+  // (resultId, stake, odd, cashoutValue) — o updateBet precisa dos quatro pra
+  // recalcular quando o usuario edita uma aposta ja liquidada.
   async findById(betId: BetId) {
     return this.dbRead
-      .selectFrom("bets")
-      .select(["id", "stake", "odd"])
-      .where("id", "=", betId)
+      .selectFrom("bets as b")
+      .leftJoin("betResults as br", "br.betId", "b.id")
+      .select(["b.id", "b.stake", "b.odd", "b.cashoutValue", "br.resultId"])
+      .where("b.id", "=", betId)
       .executeTakeFirst();
   }
 
