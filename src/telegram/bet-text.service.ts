@@ -12,6 +12,7 @@ import {
 import {
   extractLimitFromText,
   extractPercent,
+  parseBetLocal,
 } from './utils/tip-extractors.util';
 
 // Transforma texto livre (DM ou tip) numa aposta salva, e trata o fluxo de
@@ -36,13 +37,30 @@ export class BetTextService {
     replyToMessageId?: number,
     tipId?: number,
   ) {
+    // ponytail: timing temporário pra achar o gargalo do clique em Planilhar
+    // em prod. Tira depois de medir.
+    const t0 = Date.now();
+    const marks: string[] = [];
+    let last = t0;
+    const mark = (label: string) => {
+      const now = Date.now();
+      marks.push(`${label}=${now - last}ms`);
+      last = now;
+    };
+
     try {
       const resolvedHouseId =
         await this.grokService.resolveHouseId(userMessage);
-      const jsonResult = await this.grokService.parseBetMessage(
-        userMessage,
-        resolvedHouseId,
-      );
+      mark('resolveHouse');
+
+      // Caminho rápido: os dois formatos conhecidos (emoji e SOBRECARGA/
+      // AVISO) são posicionais, então dá pra extrair tudo com regex e pular
+      // a ida na IA. O Groq fica só de fallback pra texto fora do padrão.
+      const local = parseBetLocal(userMessage);
+      const jsonResult = local
+        ? { ...local, houseId: resolvedHouseId }
+        : await this.grokService.parseBetMessage(userMessage, resolvedHouseId);
+      mark(local ? 'parseLocal' : 'parseGROQ');
 
       const houseId = Number(jsonResult.houseId);
       const odd = Number(jsonResult.odd);
@@ -53,8 +71,10 @@ export class BetTextService {
       const percent = extractPercent(userMessage);
       const user = await this.usersService.findByTelegramUserId(ctx.from.id);
       if (!user) throw new Error('UNLINKED');
+      mark('findUser');
 
       const userStake = await this.usersService.getUserStake(user.id);
+      mark('getUserStake');
       let stake =
         percent !== null
           ? (percent / 100) * userStake
@@ -83,6 +103,7 @@ export class BetTextService {
       };
 
       const aposta = await this.betService.createBet(apostaData, tipId);
+      mark('createBet');
 
       let houseName = 'N/A';
       try {
@@ -92,6 +113,7 @@ export class BetTextService {
       } catch (err) {
         console.error('Erro ao buscar casa:', err);
       }
+      mark('getHouseName');
 
       const horario = new Date(aposta.betTime).toLocaleTimeString('pt-BR', {
         hour: '2-digit',
@@ -105,7 +127,14 @@ export class BetTextService {
           ? { reply_parameters: { message_id: replyToMessageId } }
           : undefined,
       );
+      mark('ctxReply');
+      console.log(
+        `⏱ planilhar TOTAL=${Date.now() - t0}ms | ${marks.join(' ')}`,
+      );
     } catch (err) {
+      console.log(
+        `⏱ planilhar FALHOU TOTAL=${Date.now() - t0}ms | ${marks.join(' ')}`,
+      );
       console.error('❌ Erro ao processar aposta:', err);
       const extra = replyToMessageId
         ? { reply_parameters: { message_id: replyToMessageId } }

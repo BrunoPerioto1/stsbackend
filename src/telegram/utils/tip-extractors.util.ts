@@ -95,3 +95,23 @@ export function extractPercent(text: string): number | null {
   const val = Number(normalized);
   return Number.isFinite(val) && val >= 0 ? val : null;
 }
+
+export function extractSportFromText(text: string): string | null {
+  if (!text) return null;
+  const m = text.match(/^⚽\ufe0f?\s*(.+)$/m);
+  return m ? m[1].trim() : (getAvisoLines(text)?.[2] ?? null);
+}
+
+// Parse 100% local dos 4 campos que a IA extraía. Cobre os dois formatos
+// (emoji e SOBRECARGA/AVISO). Retorna null se faltar qualquer campo — aí o
+// chamador cai pro Groq.
+export function parseBetLocal(
+  text: string,
+): { game: string; sport: string; market: string; odd: number } | null {
+  const game = extractGameFromText(text);
+  const sport = extractSportFromText(text);
+  const market = extractMarketFromText(text);
+  const odd = extractOddFromText(text);
+  if (!game || !sport || !market || odd === null) return null;
+  return { game, sport, market, odd };
+}
