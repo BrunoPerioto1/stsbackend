@@ -67,6 +67,11 @@ export class TelegramService implements OnModuleInit {
         return;
       }
 
+      if ('voice' in ctx.message || 'audio' in ctx.message) {
+        await this.betTextService.handleBetAudio(ctx, ctx.message);
+        return;
+      }
+
       // Resposta a um prompt de "✏️ Editar" (força reply no Telegram)?
       const replyToText = msg.reply_to_message?.text as string | undefined;
       const headerMatch = replyToText?.match(EDIT_PROMPT_HEADER_RE);

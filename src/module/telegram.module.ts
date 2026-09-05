@@ -14,6 +14,7 @@ import {
 import { BotCommandsService } from '../telegram/bot-commands.service';
 import { BetTextService } from '../telegram/bet-text.service';
 import { BetImageService } from '../telegram/bet-image.service';
+import { BetAudioService } from '../telegram/bet-audio.service';
 import { TipFanoutService } from '../telegram/tip-fanout.service';
 import { PendentesService } from '../telegram/pendentes.service';
 import { TelegramCallbackService } from '../telegram/telegram-callback.service';
@@ -28,6 +29,7 @@ import { TelegramCallbackService } from '../telegram/telegram-callback.service';
     BotCommandsService,
     BetTextService,
     BetImageService,
+    BetAudioService,
     TipFanoutService,
     PendentesService,
     TelegramCallbackService,

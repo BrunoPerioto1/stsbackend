@@ -1,4 +1,5 @@
 import { normalizeExtraction } from './bet-image.service';
+import { BetAudioService } from './bet-audio.service';
 import { BetTextService } from './bet-text.service';
 import { TelegramService } from './telegram.service';
 import {
@@ -70,6 +71,7 @@ function buildService(overrides: Record<string, any> = {}) {
     deps.houseService as any,
     deps.tipFanoutService as any,
     deps.betImageService as any,
+    {} as BetAudioService,
   );
   return { service, deps };
 }

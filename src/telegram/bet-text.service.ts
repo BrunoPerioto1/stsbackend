@@ -16,6 +16,10 @@ import {
   parseBetLocal,
 } from './utils/tip-extractors.util';
 import { BetImageService } from './bet-image.service';
+import { BetAudioService, MAX_AUDIO_BYTES } from './bet-audio.service';
+import { buildBetPreview, missingBetFields } from './utils/bet-preview.util';
+import type { Context } from 'telegraf';
+import type { Message } from 'telegraf/types';
 
 // Transforma texto livre (DM ou tip) numa aposta salva, e trata o fluxo de
 // edição de odd/limite/casa que acontece antes disso (prompt de "✏️ Editar").
@@ -28,6 +32,7 @@ export class BetTextService {
     private readonly houseService: HouseService,
     private readonly tipFanoutService: TipFanoutService,
     private readonly betImageService: BetImageService,
+    private readonly betAudioService: BetAudioService,
   ) {}
 
   // Parsing + criação da aposta. Reaproveitado tanto pelo texto livre em DM
@@ -309,13 +314,7 @@ export class BetTextService {
         return;
       }
 
-      const faltando: string[] = [];
-      if (!extracted.evento) faltando.push('Jogo');
-      if (!extracted.esporte) faltando.push('Esporte');
-      if (!extracted.mercado) faltando.push('Mercado');
-      if (extracted.odd === null || extracted.odd <= 1) faltando.push('Odd');
-      if (extracted.stake === null || extracted.stake <= 0)
-        faltando.push('Stake');
+      const faltando = missingBetFields(extracted);
 
       if (faltando.length) {
         status = 'incomplete';
@@ -331,37 +330,11 @@ export class BetTextService {
         return;
       }
 
-      // "%" no texto faria o planilhador tratar o valor como percentual da
-      // banca em vez de stake absoluta — nenhum mercado precisa do símbolo.
-      const oneLine = (s: string) =>
-        s.replace(/\s*\n\s*/g, ' ').replace(/%/g, '');
-
-      const card =
-        `🏠 ${caption}\n` +
-        `🆚 ${oneLine(extracted.evento as string)}\n` +
-        `⚽️ ${oneLine(extracted.esporte ?? 'Outros')}\n` +
-        `📌 ${oneLine(extracted.mercado as string)}\n` +
-        `🏷 ${(extracted.odd as number).toFixed(2)}\n` +
-        `💰 Stake: R$ ${(extracted.stake as number).toFixed(2).replace('.', ',')}`;
-
-      const options = {
-        reply_markup: {
-          inline_keyboard: [
-            [
-              {
-                text: '📊 Planilhar',
-                // Carrega o horário da FOTO no próprio botão: o clique pode
-                // acontecer bem depois, e o processo é serverless (não dá pra
-                // guardar em memória).
-                callback_data: `planilhar_ts:${msg.date}`,
-              },
-            ],
-            ...(!deep ? [deepButton] : []),
-          ],
-        },
-      };
-      const text = `${deep ? '✅ Análise profunda concluída!' : '✅ Aposta identificada!'}\n\n${card}`;
-      await reply(text, options);
+      const preview = buildBetPreview(extracted, caption, msg.date as number, {
+        deep,
+        allowDeep: !deep,
+      });
+      await reply(preview.text, { reply_markup: preview.reply_markup });
       status = 'ok';
     } finally {
       console.log(
@@ -370,6 +343,124 @@ export class BetTextService {
             .map(([stage, duration]) => `${stage}_ms=${duration}`)
             .join(' ') +
           ` total_ms=${Math.round(performance.now() - startedAt)}`,
+      );
+    }
+  }
+
+  async handleBetAudio(
+    ctx: Context,
+    msg: Message.VoiceMessage | Message.AudioMessage,
+  ) {
+    const startedAt = performance.now();
+    const chatId = ctx.chat?.id;
+    if (chatId === undefined) return;
+    const audio = 'voice' in msg ? msg.voice : msg.audio;
+    const extra = { reply_parameters: { message_id: msg.message_id } };
+    let feedback: Message.TextMessage | undefined;
+    let status = 'error';
+    const reply = async (
+      text: string,
+      replyMarkup?: ReturnType<typeof buildBetPreview>['reply_markup'],
+    ) => {
+      if (feedback)
+        return ctx.telegram.editMessageText(
+          chatId,
+          feedback.message_id,
+          undefined,
+          text,
+          { reply_markup: replyMarkup },
+        );
+      return ctx.reply(text, { ...extra, reply_markup: replyMarkup });
+    };
+    try {
+      if ((audio.file_size ?? 0) > MAX_AUDIO_BYTES)
+        throw new Error('AUDIO_MUITO_GRANDE');
+      try {
+        feedback = await ctx.reply('⏳ Analisando o áudio…', extra);
+      } catch {
+        console.warn('[BET_AUDIO_TOTAL] feedback_failed=true');
+      }
+
+      const downloadStart = performance.now();
+      let audioBuffer: Buffer;
+      let filename: string;
+      try {
+        const link = await ctx.telegram.getFileLink(audio.file_id);
+        filename =
+          'voice' in msg
+            ? 'voice.ogg'
+            : (msg.audio.file_name ??
+              link.pathname.split('/').pop() ??
+              'audio');
+        const response = await fetch(link.href, {
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (!response.ok || !response.body)
+          throw new Error('AUDIO_DOWNLOAD_FALHOU');
+        if (Number(response.headers.get('content-length')) > MAX_AUDIO_BYTES) {
+          await response.body.cancel();
+          throw new Error('AUDIO_MUITO_GRANDE');
+        }
+        // Limita também os bytes reais, mesmo se Telegram não informar file_size/Content-Length.
+        const reader = response.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let size = 0;
+        try {
+          while (true) {
+            const chunk = await reader.read();
+            if (chunk.done) break;
+            const value = chunk.value as Uint8Array;
+            size += value.byteLength;
+            if (size > MAX_AUDIO_BYTES) {
+              await reader.cancel();
+              throw new Error('AUDIO_MUITO_GRANDE');
+            }
+            chunks.push(value);
+          }
+        } finally {
+          reader.releaseLock();
+        }
+        audioBuffer = Buffer.concat(chunks);
+      } finally {
+        console.log(
+          `[BET_AUDIO_DOWNLOAD] message_id=${msg.message_id} duration_ms=${Math.round(performance.now() - downloadStart)}`,
+        );
+      }
+      const transcript = await this.betAudioService.transcribeBetAudio({
+        audioBuffer,
+        filename,
+        mimeType: audio.mime_type,
+        durationSeconds: audio.duration,
+      });
+      const extracted =
+        await this.betAudioService.extractBetFromTranscript(transcript);
+      const faltando = missingBetFields(extracted);
+      const houseId = extracted.casa
+        ? await this.grokService.resolveHouseId(`🏠 ${extracted.casa}`)
+        : null;
+      if (!houseId) faltando.unshift('Casa');
+      if (faltando.length) {
+        status = 'incomplete';
+        await reply(
+          `⚠️ Não consegui identificar completamente a aposta.\n\nFaltando:\n${faltando.map((f) => `• ${f}`).join('\n')}\n\nEnvie outro áudio incluindo esses dados.`,
+        );
+        return;
+      }
+      const preview = buildBetPreview(extracted, extracted.casa!, msg.date);
+      await reply(preview.text, preview.reply_markup);
+      status = 'ok';
+    } catch (error) {
+      console.error(
+        `[BET_AUDIO_ERROR] message_id=${msg.message_id} type=${error instanceof Error ? error.name : 'unknown'}`,
+      );
+      await reply(
+        error instanceof Error && error.message === 'AUDIO_MUITO_GRANDE'
+          ? '⚠️ Áudio muito grande. Envie um arquivo de até 20 MB.'
+          : 'Não consegui entender este áudio. Tente enviar novamente falando os dados da aposta.',
+      );
+    } finally {
+      console.log(
+        `[BET_AUDIO_TOTAL] message_id=${msg.message_id} status=${status} duration_ms=${Math.round(performance.now() - startedAt)}`,
       );
     }
   }

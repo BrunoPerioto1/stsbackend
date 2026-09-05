@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import OpenAI from 'openai';
+import { getOpenAIClient } from './openai-client';
 import * as dotenv from 'dotenv';
 
 dotenv.config();
@@ -22,7 +22,7 @@ Regras:
 - Odd e a TOTAL/final da aposta. Ignore odds antigas/riscadas, individuais e de outros eventos.
 - Stake e somente o valor efetivamente apostado, nunca saldo, retorno, cashout ou limite.`;
 
-const BET_IMAGE_SCHEMA = {
+export const BET_IMAGE_SCHEMA = {
   type: 'object',
   properties: {
     evento: { type: ['string', 'null'] },
@@ -47,19 +47,6 @@ export interface ExtractedBetImage {
 // botão. Quem chama é que combina isso com casa/horário.
 @Injectable()
 export class BetImageService {
-  private client: OpenAI | null = null;
-
-  // Lazy: sem a chave o resto da API continua subindo normalmente (mesmo
-  // espírito do webhook do Telegram, que também não derruba o app).
-  private getClient(): OpenAI {
-    if (!this.client) {
-      const apiKey = process.env.OPENAI_API_KEY;
-      if (!apiKey) throw new Error('OPENAI_API_KEY_AUSENTE');
-      this.client = new OpenAI({ apiKey });
-    }
-    return this.client;
-  }
-
   async extractBetFromImage({
     imageBuffer,
     mimeType,
@@ -72,7 +59,7 @@ export class BetImageService {
     const dataUrl = `data:${mimeType};base64,${imageBuffer.toString('base64')}`;
     const startedAt = Date.now();
 
-    const response = await this.getClient().responses.create({
+    const response = await getOpenAIClient().responses.create({
       model: MODEL,
       reasoning: { effort: deep ? 'low' : 'none' },
       prompt_cache_key: 'bet-image-extractor-v1',
@@ -110,20 +97,24 @@ export class BetImageService {
         `duration=${((Date.now() - startedAt) / 1000).toFixed(2)}s`,
     );
 
-    const raw = response.output_text?.trim();
-    if (!raw) throw new Error('IA_SEM_RESPOSTA');
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      throw new Error('IA_JSON_INVALIDO');
-    }
-    if (!parsed || typeof parsed !== 'object')
-      throw new Error('IA_JSON_INVALIDO');
-
-    return normalizeExtraction(parsed as Record<string, unknown>);
+    return normalizeExtraction(parseExtractionObject(response.output_text));
   }
+}
+
+export function parseExtractionObject(text: string): Record<string, unknown> {
+  const raw = text?.trim();
+  if (!raw) throw new Error('IA_SEM_RESPOSTA');
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error('IA_JSON_INVALIDO');
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+    throw new Error('IA_JSON_INVALIDO');
+
+  return parsed as Record<string, unknown>;
 }
 
 // Structured Outputs garante o formato, mas o schema aceita null em tudo e
