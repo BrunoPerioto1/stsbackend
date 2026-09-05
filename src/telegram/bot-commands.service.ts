@@ -15,7 +15,7 @@ export class BotCommandsService {
   async handleStart(ctx: any) {
     await ctx.reply(
       '👋 Bem-vindo!\n\n' +
-        '1️⃣ Vincule sua conta: faça login em https://stsfront.vercel.app/login → Perfil → "Vincular Telegram", copie o código e envie /vincular SEU_CODIGO\n' +
+        '1️⃣ Vincule sua conta: faça login em https://stsfront.vercel.app/login → Perfil → Telegram → "Gerar código de vinculação" e envie aqui /vincular com os seis dígitos\n' +
         '2️⃣ Defina sua banca: /stake VALOR\n' +
         '3️⃣ (Opcional) Defina o filtro de porcentagem mínima das tips que você quer receber: /filtro 1.5\n' +
         '   Use /filtro off para remover o filtro e receber todas as tips.\n\n' +
@@ -131,7 +131,7 @@ export class BotCommandsService {
   async handleVincular(ctx: any) {
     const args = ctx.message.text.split(' ');
     if (args.length !== 2) {
-      await ctx.reply('❌ Formato incorreto. Use: /vincular SEU_CODIGO');
+      await ctx.reply('❌ Formato incorreto. Use: /vincular 123456');
       return;
     }
 
