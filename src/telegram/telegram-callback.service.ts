@@ -39,6 +39,11 @@ export class TelegramCallbackService {
       return;
     }
 
+    if (action === 'bet_image_deep') {
+      await this.betTextService.handleDeepBetPhoto(ctx);
+      return;
+    }
+
     // planilhar_ts é o mesmo Planilhar, só que o arg não é tipId e sim o
     // horário (unix) da mensagem que originou o card — usado pelo fluxo de
     // print, onde a aposta deve ficar com a hora da foto e não a do clique.

@@ -149,7 +149,53 @@ export class BetTextService {
   // O truque pra não duplicar nada: em vez de inventar um estado novo entre
   // preview e clique, monta o MESMO card de texto emoji que o callback de
   // planilhar já sabe reler (🏠/🆚/⚽/📌/🏷 + 💰 Stake). Nada é gravado aqui.
-  async handleBetPhoto(ctx: any, msg: any) {
+  async handleDeepBetPhoto(ctx: any) {
+    const preview = ctx.callbackQuery?.message;
+    const photo = preview?.reply_to_message;
+    if (!photo?.photo?.length || !photo.caption || !photo.date) {
+      await ctx.answerCbQuery(
+        'Não encontrei a foto original. Envie novamente com a legenda.',
+      );
+      return;
+    }
+    if (photo.from?.id !== ctx.from?.id) {
+      await ctx.answerCbQuery(
+        'Somente quem enviou a foto pode revisar esta aposta.',
+      );
+      return;
+    }
+    const keyboard = preview.reply_markup;
+    if (
+      !keyboard?.inline_keyboard?.some((row: any[]) =>
+        row.some((button) => button.callback_data === 'bet_image_deep'),
+      )
+    ) {
+      await ctx.answerCbQuery('Esta análise já foi solicitada.');
+      return;
+    }
+    await ctx.answerCbQuery('Analisando a foto novamente…');
+    try {
+      // Remove Planilhar enquanto a revisão está em andamento.
+      await ctx.editMessageReplyMarkup({
+        inline_keyboard: [[{ text: '⏳ Analisando…', callback_data: 'noop' }]],
+      });
+    } catch {
+      // Outro clique pode já ter colocado a mensagem no mesmo estado.
+      return;
+    }
+    try {
+      await this.handleBetPhoto(ctx, photo, true);
+    } catch (err) {
+      console.error('❌ Erro na análise profunda:', (err as Error).message);
+      await ctx.editMessageReplyMarkup(keyboard);
+      await ctx.reply(
+        '⚠️ A análise profunda não conseguiu concluir a leitura. O preview anterior foi mantido. Tente novamente ou envie um print mais legível.',
+        { reply_parameters: { message_id: preview.message_id } },
+      );
+    }
+  }
+
+  async handleBetPhoto(ctx: any, msg: any, deep = false) {
     const caption = String(msg.caption ?? '').trim();
     if (!caption) {
       await ctx.reply(
@@ -160,11 +206,19 @@ export class BetTextService {
     }
 
     const extra = { reply_parameters: { message_id: msg.message_id } };
+    const deepButton = [
+      { text: '🔎 Análise profunda', callback_data: 'bet_image_deep' },
+    ];
+    const retryExtra = {
+      ...extra,
+      reply_markup: { inline_keyboard: [deepButton] },
+    };
 
     // Mesma resolução de casa do fluxo textual (aliases + similaridade) — o
     // 🏠 na frente é só pra falar a língua que resolveHouseId já entende.
     const houseId = await this.grokService.resolveHouseId(`🏠 ${caption}`);
     if (!houseId) {
+      if (deep) throw new Error('CASA_INVALIDA');
       await ctx.reply(
         '❌ Erro ao ler a casa de aposta. Por favor, remande a aposta aqui no chat trocando a casa por uma parecida.',
         extra,
@@ -189,6 +243,7 @@ export class BetTextService {
       extracted = await this.betImageService.extractBetFromImage({
         imageBuffer,
         mimeType,
+        deep,
       });
     } catch (err) {
       const reason = (err as Error).message;
@@ -196,28 +251,33 @@ export class BetTextService {
         `❌ Erro ao reconhecer print (chatId=${ctx.chat?.id} messageId=${msg.message_id}):`,
         reason,
       );
+      if (deep) throw err;
       await ctx.reply(
         reason === 'OPENAI_API_KEY_AUSENTE'
           ? '❌ Reconhecimento por imagem não está configurado no servidor.'
           : '❌ Não consegui ler esse print agora. Tenta de novo em instantes.',
-        extra,
+        retryExtra,
       );
       return;
     }
 
     const faltando: string[] = [];
     if (!extracted.evento) faltando.push('Jogo');
+    if (!extracted.esporte) faltando.push('Esporte');
     if (!extracted.mercado) faltando.push('Mercado');
     if (extracted.odd === null || extracted.odd <= 1) faltando.push('Odd');
     if (extracted.stake === null || extracted.stake <= 0)
       faltando.push('Stake');
 
     if (faltando.length) {
+      if (deep) throw new Error(`CAMPOS_AUSENTES: ${faltando.join(', ')}`);
       await ctx.reply(
         `⚠️ Não consegui identificar completamente esta aposta.\n\nNão identificado:\n${faltando
           .map((f) => `• ${f}`)
-          .join('\n')}\n\nEnvie outro print mostrando o bilhete completo.`,
-        extra,
+          .join(
+            '\n',
+          )}\n\nTente a análise profunda ou envie outro print mostrando o bilhete completo.`,
+        retryExtra,
       );
       return;
     }
@@ -235,22 +295,25 @@ export class BetTextService {
       `🏷 ${(extracted.odd as number).toFixed(2)}\n` +
       `💰 Stake: R$ ${(extracted.stake as number).toFixed(2).replace('.', ',')}`;
 
-    await ctx.reply(`✅ Aposta identificada!\n\n${card}`, {
-      ...extra,
+    const options = {
       reply_markup: {
         inline_keyboard: [
           [
             {
-              text: '📊 Enviar ao Planilhador',
+              text: '📊 Planilhar',
               // Carrega o horário da FOTO no próprio botão: o clique pode
               // acontecer bem depois, e o processo é serverless (não dá pra
               // guardar em memória).
               callback_data: `planilhar_ts:${msg.date}`,
             },
           ],
+          ...(!deep ? [deepButton] : []),
         ],
       },
-    });
+    };
+    const text = `${deep ? '✅ Análise profunda concluída!' : '✅ Aposta identificada!'}\n\n${card}`;
+    if (deep) await ctx.editMessageText(text, options);
+    else await ctx.reply(text, { ...extra, ...options });
   }
 
   // Resposta (reply) a um prompt de "✏️ Editar": extrai a odd/limite novos e

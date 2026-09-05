@@ -9,56 +9,18 @@ const MODEL = 'gpt-5.6-luna';
 // Único lugar onde as regras de leitura do bilhete vivem. Mexer aqui muda o
 // comportamento do reconhecimento inteiro — não espalhar regra em outro
 // arquivo.
-export const BET_IMAGE_PROMPT = `Você é um extrator de dados de bilhetes de apostas esportivas.
+export const BET_IMAGE_PROMPT = `Analise somente a aposta efetivamente realizada no print.
+Extraia evento, esporte, mercado, odd total e stake.
 
-Analise especificamente a aposta EFETIVAMENTE REALIZADA no print.
-
-Extraia: evento, esporte, mercado, odd total e stake.
-
-Não invente informações. Se evento, mercado, odd ou stake não puderem ser
-identificados com segurança, retorne null no respectivo campo.
-
-ESPORTE
-Pode ser inferido pelo contexto quando houver evidências fortes. Não é
-necessário que a palavra "Futebol"/"Basquete" esteja escrita no print.
-- "Fluminense x Vasco" + "Hulk" + "marcar ou dar assistência" => Futebol
-- "Boston Celtics x Miami Heat" + pontos/rebotes => Basquete
-- "Carlos Alcaraz x Jannik Sinner" + sets/games => Tênis
-Só retorne null quando realmente não for possível inferir com confiança.
-
-EVENTO
-Identifique somente o evento da aposta efetivamente realizada. Ignore outros
-jogos visíveis ao fundo, sugestões da casa, eventos disponíveis para apostar
-e banners.
-
-MERCADO
-Não existe campo "seleção" separado: o campo mercado deve conter tudo que
-identifica exatamente a seleção apostada. Exemplos:
-- "Juárez - 1x2"
-- "Sim - Ambas equipes marcam"
-- "Mais de 2,5 gols - Total de gols"
-- "Carlos Vinicius: Mais de 0,5 chutes no gol"
-- "Carlos Vinicius: Mais de 0,5 chutes no gol e Jonathan Calleri: Mais de 0,5 chutes no gol"
-- "SC Freiburg e Sim - 1x2 e ambas equipes marcam"
-- "Hulk tocar na bola + marcar ou dar assistência"
-Preserve informações importantes da seleção, mas NÃO inclua etiquetas
-promocionais: Super odds, BetoBoost, Boost, Price Boost, Odds aumentadas,
-Enhanced Odds, Turbo, Promoção, Oferta, bônus.
-Certo: "Hulk tocar na bola + marcar ou dar assistência"
-Errado: "Hulk tocar na bola + marcar ou dar assistência - Super odds"
-
-ODD
-Somente a odd TOTAL da aposta realizada. Ignore odds de outras partidas,
-odds disponíveis para apostar, odds individuais quando existir múltipla com
-odd total, e a odd antiga riscada quando um boost mostra uma nova odd
-(1.78 riscada -> 3.00 atual => 3.00).
-
-STAKE
-Somente o valor efetivamente apostado. "Valor: R$ 14,83" => 14.83.
-"Aposta R$100,00" => 100. Não confundir com saldo, possível retorno, ganho
-potencial, cashout, limite, bônus, depósito, saque ou valor de outra aposta.
-
-RETORNO, HORÁRIO e CASA: ignore completamente, não extraia.`;
+Regras:
+- Nao invente dados; retorne null se nao identificar um campo com seguranca.
+- Ignore outros jogos, mercados disponiveis, saldo, retorno, cashout, limite, IDs, datas e horarios.
+- O esporte pode ser inferido pelo contexto.
+- Mercado deve conter somente as condicoes esportivas para a aposta vencer, preservando jogadores, linhas, periodos e tipo de estatistica.
+- Junte todas as selecoes relevantes em apostas combinadas/criadas.
+- Exclua do mercado interface, status e promocoes, como "Criar Aposta", "Super Odds", "Boost", "BetoBoost", "Simples", "Multiplas", "Perdida" e "Ganha".
+- Odd e a TOTAL/final da aposta. Ignore odds antigas/riscadas, individuais e de outros eventos.
+- Stake e somente o valor efetivamente apostado, nunca saldo, retorno, cashout ou limite.`;
 
 const BET_IMAGE_SCHEMA = {
   type: 'object',
@@ -101,22 +63,30 @@ export class BetImageService {
   async extractBetFromImage({
     imageBuffer,
     mimeType,
+    deep = false,
   }: {
     imageBuffer: Buffer;
     mimeType: string;
+    deep?: boolean;
   }): Promise<ExtractedBetImage> {
     const dataUrl = `data:${mimeType};base64,${imageBuffer.toString('base64')}`;
     const startedAt = Date.now();
 
     const response = await this.getClient().responses.create({
       model: MODEL,
-      reasoning: { effort: 'low' },
+      reasoning: { effort: deep ? 'low' : 'none' },
+      prompt_cache_key: 'bet-image-extractor-v1',
+      prompt_cache_options: { mode: 'implicit', ttl: '30m' },
       input: [
         {
           role: 'user',
           content: [
             { type: 'input_text', text: BET_IMAGE_PROMPT },
-            { type: 'input_image', image_url: dataUrl, detail: 'high' },
+            {
+              type: 'input_image',
+              image_url: dataUrl,
+              detail: deep ? 'high' : 'original',
+            },
           ],
         },
       ],
@@ -132,7 +102,9 @@ export class BetImageService {
 
     const usage = response.usage;
     console.log(
-      `[BET_IMAGE_AI] model=${MODEL} input=${usage?.input_tokens ?? '?'} ` +
+      `[BET_IMAGE_AI] model=${MODEL} mode=${deep ? 'deep' : 'standard'} input=${usage?.input_tokens ?? '?'} ` +
+        `cached=${usage?.input_tokens_details?.cached_tokens ?? 0} ` +
+        `cache_write=${usage?.input_tokens_details?.cache_write_tokens ?? 0} ` +
         `output=${usage?.output_tokens ?? '?'} total=${usage?.total_tokens ?? '?'} ` +
         `reasoning=${usage?.output_tokens_details?.reasoning_tokens ?? '?'} ` +
         `duration=${((Date.now() - startedAt) / 1000).toFixed(2)}s`,
