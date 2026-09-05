@@ -11,7 +11,7 @@ import { parseBetLocal } from './utils/tip-extractors.util';
 
 dotenv.config();
 
-// Bootstrap do bot: registra o webhook e conecta cada evento do Telegraf no
+// Bootstrap do bot: conecta cada evento do Telegraf no
 // serviço responsável. A lógica de verdade (comandos, fan-out de tips,
 // parsing/criação de aposta, callback_query) vive nos serviços injetados
 // aqui — este arquivo só existe pra deixar visível, num lugar só, o que o
@@ -26,19 +26,8 @@ export class TelegramService implements OnModuleInit {
     private readonly callbackService: TelegramCallbackService,
   ) {}
 
-  async onModuleInit() {
+  onModuleInit() {
     this.registerHandlers();
-
-    const url = `${process.env.APP_URL}/telegram/${process.env.TELEGRAM_BOT_TOKEN}`;
-    try {
-      await this.bot.telegram.setWebhook(url);
-      console.log(`🤖 Telegram bot iniciado em webhook: ${url}`);
-    } catch (error) {
-      console.error(
-        `⚠️  Não foi possível registrar o webhook do Telegram (${url}). O bot ficará indisponível, mas o resto da API continua rodando.`,
-        error instanceof Error ? error.message : error,
-      );
-    }
   }
 
   private registerHandlers() {

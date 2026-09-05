@@ -13,8 +13,12 @@ let expressAppPromise: Promise<RequestHandler> | null = null;
 
 function getExpressApp(): Promise<RequestHandler> {
   if (!expressAppPromise) {
+    const startedAt = performance.now();
     expressAppPromise = createNestApp().then(async (app) => {
       await app.init();
+      console.log(
+        `[APP_INIT] duration_ms=${Math.round(performance.now() - startedAt)}`,
+      );
       return app.getHttpAdapter().getInstance() as RequestHandler;
     });
   }
@@ -25,6 +29,11 @@ export default async function handler(
   req: IncomingMessage,
   res: ServerResponse,
 ) {
+  const startedAt = performance.now();
+  const coldStart = expressAppPromise === null;
   const expressApp = await getExpressApp();
+  console.log(
+    `[APP_READY] cold_start=${coldStart} wait_ms=${Math.round(performance.now() - startedAt)}`,
+  );
   expressApp(req, res);
 }

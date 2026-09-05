@@ -149,4 +149,48 @@ npm run lint              # lint
 
 ## Status
 
+### Telegram: webhook e duração
+
+O backend não registra o webhook durante a inicialização. Depois do primeiro
+deploy, ou ao mudar `APP_URL`/`TELEGRAM_BOT_TOKEN`, configure usando o ambiente
+correto e a URL pública já disponível:
+
+```bash
+npm run telegram:webhook
+```
+
+O webhook já registrado continua válido; não precisa executar a cada deploy
+com a mesma URL. Não execute no build de previews, que poderiam redirecionar
+o bot de produção. O comando não descarta updates pendentes e não imprime token.
+
+Ao receber foto com legenda, o bot envia “⏳ Analisando a foto…” enquanto
+identifica a casa e baixa a imagem em paralelo. O resultado substitui essa
+mensagem. Se o aviso falhar, a leitura continua e o resultado é enviado
+normalmente.
+
+Logs (todos os valores em milissegundos):
+
+- `[APP_INIT] duration_ms`: criação e inicialização do Nest na instância nova;
+  não inclui provisionamento da Vercel nem carregamento anterior dos módulos.
+- `[APP_READY] cold_start wait_ms`: espera pela aplicação em cada requisição.
+- `[TELEGRAM_WEBHOOK] update_id status duration_ms`: processamento do update,
+  incluindo inicialização do Telegraf/getMe quando necessária, até concluir o handler.
+- `[BET_IMAGE_FLOW] chat_id message_id mode status feedback_ms house_ms get_file_ms download_ms ai_ms preview_ms total_ms`:
+  aviso inicial, consulta de casa, obtenção do link, download dos bytes, leitura
+  da IA, envio/edição do resultado e total do fluxo de foto.
+
+Exemplo **ilustrativo**, não medição de produção:
+
+```text
+[BET_IMAGE_FLOW] chat_id=1 message_id=10 mode=standard status=ok feedback_ms=180 house_ms=90 get_file_ms=100 download_ms=140 ai_ms=1600 preview_ms=150 total_ms=1990
+```
+
+Etapas paralelas não devem ser somadas. Os campos aparecem na ordem em que
+cada etapa termina, não na ordem acima. Campos de etapas não executadas são
+omitidos. `deep` reaproveita o aviso do botão; seu `total_ms` começa depois
+desse aviso. `error`, `invalid_house` e `incomplete` indicam saídas sem preview
+válido. Não há medição do upload no celular nem da renderização no aplicativo.
+
+## Status do projeto
+
 Personal project, actively developed. Not production-hardened for third-party use — showcased here as a portfolio piece.

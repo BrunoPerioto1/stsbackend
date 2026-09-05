@@ -205,6 +205,21 @@ export class BetTextService {
       return;
     }
 
+    const startedAt = performance.now();
+    const timings: Record<string, number> = {};
+    let status = 'error';
+    const measure = async <T>(
+      stage: string,
+      operation: () => Promise<T>,
+    ): Promise<T> => {
+      const start = performance.now();
+      try {
+        return await operation();
+      } finally {
+        timings[stage] = Math.round(performance.now() - start);
+      }
+    };
+    let feedback: { message_id: number } | null = null;
     const extra = { reply_parameters: { message_id: msg.message_id } };
     const deepButton = [
       { text: '🔎 Análise profunda', callback_data: 'bet_image_deep' },
@@ -214,106 +229,149 @@ export class BetTextService {
       reply_markup: { inline_keyboard: [deepButton] },
     };
 
-    // Mesma resolução de casa do fluxo textual (aliases + similaridade) — o
-    // 🏠 na frente é só pra falar a língua que resolveHouseId já entende.
-    const houseId = await this.grokService.resolveHouseId(`🏠 ${caption}`);
-    if (!houseId) {
-      if (deep) throw new Error('CASA_INVALIDA');
-      await ctx.reply(
-        '❌ Erro ao ler a casa de aposta. Por favor, remande a aposta aqui no chat trocando a casa por uma parecida.',
-        extra,
-      );
-      return;
-    }
-
-    let extracted: Awaited<
-      ReturnType<typeof this.betImageService.extractBetFromImage>
-    >;
-    try {
-      // photo[] vem ordenado do menor pro maior; o último é a melhor resolução.
-      const fileId = msg.photo[msg.photo.length - 1].file_id;
-      const link = await ctx.telegram.getFileLink(fileId);
-      const res = await fetch(link.href ?? String(link));
-      if (!res.ok) throw new Error(`download ${res.status}`);
-      const imageBuffer = Buffer.from(await res.arrayBuffer());
-      const mimeType = /\.png($|\?)/i.test(link.href ?? String(link))
-        ? 'image/png'
-        : 'image/jpeg';
-
-      extracted = await this.betImageService.extractBetFromImage({
-        imageBuffer,
-        mimeType,
-        deep,
+    const reply = async (text: string, options: any = {}) =>
+      measure('preview', async () => {
+        const { reply_parameters: _replyParameters, ...editOptions } = options;
+        if (deep) return ctx.editMessageText(text, editOptions);
+        if (feedback)
+          return ctx.telegram.editMessageText(
+            ctx.chat.id,
+            feedback.message_id,
+            undefined,
+            text,
+            editOptions,
+          );
+        return ctx.reply(text, { ...extra, ...editOptions });
       });
-    } catch (err) {
-      const reason = (err as Error).message;
-      console.error(
-        `❌ Erro ao reconhecer print (chatId=${ctx.chat?.id} messageId=${msg.message_id}):`,
-        reason,
-      );
-      if (deep) throw err;
-      await ctx.reply(
-        reason === 'OPENAI_API_KEY_AUSENTE'
-          ? '❌ Reconhecimento por imagem não está configurado no servidor.'
-          : '❌ Não consegui ler esse print agora. Tenta de novo em instantes.',
-        retryExtra,
-      );
-      return;
-    }
 
-    const faltando: string[] = [];
-    if (!extracted.evento) faltando.push('Jogo');
-    if (!extracted.esporte) faltando.push('Esporte');
-    if (!extracted.mercado) faltando.push('Mercado');
-    if (extracted.odd === null || extracted.odd <= 1) faltando.push('Odd');
-    if (extracted.stake === null || extracted.stake <= 0)
-      faltando.push('Stake');
+    try {
+      // Feedback, consulta da casa e download começam juntos. A IA só roda com casa válida.
+      const [notice, house, photo] = await Promise.allSettled([
+        deep
+          ? Promise.resolve(null)
+          : measure('feedback', () =>
+              ctx.reply('⏳ Analisando a foto…', extra),
+            ),
+        measure('house', () =>
+          this.grokService.resolveHouseId(`🏠 ${caption}`),
+        ),
+        (async () => {
+          const fileId = msg.photo[msg.photo.length - 1].file_id;
+          const link: any = await measure('get_file', () =>
+            ctx.telegram.getFileLink(fileId),
+          );
+          const url = link.href ?? String(link);
+          const imageBuffer = await measure('download', async () => {
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`download ${res.status}`);
+            return Buffer.from(await res.arrayBuffer());
+          });
+          return {
+            imageBuffer,
+            mimeType: /\.png($|\?)/i.test(url) ? 'image/png' : 'image/jpeg',
+          };
+        })(),
+      ]);
+      if (notice.status === 'fulfilled')
+        feedback = notice.value as { message_id: number } | null;
+      else console.warn('[BET_IMAGE_FLOW] feedback_failed=true');
 
-    if (faltando.length) {
-      if (deep) throw new Error(`CAMPOS_AUSENTES: ${faltando.join(', ')}`);
-      await ctx.reply(
-        `⚠️ Não consegui identificar completamente esta aposta.\n\nNão identificado:\n${faltando
-          .map((f) => `• ${f}`)
-          .join(
-            '\n',
-          )}\n\nTente a análise profunda ou envie outro print mostrando o bilhete completo.`,
-        retryExtra,
-      );
-      return;
-    }
+      let extracted: Awaited<
+        ReturnType<typeof this.betImageService.extractBetFromImage>
+      >;
+      try {
+        if (house.status === 'rejected') throw house.reason;
+        if (!house.value) {
+          status = 'invalid_house';
+          if (deep) throw new Error('CASA_INVALIDA');
+          await reply(
+            '❌ Erro ao ler a casa de aposta. Por favor, remande a aposta aqui no chat trocando a casa por uma parecida.',
+          );
+          return;
+        }
+        if (photo.status === 'rejected') throw photo.reason;
+        extracted = await measure('ai', () =>
+          this.betImageService.extractBetFromImage({ ...photo.value, deep }),
+        );
+      } catch (err) {
+        const reason = (err as Error).message;
+        console.error(
+          `❌ Erro ao reconhecer print (chatId=${ctx.chat?.id} messageId=${msg.message_id}):`,
+          reason,
+        );
+        if (deep) throw err;
+        await reply(
+          reason === 'OPENAI_API_KEY_AUSENTE'
+            ? '❌ Reconhecimento por imagem não está configurado no servidor.'
+            : '❌ Não consegui ler esse print agora. Tenta de novo em instantes.',
+          retryExtra,
+        );
+        return;
+      }
 
-    // "%" no texto faria o planilhador tratar o valor como percentual da
-    // banca em vez de stake absoluta — nenhum mercado precisa do símbolo.
-    const oneLine = (s: string) =>
-      s.replace(/\s*\n\s*/g, ' ').replace(/%/g, '');
+      const faltando: string[] = [];
+      if (!extracted.evento) faltando.push('Jogo');
+      if (!extracted.esporte) faltando.push('Esporte');
+      if (!extracted.mercado) faltando.push('Mercado');
+      if (extracted.odd === null || extracted.odd <= 1) faltando.push('Odd');
+      if (extracted.stake === null || extracted.stake <= 0)
+        faltando.push('Stake');
 
-    const card =
-      `🏠 ${caption}\n` +
-      `🆚 ${oneLine(extracted.evento as string)}\n` +
-      `⚽️ ${oneLine(extracted.esporte ?? 'Outros')}\n` +
-      `📌 ${oneLine(extracted.mercado as string)}\n` +
-      `🏷 ${(extracted.odd as number).toFixed(2)}\n` +
-      `💰 Stake: R$ ${(extracted.stake as number).toFixed(2).replace('.', ',')}`;
+      if (faltando.length) {
+        status = 'incomplete';
+        if (deep) throw new Error(`CAMPOS_AUSENTES: ${faltando.join(', ')}`);
+        await reply(
+          `⚠️ Não consegui identificar completamente esta aposta.\n\nNão identificado:\n${faltando
+            .map((f) => `• ${f}`)
+            .join(
+              '\n',
+            )}\n\nTente a análise profunda ou envie outro print mostrando o bilhete completo.`,
+          retryExtra,
+        );
+        return;
+      }
 
-    const options = {
-      reply_markup: {
-        inline_keyboard: [
-          [
-            {
-              text: '📊 Planilhar',
-              // Carrega o horário da FOTO no próprio botão: o clique pode
-              // acontecer bem depois, e o processo é serverless (não dá pra
-              // guardar em memória).
-              callback_data: `planilhar_ts:${msg.date}`,
-            },
+      // "%" no texto faria o planilhador tratar o valor como percentual da
+      // banca em vez de stake absoluta — nenhum mercado precisa do símbolo.
+      const oneLine = (s: string) =>
+        s.replace(/\s*\n\s*/g, ' ').replace(/%/g, '');
+
+      const card =
+        `🏠 ${caption}\n` +
+        `🆚 ${oneLine(extracted.evento as string)}\n` +
+        `⚽️ ${oneLine(extracted.esporte ?? 'Outros')}\n` +
+        `📌 ${oneLine(extracted.mercado as string)}\n` +
+        `🏷 ${(extracted.odd as number).toFixed(2)}\n` +
+        `💰 Stake: R$ ${(extracted.stake as number).toFixed(2).replace('.', ',')}`;
+
+      const options = {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: '📊 Planilhar',
+                // Carrega o horário da FOTO no próprio botão: o clique pode
+                // acontecer bem depois, e o processo é serverless (não dá pra
+                // guardar em memória).
+                callback_data: `planilhar_ts:${msg.date}`,
+              },
+            ],
+            ...(!deep ? [deepButton] : []),
           ],
-          ...(!deep ? [deepButton] : []),
-        ],
-      },
-    };
-    const text = `${deep ? '✅ Análise profunda concluída!' : '✅ Aposta identificada!'}\n\n${card}`;
-    if (deep) await ctx.editMessageText(text, options);
-    else await ctx.reply(text, { ...extra, ...options });
+        },
+      };
+      const text = `${deep ? '✅ Análise profunda concluída!' : '✅ Aposta identificada!'}\n\n${card}`;
+      await reply(text, options);
+      status = 'ok';
+    } finally {
+      console.log(
+        `[BET_IMAGE_FLOW] chat_id=${ctx.chat?.id} message_id=${msg.message_id} mode=${deep ? 'deep' : 'standard'} status=${status} ` +
+          Object.entries(timings)
+            .map(([stage, duration]) => `${stage}_ms=${duration}`)
+            .join(' ') +
+          ` total_ms=${Math.round(performance.now() - startedAt)}`,
+      );
+    }
   }
 
   // Resposta (reply) a um prompt de "✏️ Editar": extrai a odd/limite novos e
