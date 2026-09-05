@@ -95,9 +95,13 @@ export class HouseRepository {
   findAllHousesBalance(userId: UserId, filter?: HouseFilterRequestDto) {
     return this.dbRead
       .selectFrom('bettingHouses as bh')
-      .innerJoin(this.betsAggregate(userId).as('ba'), 'ba.houseId', 'bh.id')
+      .leftJoin(this.betsAggregate(userId).as('ba'), 'ba.houseId', 'bh.id')
       .leftJoin(this.transactionsAggregate(userId).as('ta'), 'ta.houseId', 'bh.id')
       .where('bh.isActive', '=', true)
+      .where((eb) => eb.or([
+        eb('ba.houseId', 'is not', null),
+        eb('ta.houseId', 'is not', null),
+      ]))
       .$if(!!filter?.houseId, (qb) => qb.where('bh.id', '=', filter!.houseId!))
       .$if(!!filter?.houseName, (qb) => qb.where('bh.name', 'ilike', `%${filter!.houseName}%`))
       .select((eb) => [
