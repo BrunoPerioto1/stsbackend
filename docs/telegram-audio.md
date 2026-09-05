@@ -4,6 +4,10 @@
 
 Receber áudio nunca salva a aposta. Só o clique em **Planilhar** chama o registro existente. Casa ausente/desconhecida ou campos incompletos geram uma lista do que falta, sem botão. A validação de casas usa `resolveHouseId`, sem lista nova.
 
+Antes do preview, a própria chamada Luna formata a fala como bilhete: “Palmeiras contra Corinthians” fica “Palmeiras x Corinthians”; “Rioroberto chuta para o gol” fica “Rioroberto: Chute ao gol”. Preserva nomes, linhas, períodos e condições, sem inventar quantidade de chutes. Não há chamada extra de IA para formatação.
+
+As regras do prompt padronizam vitória como “Palmeiras ML” e linhas como “Palmeiras: Mais de 1,5 gols” ou “Palmeiras: Menos de 9,5 escanteios”, usando Mais de/Menos de em vez de Over/Under. Derrota explícita fica “Palmeiras perde”; não perder, empate e empate anula não viram ML. Linhas mantêm o valor e a direção originais: 1,5 não vira 1 e mais de 9,5 não vira mais de 10. Linha sem condição clara ou fala ambígua deve retornar mercado nulo; a validação existente bloqueia Planilhar e pede novo áudio. Essa verificação semântica depende do Luna; os testes com mocks não comprovam sua precisão.
+
 O timestamp vem da mensagem original, com a mesma conversão e apresentação em `America/Sao_Paulo` do callback existente. O estado antes do clique continua no texto do preview; não há tabela ou histórico novo. Texto e encaminhamento do grupo de tips mantêm seu comportamento anterior.
 
 ## Arquivos
