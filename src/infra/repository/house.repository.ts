@@ -50,6 +50,7 @@ export class HouseRepository {
       .select((eb) => [
         'b.houseId',
         eb.fn.count('b.id').as('totalBets'),
+        eb.fn<number>('sum', [eb.case().when('br.resultId', 'in', [1, 2, 4, 5] as any).then(1).else(0).end()]).as('settledBets'),
         eb.fn<number>('coalesce', [eb.fn.sum<number>('b.stake'), sql.lit(0)]).as('totalStake'),
         eb.fn<number>('coalesce', [eb.fn.sum<number>('b.profit'), sql.lit(0)]).as('totalBetProfit'),
         eb.fn<number>('coalesce', [
@@ -57,11 +58,11 @@ export class HouseRepository {
           sql.lit(0),
         ]).as('pendingBets'),
         eb.fn<number>('coalesce', [
-          eb.fn.sum<number>(eb.case().when('br.resultId', '=', 1 as any).then(1).else(0).end()),
+          eb.fn.sum<number>(eb.case().when('br.resultId', 'in', [1, 4] as any).then(1).else(0).end()),
           sql.lit(0),
         ]).as('wonBets'),
         eb.fn<number>('coalesce', [
-          eb.fn.sum<number>(eb.case().when('br.resultId', '=', 2 as any).then(1).else(0).end()),
+          eb.fn.sum<number>(eb.case().when('br.resultId', 'in', [2, 5] as any).then(1).else(0).end()),
           sql.lit(0),
         ]).as('lostBets'),
       ])
@@ -108,6 +109,7 @@ export class HouseRepository {
         'bh.id as houseId',
         'bh.name as houseName',
         eb.fn.coalesce('ba.totalBets', eb.lit(0)).as('totalBets'),
+        eb.fn.coalesce('ba.settledBets', eb.lit(0)).as('settledBets'),
         eb.fn.coalesce('ba.totalStake', eb.lit(0)).as('totalStake'),
         eb.fn.coalesce('ba.totalBetProfit', eb.lit(0)).as('totalBetProfit'),
         eb.fn.coalesce('ba.pendingBets', eb.lit(0)).as('pendingBets'),
