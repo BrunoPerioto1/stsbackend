@@ -115,3 +115,18 @@ export function parseBetLocal(
   if (!game || !sport || !market || odd === null) return null;
   return { game, sport, market, odd };
 }
+
+// Stake absoluta em R$ — só existe nos cards gerados a partir de print
+// (fluxo de imagem), onde o valor apostado já vem pronto em vez de uma %.
+// Casa o rótulo inteiro de propósito: card de tip tem "💰 Lucro potencial:
+// R$ X", que NÃO é stake e não pode ser confundido com uma.
+export function extractStakeFromText(text: string): number | null {
+  const m = text?.match(/^💰\s*Stake:\s*R?\$?\s*([\d.,]+)/im);
+  if (!m) return null;
+  const raw = m[1];
+  const normalized = raw.includes(',')
+    ? raw.replace(/\./g, '').replace(',', '.')
+    : raw;
+  const val = Number(normalized);
+  return Number.isFinite(val) && val > 0 ? val : null;
+}

@@ -17,7 +17,8 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:bet-image": "ts-node -r tsconfig-paths/register scripts/test-bet-image.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
@@ -34,6 +35,7 @@
     "express-basic-auth": "^1.2.1",
     "groq-sdk": "^0.30.0",
     "kysely": "^0.28.8",
+    "openai": "^7.10.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "pg": "^8.16.3",

@@ -39,17 +39,22 @@ export class TelegramCallbackService {
       return;
     }
 
-    if (action === 'planilhar') {
+    // planilhar_ts é o mesmo Planilhar, só que o arg não é tipId e sim o
+    // horário (unix) da mensagem que originou o card — usado pelo fluxo de
+    // print, onde a aposta deve ficar com a hora da foto e não a do clique.
+    if (action === 'planilhar' || action === 'planilhar_ts') {
       if (!text) {
         await ctx.answerCbQuery('❌ Não consegui ler o texto da mensagem.');
         return;
       }
+      const isTs = action === 'planilhar_ts';
       try {
         await this.betTextService.processBetText(
           ctx,
           text,
           msg.message_id,
-          tipId ?? undefined,
+          isTs ? undefined : (tipId ?? undefined),
+          isTs && tipId ? new Date(tipId * 1000) : undefined,
         );
         const novoTexto = `✅ PLANILHADO\n\n${text}`;
         const doneKeyboard = {
@@ -249,10 +254,7 @@ export class TelegramCallbackService {
           // individual que o usuário recebeu) pra confirmação sair como
           // reply da aposta, e não da lista. Sem delivery salva (tip antiga),
           // cai pro comportamento anterior em vez de não responder nada.
-          const delivery = await this.tipsService.findDelivery(
-            tipId,
-            user.id,
-          );
+          const delivery = await this.tipsService.findDelivery(tipId, user.id);
           await this.betTextService.processBetText(
             ctx,
             tip.text,

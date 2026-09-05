@@ -7,6 +7,7 @@ import { BetTextService } from './bet-text.service';
 import { TipFanoutService } from './tip-fanout.service';
 import { TelegramCallbackService } from './telegram-callback.service';
 import { EDIT_PROMPT_HEADER_RE } from './messages.const';
+import { parseBetLocal } from './utils/tip-extractors.util';
 
 dotenv.config();
 
@@ -87,6 +88,14 @@ export class TelegramService implements OnModuleInit {
           headerMatch,
           msg.text ?? '',
         );
+        return;
+      }
+
+      // Print de bilhete: só entra no fluxo de visão quando a legenda NÃO é
+      // um card de aposta completo — encaminhar uma tip com mídia + legenda
+      // inteira continua caindo no parser de texto de sempre.
+      if (msg.photo && !parseBetLocal(msg.caption ?? '')) {
+        await this.betTextService.handleBetPhoto(ctx, msg);
         return;
       }
 

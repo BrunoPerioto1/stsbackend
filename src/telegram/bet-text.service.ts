@@ -12,8 +12,10 @@ import {
 import {
   extractLimitFromText,
   extractPercent,
+  extractStakeFromText,
   parseBetLocal,
 } from './utils/tip-extractors.util';
+import { BetImageService } from './bet-image.service';
 
 // Transforma texto livre (DM ou tip) numa aposta salva, e trata o fluxo de
 // edição de odd/limite/casa que acontece antes disso (prompt de "✏️ Editar").
@@ -25,6 +27,7 @@ export class BetTextService {
     private readonly usersService: UsersService,
     private readonly houseService: HouseService,
     private readonly tipFanoutService: TipFanoutService,
+    private readonly betImageService: BetImageService,
   ) {}
 
   // Parsing + criação da aposta. Reaproveitado tanto pelo texto livre em DM
@@ -36,6 +39,7 @@ export class BetTextService {
     userMessage: string,
     replyToMessageId?: number,
     tipId?: number,
+    betTime?: Date,
   ) {
     try {
       const resolvedHouseId =
@@ -65,6 +69,11 @@ export class BetTextService {
           ? (percent / 100) * userStake
           : Number(jsonResult.stake);
 
+      // Card vindo de print: não tem % pra converter pela banca, o valor
+      // apostado já está no texto ("💰 Stake: R$ 14,83").
+      if (!Number.isFinite(stake))
+        stake = extractStakeFromText(userMessage) ?? NaN;
+
       const limit = extractLimitFromText(userMessage);
       if (limit !== null) stake = Math.min(stake, limit);
 
@@ -85,6 +94,9 @@ export class BetTextService {
         houseId,
         market,
         sport,
+        // Só o fluxo de imagem passa isso (horário da mensagem original no
+        // Telegram). Sem betTime o banco segue usando o default de sempre.
+        ...(betTime ? { betTime: betTime.toISOString() } : {}),
       };
 
       const aposta = await this.betService.createBet(apostaData, tipId);
@@ -130,6 +142,115 @@ export class BetTextService {
       }
       throw err;
     }
+  }
+
+  // Print de bilhete + legenda com o nome da casa. A IA só extrai os dados —
+  // quem planilha continua sendo o botão "Enviar ao Planilhador" de sempre.
+  // O truque pra não duplicar nada: em vez de inventar um estado novo entre
+  // preview e clique, monta o MESMO card de texto emoji que o callback de
+  // planilhar já sabe reler (🏠/🆚/⚽/📌/🏷 + 💰 Stake). Nada é gravado aqui.
+  async handleBetPhoto(ctx: any, msg: any) {
+    const caption = String(msg.caption ?? '').trim();
+    if (!caption) {
+      await ctx.reply(
+        '📸 Informe o nome da casa na legenda da imagem. Ex.: Ginga',
+        { reply_parameters: { message_id: msg.message_id } },
+      );
+      return;
+    }
+
+    const extra = { reply_parameters: { message_id: msg.message_id } };
+
+    // Mesma resolução de casa do fluxo textual (aliases + similaridade) — o
+    // 🏠 na frente é só pra falar a língua que resolveHouseId já entende.
+    const houseId = await this.grokService.resolveHouseId(`🏠 ${caption}`);
+    if (!houseId) {
+      await ctx.reply(
+        '❌ Erro ao ler a casa de aposta. Por favor, remande a aposta aqui no chat trocando a casa por uma parecida.',
+        extra,
+      );
+      return;
+    }
+
+    let extracted: Awaited<
+      ReturnType<typeof this.betImageService.extractBetFromImage>
+    >;
+    try {
+      // photo[] vem ordenado do menor pro maior; o último é a melhor resolução.
+      const fileId = msg.photo[msg.photo.length - 1].file_id;
+      const link = await ctx.telegram.getFileLink(fileId);
+      const res = await fetch(link.href ?? String(link));
+      if (!res.ok) throw new Error(`download ${res.status}`);
+      const imageBuffer = Buffer.from(await res.arrayBuffer());
+      const mimeType = /\.png($|\?)/i.test(link.href ?? String(link))
+        ? 'image/png'
+        : 'image/jpeg';
+
+      extracted = await this.betImageService.extractBetFromImage({
+        imageBuffer,
+        mimeType,
+      });
+    } catch (err) {
+      const reason = (err as Error).message;
+      console.error(
+        `❌ Erro ao reconhecer print (chatId=${ctx.chat?.id} messageId=${msg.message_id}):`,
+        reason,
+      );
+      await ctx.reply(
+        reason === 'OPENAI_API_KEY_AUSENTE'
+          ? '❌ Reconhecimento por imagem não está configurado no servidor.'
+          : '❌ Não consegui ler esse print agora. Tenta de novo em instantes.',
+        extra,
+      );
+      return;
+    }
+
+    const faltando: string[] = [];
+    if (!extracted.evento) faltando.push('Jogo');
+    if (!extracted.mercado) faltando.push('Mercado');
+    if (extracted.odd === null || extracted.odd <= 1) faltando.push('Odd');
+    if (extracted.stake === null || extracted.stake <= 0)
+      faltando.push('Stake');
+
+    if (faltando.length) {
+      await ctx.reply(
+        `⚠️ Não consegui identificar completamente esta aposta.\n\nNão identificado:\n${faltando
+          .map((f) => `• ${f}`)
+          .join('\n')}\n\nEnvie outro print mostrando o bilhete completo.`,
+        extra,
+      );
+      return;
+    }
+
+    // "%" no texto faria o planilhador tratar o valor como percentual da
+    // banca em vez de stake absoluta — nenhum mercado precisa do símbolo.
+    const oneLine = (s: string) =>
+      s.replace(/\s*\n\s*/g, ' ').replace(/%/g, '');
+
+    const card =
+      `🏠 ${caption}\n` +
+      `🆚 ${oneLine(extracted.evento as string)}\n` +
+      `⚽️ ${oneLine(extracted.esporte ?? 'Outros')}\n` +
+      `📌 ${oneLine(extracted.mercado as string)}\n` +
+      `🏷 ${(extracted.odd as number).toFixed(2)}\n` +
+      `💰 Stake: R$ ${(extracted.stake as number).toFixed(2).replace('.', ',')}`;
+
+    await ctx.reply(`✅ Aposta identificada!\n\n${card}`, {
+      ...extra,
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: '📊 Enviar ao Planilhador',
+              // Carrega o horário da FOTO no próprio botão: o clique pode
+              // acontecer bem depois, e o processo é serverless (não dá pra
+              // guardar em memória).
+              callback_data: `planilhar_ts:${msg.date}`,
+            },
+          ],
+        ],
+      },
+    });
   }
 
   // Resposta (reply) a um prompt de "✏️ Editar": extrai a odd/limite novos e

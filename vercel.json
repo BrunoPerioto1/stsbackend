@@ -1,11 +1,18 @@
 {
     "version": 2,
-    "regions": ["gru1"],
+    "regions": [
+        "gru1"
+    ],
     "buildCommand": "npm run build",
     "rewrites": [
         {
             "source": "/(.*)",
             "destination": "/api/index"
         }
-    ]
+    ],
+    "functions": {
+        "api/index.ts": {
+            "maxDuration": 60
+        }
+    }
 }

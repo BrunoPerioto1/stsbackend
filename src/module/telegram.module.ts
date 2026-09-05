@@ -13,6 +13,7 @@ import {
 } from '../telegram/telegram-bot.provider';
 import { BotCommandsService } from '../telegram/bot-commands.service';
 import { BetTextService } from '../telegram/bet-text.service';
+import { BetImageService } from '../telegram/bet-image.service';
 import { TipFanoutService } from '../telegram/tip-fanout.service';
 import { PendentesService } from '../telegram/pendentes.service';
 import { TelegramCallbackService } from '../telegram/telegram-callback.service';
@@ -26,6 +27,7 @@ import { TelegramCallbackService } from '../telegram/telegram-callback.service';
     GrokService,
     BotCommandsService,
     BetTextService,
+    BetImageService,
     TipFanoutService,
     PendentesService,
     TelegramCallbackService,
