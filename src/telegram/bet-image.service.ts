@@ -16,9 +16,11 @@ Regras:
 - Nao invente dados; retorne null se nao identificar um campo com seguranca.
 - Ignore outros jogos, mercados disponiveis, saldo, retorno, cashout, limite, IDs, datas e horarios.
 - O esporte pode ser inferido pelo contexto.
+- No evento, remova sufixos geograficos redundantes dos times quando a identidade estiver clara: "Sao Paulo SP vs Palmeiras" deve ser "Sao Paulo vs Palmeiras". Preserve acentos do nome e siglas que sejam parte do nome ou necessarias para distinguir equipes.
 - Mercado deve conter somente as condicoes esportivas para a aposta vencer, preservando jogadores, linhas, periodos e tipo de estatistica.
+- Em selecoes de jogador, separe o nome e a condicao do mercado com " - ": "Joaquin Piquerez - jogador a ser advertido". Nao deixe nome e mercado concatenados sem esse separador.
 - Junte todas as selecoes relevantes em apostas combinadas/criadas no campo mercado, usando exclusivamente " / " (barra com espacos) entre selecoes distintas. Nao use "e", ";" ou "+" como separador de selecoes.
-- Exemplo de mercado combinado: "Pedro chute ao gol / mais de 2.5 gols". Preserve conectivos que fazem parte de uma unica selecao ou nome; apenas a separacao entre selecoes deve usar " / ".
+- Exemplo de mercado combinado: "Pedro - chute ao gol / mais de 2.5 gols". Preserve conectivos que fazem parte de uma unica selecao ou nome; apenas a separacao entre selecoes deve usar " / ".
 - Exclua do mercado interface, status e promocoes, como "Criar Aposta", "Super Odds", "Boost", "BetoBoost", "Simples", "Multiplas", "Perdida" e "Ganha".
 - Odd e a TOTAL/final da aposta. Ignore odds antigas/riscadas, individuais e de outros eventos.
 - Stake e somente o valor efetivamente apostado, nunca saldo, retorno, cashout ou limite.`;
