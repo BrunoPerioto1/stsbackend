@@ -3,7 +3,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Transform, Type } from 'class-transformer';
 import { ResultIdEnum } from './result-id.enum';
 
-export class CreateBetRequestDto {
+class CreateBetRequestDto {
   
   @ApiProperty({  
     description: 'Game or sporting event name',

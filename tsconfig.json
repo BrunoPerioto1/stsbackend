@@ -18,7 +18,7 @@
     "noImplicitAny": false,
     "strictBindCallApply": false,
     "noFallthroughCasesInSwitch": false,
-    "types": ["node"],
+    "types": ["node", "jest"],
     "lib": ["ES2023"],
     "moduleDetection": "force"
   }

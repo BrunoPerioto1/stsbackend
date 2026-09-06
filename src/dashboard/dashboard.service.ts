@@ -30,6 +30,7 @@ export class DashboardService {
 
     const totalBets   = Number(raw.totalBets);
     const wonBets     = Number(raw.wonBets);
+    const settledBets = Number(raw.settledBets ?? 0);
     const totalStaked = Number(raw.totalStaked);
     const totalProfit = Number(raw.totalProfit);
 
@@ -37,6 +38,7 @@ export class DashboardService {
       ...raw,
       totalBets,
       wonBets,
+      settledBets,
       totalStaked,
       totalProfit,
       lostBets:     Number(raw.lostBets),
@@ -44,7 +46,7 @@ export class DashboardService {
       canceledBets: Number(raw.canceledBets),
       averageStake: Number(raw.averageStake),
       averageOdd:   Number(raw.averageOdd),
-      hitRate: totalBets   > 0 ? wonBets     / totalBets   : 0,
+      hitRate: settledBets > 0 ? wonBets / settledBets : 0,
       roi:     totalStaked > 0 ? totalProfit / totalStaked : 0,
     };
   }

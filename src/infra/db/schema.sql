@@ -59,6 +59,28 @@ CREATE TABLE IF NOT EXISTS users (
 -- Idempotent for pre-existing databases created before this column was added.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS min_percent_filter NUMERIC(5,2);
 
+-- Login lockout. Counted per user in the database, not per IP in memory: the
+-- API runs serverless, so an in-process counter resets whenever a request
+-- lands on a fresh instance and would never actually lock anyone out.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts SMALLINT NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP;
+
+-- Telegram linking. The code lives in the row, not in the API process: the bot
+-- confirms the link on a second request that lands on a different serverless
+-- instance, so an in-memory map never had the code by then.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_link_code VARCHAR(6);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_link_expires_at TIMESTAMP;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_linked_at TIMESTAMP;
+
+-- Accounts linked before the column existed have no date to show. updated_at is
+-- an approximation (any profile change moves it), but it beats leaving the
+-- screen with nothing. Guarded by IS NULL so re-running never overwrites a real
+-- link date.
+UPDATE users
+   SET telegram_linked_at = updated_at
+ WHERE telegram_user_id IS NOT NULL
+   AND telegram_linked_at IS NULL;
+
 -- === Bookmakers =========================================================
 
 CREATE TABLE IF NOT EXISTS betting_houses (

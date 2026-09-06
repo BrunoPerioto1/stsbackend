@@ -17,6 +17,11 @@ export default interface UsersTable {
   telegramUserId: ColumnType<number | null, number | null, number | null>; // bigint como number
   stake: ColumnType<number | null, number | null, number | null>; // NUMERIC como number
   minPercentFilter: ColumnType<number | null, number | null, number | null>; // NUMERIC; null = sem filtro
+  failedLoginAttempts: ColumnType<number, number | undefined, number>;
+  lockedUntil: ColumnType<Date | null, Date | null, Date | null>;
+  telegramLinkCode: ColumnType<string | null, string | null, string | null>;
+  telegramLinkExpiresAt: ColumnType<Date | null, Date | null, Date | null>;
+  telegramLinkedAt: ColumnType<Date | null, Date | null, Date | null>;
 }
 
 export type User = Selectable<UsersTable>;      // SELECT

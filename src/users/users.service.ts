@@ -17,6 +17,36 @@ export class UsersService {
         return user ?? null;
     }
 
+    // Contagem de tentativas de login. `lockedUntil` null limpa um bloqueio
+    // vencido; com data, tranca a conta até lá.
+    async registerFailedLogin(userId: number, attempts: number, lockedUntil: Date | null) {
+        await this.usersRepository.updateUser(userId as UserId, {
+            failedLoginAttempts: attempts,
+            lockedUntil,
+        });
+    }
+
+    async registerSuccessfulLogin(userId: number) {
+        await this.usersRepository.updateUser(userId as UserId, {
+            failedLoginAttempts: 0,
+            lockedUntil: null,
+            lastLogin: new Date(),
+        });
+    }
+
+    // Linha crua, com passwordHash — usada por quem precisa conferir a senha
+    // (troca de senha). Telas continuam usando getMe, que já vem sem o hash.
+    async findById(userId: number): Promise<UserDto | null> {
+        const user = await this.usersRepository.findById(userId as UserId);
+        return user ?? null;
+    }
+
+    async deleteAccount(userId: number): Promise<void> {
+        const user = await this.usersRepository.findById(userId as UserId);
+        if (!user) throw new BadRequestException('Usuário não encontrado.');
+        await this.usersRepository.deleteUserAndData(userId as UserId);
+    }
+
     async createUser(params: CreateUserRequestDTO): Promise<CreateUserResponseDTO> {
         const existingEmail = await this.usersRepository.findByEmail(params.email);
         if (existingEmail) {
@@ -70,7 +100,10 @@ export class UsersService {
     }
 
     async desvincularTelegram(userId: number) {
-        await this.usersRepository.updateUser(userId as UserId, { telegramUserId: null });
+        await this.usersRepository.updateUser(userId as UserId, {
+            telegramUserId: null,
+            telegramLinkedAt: null,
+        });
     }
 
     // Tipo de retorno estendido com telegramUserId/minPercentFilter — a linha

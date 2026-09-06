@@ -37,6 +37,15 @@ export class UsersController {
 
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth('jwt')
+  @Delete('me')
+  @ApiOperation({ summary: 'Exclui a conta logada e todos os seus dados' })
+  async deleteMe(@Req() req: any) {
+    await this.usersService.deleteAccount(req.user.userId);
+    return { success: true };
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('jwt')
   @Delete('me/telegram')
   @ApiOperation({ summary: 'Desvincula a conta do Telegram do usuário logado' })
   async unlinkTelegram(@Req() req: any) {

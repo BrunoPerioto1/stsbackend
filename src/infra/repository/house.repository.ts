@@ -1,18 +1,12 @@
 // house.repository.ts
 import { Inject, Injectable } from '@nestjs/common';
 import { Kysely, sql } from 'kysely';
-import { isNotEmpty } from 'class-validator';
 import type { Database } from '../db/database.types';
 import { DATABASE_READ_CONNECTION, DATABASE_WRITE_CONNECTION } from '../db/db.module';
 import type { UserId } from '../../db_types/Users';
 import type { BettingHouseId } from '../../db_types/BettingHouse';
 import { HouseFilterRequestDto } from '../../house/dto/house.filter.dto';
 import { endOfDay, startOfDay } from '../../common/utils/bet.utils';
-
-export interface FilterGetHouses {
-  houseId?: BettingHouseId;
-  houseName?: string;
-}
 
 @Injectable()
 export class HouseRepository {
@@ -56,6 +50,7 @@ export class HouseRepository {
       .select((eb) => [
         'b.houseId',
         eb.fn.count('b.id').as('totalBets'),
+        eb.fn<number>('sum', [eb.case().when('br.resultId', 'in', [1, 2, 4, 5] as any).then(1).else(0).end()]).as('settledBets'),
         eb.fn<number>('coalesce', [eb.fn.sum<number>('b.stake'), sql.lit(0)]).as('totalStake'),
         eb.fn<number>('coalesce', [eb.fn.sum<number>('b.profit'), sql.lit(0)]).as('totalBetProfit'),
         eb.fn<number>('coalesce', [
@@ -63,11 +58,11 @@ export class HouseRepository {
           sql.lit(0),
         ]).as('pendingBets'),
         eb.fn<number>('coalesce', [
-          eb.fn.sum<number>(eb.case().when('br.resultId', '=', 1 as any).then(1).else(0).end()),
+          eb.fn.sum<number>(eb.case().when('br.resultId', 'in', [1, 4] as any).then(1).else(0).end()),
           sql.lit(0),
         ]).as('wonBets'),
         eb.fn<number>('coalesce', [
-          eb.fn.sum<number>(eb.case().when('br.resultId', '=', 2 as any).then(1).else(0).end()),
+          eb.fn.sum<number>(eb.case().when('br.resultId', 'in', [2, 5] as any).then(1).else(0).end()),
           sql.lit(0),
         ]).as('lostBets'),
       ])
@@ -98,33 +93,23 @@ export class HouseRepository {
       .groupBy('ht.houseId');
   }
 
-  findHouseMetrics(userId: UserId) {
-    return this.dbRead
-      .selectFrom('bettingHouses as bh')
-      .where('bh.isActive', '=', true)
-      .leftJoin(this.betsAggregate(userId).as('ba'), 'ba.houseId', 'bh.id')
-      .leftJoin(this.transactionsAggregate(userId).as('ta'), 'ta.houseId', 'bh.id')
-      .select((eb) => [
-        eb.fn.coalesce('ba.totalStake', eb.lit(0)).as('totalInvested'),
-        eb.fn.coalesce('ba.totalBets', eb.lit(0)).as('totalBets'),
-        eb.fn.coalesce('ba.totalBetProfit', eb.lit(0)).as('totalBetProfit'),
-        eb.fn.coalesce('ta.totalTransactions', eb.lit(0)).as('transactionBalance'),
-      ])
-      .executeTakeFirst();
-  }
-
   findAllHousesBalance(userId: UserId, filter?: HouseFilterRequestDto) {
     return this.dbRead
       .selectFrom('bettingHouses as bh')
-      .innerJoin(this.betsAggregate(userId).as('ba'), 'ba.houseId', 'bh.id')
+      .leftJoin(this.betsAggregate(userId).as('ba'), 'ba.houseId', 'bh.id')
       .leftJoin(this.transactionsAggregate(userId).as('ta'), 'ta.houseId', 'bh.id')
       .where('bh.isActive', '=', true)
+      .where((eb) => eb.or([
+        eb('ba.houseId', 'is not', null),
+        eb('ta.houseId', 'is not', null),
+      ]))
       .$if(!!filter?.houseId, (qb) => qb.where('bh.id', '=', filter!.houseId!))
       .$if(!!filter?.houseName, (qb) => qb.where('bh.name', 'ilike', `%${filter!.houseName}%`))
       .select((eb) => [
         'bh.id as houseId',
         'bh.name as houseName',
         eb.fn.coalesce('ba.totalBets', eb.lit(0)).as('totalBets'),
+        eb.fn.coalesce('ba.settledBets', eb.lit(0)).as('settledBets'),
         eb.fn.coalesce('ba.totalStake', eb.lit(0)).as('totalStake'),
         eb.fn.coalesce('ba.totalBetProfit', eb.lit(0)).as('totalBetProfit'),
         eb.fn.coalesce('ba.pendingBets', eb.lit(0)).as('pendingBets'),
@@ -165,46 +150,6 @@ export class HouseRepository {
         eb.fn<number>('coalesce', [eb.fn.sum<number>('b.stake'), sql.lit(0)]).as('volume'),
         eb.fn<number>('coalesce', [eb.fn.sum<number>('b.profit'), sql.lit(0)]).as('profit'),
       ])
-      .execute();
-  }
-
-  findUserBets(userId: UserId, filter?: FilterGetHouses) {
-    return this.dbRead
-      .selectFrom('bets as b')
-      .leftJoin('betResults as br', 'br.betId', 'b.id')
-      .leftJoin('bettingHouses as bh', 'bh.id', 'b.houseId')
-      .select([
-        'b.id',
-        'b.houseId',
-        'b.stake',
-        'b.profit',
-        'br.resultId',
-        'bh.name as houseName',
-      ])
-      .where('b.userId', '=', userId)
-      .$if(filter?.houseId !== undefined, (qb) => qb.where('b.houseId', '=', filter!.houseId!))
-      .$if(isNotEmpty(filter?.houseName), (qb) => qb.where('bh.name', 'ilike', `%${filter!.houseName}%`))
-      .execute();
-  }
-
-  findHouseTransactions(userId: UserId, filter?: FilterGetHouses) {
-    return this.dbRead
-      .selectFrom('houseTransactions as ht')
-      .leftJoin('bettingHouses as bh', 'bh.id', 'ht.houseId')
-      .select([
-        'ht.id',
-        'ht.houseId',
-        'ht.userId',
-        'ht.transactionTypeId',
-        'ht.value',
-        'ht.description',
-        'ht.createdAt',
-        'ht.updatedAt',
-        'bh.name as houseName',
-      ])
-      .where('ht.userId', '=', userId)
-      .$if(isNotEmpty(filter?.houseId),   (qb) => qb.where('ht.houseId', '=', filter!.houseId!))
-      .$if(isNotEmpty(filter?.houseName), (qb) => qb.where('bh.name', 'ilike', `%${filter!.houseName}%`))
       .execute();
   }
 }

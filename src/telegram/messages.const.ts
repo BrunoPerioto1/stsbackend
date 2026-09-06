@@ -16,6 +16,6 @@ export const UNLINKED_INSTRUCTIONS =
   '❌ Sua conta não está vinculada.\n\n' +
   'Pra vincular:\n' +
   '1️⃣ Entre em https://stsfront.vercel.app/login e faça login\n' +
-  '2️⃣ Vá em Perfil → clique em "Vincular Telegram"\n' +
-  '3️⃣ Copie o código que aparecer\n' +
-  '4️⃣ Volte aqui e envie: /vincular CODIGO';
+  '2️⃣ Vá em Perfil → Telegram → "Gerar código de vinculação"\n' +
+  '3️⃣ Copie os seis dígitos (valem 5 minutos)\n' +
+  '4️⃣ Volte aqui e envie: /vincular 123456';

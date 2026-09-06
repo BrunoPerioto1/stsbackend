@@ -41,6 +41,10 @@ async findById(id: UserId) {
    async linkTelegram(userId: UserId, telegramUserId: number) {
   const update: UpdateUser = {
     telegramUserId,
+    telegramLinkedAt: new Date(),
+    // O código morre no ato: um mesmo código não vincula dois Telegrams.
+    telegramLinkCode: null,
+    telegramLinkExpiresAt: null,
     updatedAt: new Date(),
   };
 
@@ -81,6 +85,26 @@ async findById(id: UserId) {
     .where("id", "=", id)
     .returningAll()
     .executeTakeFirst();
+}
+
+async findByTelegramLinkCode(code: string) {
+  return this.dbRead
+    .selectFrom("users")
+    .selectAll()
+    .where("telegramLinkCode", "=", code)
+    .executeTakeFirst();
+}
+
+// Apaga tudo que é do usuário e o usuário. bets e house_transactions são
+// ON DELETE SET NULL no banco, então sem esse delete explícito as linhas
+// sobreviveriam órfãs à conta excluída.
+async deleteUserAndData(userId: UserId) {
+  await this.dbWrite.transaction().execute(async (trx) => {
+    await trx.deleteFrom("bets").where("userId", "=", userId).execute();
+    await trx.deleteFrom("houseTransactions").where("userId", "=", userId).execute();
+    await trx.deleteFrom("houseBalances").where("userId", "=", userId).execute();
+    await trx.deleteFrom("users").where("id", "=", userId).execute();
+  });
 }
 
 async findByTelegramUserId(telegramUserId: number) {

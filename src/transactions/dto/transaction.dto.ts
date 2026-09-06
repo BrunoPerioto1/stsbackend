@@ -7,37 +7,6 @@ export enum TransactionTypeEnum {
   ADJUSTMENT = 3,
 }
 
-export class TransactionTypeDto {
-  @ApiProperty({ description: "ID do tipo de transação", example: 1 })
-  @IsNumber()
-  id!: number;
-
-  @ApiProperty({ description: "Nome do tipo de transação", example: "DEPOSIT" })
-  @IsString()
-  name!: string;
-}
-
-export class GetTransactionDto {
-  @ApiProperty({ description: "ID da transação", example: 123 })
-  @IsNumber()
-  id!: number;
-
-  @ApiProperty({ description: "Nome da casa de apostas", example: "Bet365" })
-  @IsString()
-  houseName!: string;
-
-  @ApiProperty({ description: "Tipo de transação", example: "DEPOSIT" })
-  @IsString()
-  transactionType!: string;
-
-  @ApiProperty({ description: "Valor da transação", example: 500.00 })
-  @IsNumber()
-  value!: number;
-
-  @ApiProperty({ description: "Data de criação da transação", example: "2025-09-03T12:34:56.000Z" })
-  @IsString()
-  createdAt!: string;
-}
 
 export class NewTransactionDto {
   @ApiProperty({

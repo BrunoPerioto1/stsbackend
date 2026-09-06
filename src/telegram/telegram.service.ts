@@ -7,10 +7,11 @@ import { BetTextService } from './bet-text.service';
 import { TipFanoutService } from './tip-fanout.service';
 import { TelegramCallbackService } from './telegram-callback.service';
 import { EDIT_PROMPT_HEADER_RE } from './messages.const';
+import { parseBetLocal } from './utils/tip-extractors.util';
 
 dotenv.config();
 
-// Bootstrap do bot: registra o webhook e conecta cada evento do Telegraf no
+// Bootstrap do bot: conecta cada evento do Telegraf no
 // serviço responsável. A lógica de verdade (comandos, fan-out de tips,
 // parsing/criação de aposta, callback_query) vive nos serviços injetados
 // aqui — este arquivo só existe pra deixar visível, num lugar só, o que o
@@ -25,19 +26,8 @@ export class TelegramService implements OnModuleInit {
     private readonly callbackService: TelegramCallbackService,
   ) {}
 
-  async onModuleInit() {
+  onModuleInit() {
     this.registerHandlers();
-
-    const url = `${process.env.APP_URL}/telegram/${process.env.TELEGRAM_BOT_TOKEN}`;
-    try {
-      await this.bot.telegram.setWebhook(url);
-      console.log(`🤖 Telegram bot iniciado em webhook: ${url}`);
-    } catch (error) {
-      console.error(
-        `⚠️  Não foi possível registrar o webhook do Telegram (${url}). O bot ficará indisponível, mas o resto da API continua rodando.`,
-        error instanceof Error ? error.message : error,
-      );
-    }
   }
 
   private registerHandlers() {
@@ -77,6 +67,11 @@ export class TelegramService implements OnModuleInit {
         return;
       }
 
+      if ('voice' in ctx.message || 'audio' in ctx.message) {
+        await this.betTextService.handleBetAudio(ctx, ctx.message);
+        return;
+      }
+
       // Resposta a um prompt de "✏️ Editar" (força reply no Telegram)?
       const replyToText = msg.reply_to_message?.text as string | undefined;
       const headerMatch = replyToText?.match(EDIT_PROMPT_HEADER_RE);
@@ -87,6 +82,14 @@ export class TelegramService implements OnModuleInit {
           headerMatch,
           msg.text ?? '',
         );
+        return;
+      }
+
+      // Print de bilhete: só entra no fluxo de visão quando a legenda NÃO é
+      // um card de aposta completo — encaminhar uma tip com mídia + legenda
+      // inteira continua caindo no parser de texto de sempre.
+      if (msg.photo && !parseBetLocal(msg.caption ?? '')) {
+        await this.betTextService.handleBetPhoto(ctx, msg);
         return;
       }
 

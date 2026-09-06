@@ -17,7 +17,7 @@ const betTimeBr = sql`(${sql.ref('b.betTime')} AT TIME ZONE 'UTC') AT TIME ZONE 
 const betCalendarDateBr = sql<string>`to_char(${betTimeBr}, 'YYYY-MM-DD')`;
 const betCalendarMonthBr = sql<string>`to_char(date_trunc('month', ${betTimeBr}), 'YYYY-MM-DD')`;
 
-export interface FilterDashboard {
+interface FilterDashboard {
   startDate?: string;
   endDate?: string;
   houseId?: BettingHouseId;
@@ -117,10 +117,11 @@ async findDashboardMetrics(filters: FilterDashboard) {
     )
     .select((eb) => [
       eb.fn.count("b.id").as("totalBets"),
+      eb.fn<number>("sum", [eb.case().when("br.resultId", "in", [1, 2, 4, 5] as any).then(1).else(0).end()]).as("settledBets"),
       eb.fn<number>("sum", [
         eb
           .case()
-          .when("br.resultId", "=", 1 as any)
+          .when("br.resultId", "in", [1, 4] as any)
           .then(1)
           .else(0)
           .end(),
@@ -128,7 +129,7 @@ async findDashboardMetrics(filters: FilterDashboard) {
       eb.fn<number>("sum", [
         eb
           .case()
-          .when("br.resultId", "=", 2 as any)
+          .when("br.resultId", "in", [2, 5] as any)
           .then(1)
           .else(0)
           .end(),
