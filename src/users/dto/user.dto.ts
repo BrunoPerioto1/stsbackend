@@ -1,6 +1,10 @@
+import { DashboardPreferencesDTO } from './dashboard-preferences.dto';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UserDto {
+  @ApiProperty({ nullable: true, type: DashboardPreferencesDTO })
+  dashboardPreferences!: DashboardPreferencesDTO | null;
+
   @ApiProperty()
   id!: number;
 

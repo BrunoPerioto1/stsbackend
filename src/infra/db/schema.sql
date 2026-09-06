@@ -59,6 +59,9 @@ CREATE TABLE IF NOT EXISTS users (
 -- Idempotent for pre-existing databases created before this column was added.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS min_percent_filter NUMERIC(5,2);
 
+-- Personalização opcional; NULL preserva os padrões de usuários existentes.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS dashboard_preferences JSONB;
+
 -- Login lockout. Counted per user in the database, not per IP in memory: the
 -- API runs serverless, so an in-process counter resets whenever a request
 -- lands on a fresh instance and would never actually lock anyone out.
