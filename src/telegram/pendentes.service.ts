@@ -50,6 +50,10 @@ export class PendentesService {
   async buildMessage(
     user: { id: number; minPercentFilter?: number | null },
     page = 0,
+    // Oferta de desfazer da acao que acabou de acontecer. Some sozinha na
+    // proxima renderizacao (trocar de pagina, resolver outro item) — nao ha
+    // estado guardado em lugar nenhum.
+    undo?: { tipId: number; kind: 'planilhar' | 'caiu'; label: string },
   ) {
     const minPercentFilter =
       user.minPercentFilter != null ? Number(user.minPercentFilter) : null;
@@ -61,8 +65,20 @@ export class PendentesService {
       (r) => r.betId == null && r.dismissalId == null,
     );
 
+    const undoRow = undo
+      ? [
+          {
+            text: `↩️ Desfazer ${undo.label}`,
+            callback_data: `lista_desfazer:${undo.tipId}:${page}:${undo.kind === 'caiu' ? 1 : 0}`,
+          },
+        ]
+      : null;
+
     if (pendentes.length === 0) {
-      return { text: '🎉 Nada pendente!', keyboard: undefined as any };
+      return {
+        text: '🎉 Nada pendente!',
+        keyboard: undoRow ? { inline_keyboard: [undoRow] } : (undefined as any),
+      };
     }
 
     const header = `⏳ ${pendentes.length} pendente${pendentes.length === 1 ? '' : 's'}`;
@@ -117,17 +133,20 @@ export class PendentesService {
       if (link) listText += `   🔗 <a href="${escapeHtml(link)}">Aposta</a>\n`;
       listText += '\n';
 
+      // Numero do item no rotulo: com varias linhas de botoes identicas nao
+      // dava pra saber qual botao pertencia a qual pendencia.
+      const tag = toKeycapNumber(counter);
       keyboardRows.push([
         {
-          text: '✅ Planilhar',
+          text: `${tag} ✅ Planilhar`,
           callback_data: `lista_planilhar:${tip.id}:${currentPage}`,
         },
         {
-          text: '❌ Caiu',
+          text: `${tag} ❌ Caiu`,
           callback_data: `lista_caiu:${tip.id}:${currentPage}`,
         },
         {
-          text: '✏️ Editar',
+          text: `${tag} ✏️ Editar`,
           callback_data: `lista_editar:${tip.id}:${currentPage}`,
         },
       ]);
@@ -173,7 +192,9 @@ export class PendentesService {
 
     return {
       text: `${header}\n${listText}`.trim(),
-      keyboard: { inline_keyboard: keyboardRows },
+      keyboard: {
+        inline_keyboard: undoRow ? [undoRow, ...keyboardRows] : keyboardRows,
+      },
     };
   }
 }

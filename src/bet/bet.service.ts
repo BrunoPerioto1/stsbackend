@@ -256,6 +256,19 @@ export class BetService {
     };
   }
 
+  // Usadas pelo /pendentes: saber se a tip ja virou aposta (clique repetido)
+  // e desfazer o planilhamento devolvendo a tip pra lista.
+  async findBetByTip(tipId: number, userId: number) {
+    return this.betRepository.findByTipId(tipId as TipId, userId as UserId);
+  }
+
+  async deleteBetByTip(tipId: number, userId: number) {
+    const bet = await this.findBetByTip(tipId, userId);
+    if (!bet) return null;
+    await this.betRepository.delete(bet.id, userId as UserId);
+    return bet;
+  }
+
   async deleteBet(betId: number, userId: number) {
     const deleted = await this.betRepository.delete(
       betId as BetId,

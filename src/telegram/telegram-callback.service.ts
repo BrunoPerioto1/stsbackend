@@ -5,9 +5,11 @@ import { TipsService } from '../tips/tips.service';
 import { BetTextService } from './bet-text.service';
 import { TipFanoutService } from './tip-fanout.service';
 import { PendentesService } from './pendentes.service';
+import { BetService } from '../bet/bet.service';
 import { EDIT_PROMPT_INSTRUCTIONS } from './messages.const';
 import { escapeHtml } from './utils/tip-text.util';
 import {
+  extractGameFromText,
   extractHouseFromText,
   extractLimitFromText,
   extractOddFromText,
@@ -19,13 +21,45 @@ import { parseCallbackAction } from './utils/callback-parsing.util';
 // (lista_planilhar / lista_caiu / lista_editar / lista_pagina).
 @Injectable()
 export class TelegramCallbackService {
+  // Clique duplo no mesmo botao dispara dois callbacks antes do primeiro
+  // gravar a aposta — a checagem no banco nao ve nada ainda e as duas passam.
+  // Este lock cobre a corrida; a checagem de estado logo abaixo cobre o
+  // clique tardio (mensagem antiga, item ja resolvido).
+  private readonly inFlight = new Set<string>();
+
   constructor(
     private readonly usersService: UsersService,
     private readonly tipsService: TipsService,
     private readonly betTextService: BetTextService,
     private readonly tipFanoutService: TipFanoutService,
     private readonly pendentesService: PendentesService,
+    private readonly betService: BetService,
   ) {}
+
+  // Redesenha a mensagem-lista no lugar. `editMessageText` reclama quando o
+  // conteudo nao mudou — nesse caso nao ha o que corrigir, so ignora.
+  private async refreshList(
+    ctx: any,
+    user: { id: number; minPercentFilter?: number | null },
+    page: number,
+    undo?: Parameters<PendentesService['buildMessage']>[2],
+  ) {
+    try {
+      const { text, keyboard } = await this.pendentesService.buildMessage(
+        user,
+        page,
+        undo,
+      );
+      await ctx.editMessageText(text, {
+        parse_mode: 'HTML',
+        link_preview_options: { is_disabled: true },
+        reply_markup: keyboard,
+      });
+    } catch (err) {
+      if (!String(err).includes('message is not modified'))
+        console.error('❌ Erro ao atualizar lista de pendentes:', err);
+    }
+  }
 
   async handle(ctx: any) {
     const query = ctx.callbackQuery;
@@ -240,7 +274,7 @@ export class TelegramCallbackService {
       action === 'lista_caiu' ||
       action === 'lista_editar'
     ) {
-      if (tipId === null) {
+      if (tipId === null || !Number.isInteger(tipId) || tipId <= 0) {
         await ctx.answerCbQuery('❌ Referência inválida.');
         return;
       }
@@ -259,54 +293,118 @@ export class TelegramCallbackService {
         return;
       }
 
-      if (action === 'lista_caiu') {
-        await this.tipsService.dismissTip(tipId, user.id);
-        await this.tipFanoutService.markDeliveredMessage(user, tipId, 'caiu');
-        await ctx.answerCbQuery('❌ Marcado como caiu.');
-      } else {
+      const lock = `${user.id}:${tipId}`;
+      if (this.inFlight.has(lock)) {
+        await ctx.answerCbQuery('⏳ Já estou processando esse item.');
+        return;
+      }
+      this.inFlight.add(lock);
+      let undo: Parameters<PendentesService['buildMessage']>[2];
+      try {
         const tip = await this.tipsService.findById(tipId);
         if (!tip) {
           await ctx.answerCbQuery('❌ Tip não encontrada.');
           return;
         }
-        try {
-          // msg aqui é a mensagem-lista do /pendentes, não a tip entregue no
-          // DM do usuário — usa o messageId salvo em saveDelivery (a cópia
-          // individual que o usuário recebeu) pra confirmação sair como
-          // reply da aposta, e não da lista. Sem delivery salva (tip antiga),
-          // cai pro comportamento anterior em vez de não responder nada.
-          const delivery = await this.tipsService.findDelivery(tipId, user.id);
-          await this.betTextService.processBetText(
-            ctx,
-            tip.text,
-            delivery?.messageId ?? msg.message_id,
-            tipId,
-          );
-          await this.tipFanoutService.markDeliveredMessage(
-            user,
-            tipId,
-            'planilhado',
-          );
-          await ctx.answerCbQuery('✅ Planilhado!');
-        } catch {
-          await ctx.answerCbQuery(
-            '❌ Erro ao planilhar. Veja a mensagem no chat.',
-          );
+        const label = extractGameFromText(tip.text) ?? `#${tipId}`;
+
+        // Item ja resolvido (clique numa lista antiga, ou segundo clique
+        // depois do commit): nao cria nada de novo, so recarrega a lista.
+        const existing = await this.betService.findBetByTip(tipId, user.id);
+        if (existing) {
+          await ctx.answerCbQuery(`✅ ${label} já está planilhada.`);
+          await this.refreshList(ctx, user, page);
           return;
         }
+
+        if (action === 'lista_caiu') {
+          const marked = await this.tipsService.dismissTip(tipId, user.id);
+          await this.tipFanoutService.markDeliveredMessage(user, tipId, 'caiu');
+          await ctx.answerCbQuery(
+            marked ? `❌ ${label}: marcada como caiu.` : 'Já estava marcada.',
+          );
+          if (marked) undo = { tipId, kind: 'caiu', label };
+        } else {
+          try {
+            // msg aqui é a mensagem-lista do /pendentes, não a tip entregue no
+            // DM do usuário — usa o messageId salvo em saveDelivery (a cópia
+            // individual que o usuário recebeu) pra confirmação sair como
+            // reply da aposta, e não da lista. Sem delivery salva (tip antiga),
+            // cai pro comportamento anterior em vez de não responder nada.
+            const delivery = await this.tipsService.findDelivery(
+              tipId,
+              user.id,
+            );
+            await this.betTextService.processBetText(
+              ctx,
+              tip.text,
+              delivery?.messageId ?? msg.message_id,
+              tipId,
+            );
+            await this.tipFanoutService.markDeliveredMessage(
+              user,
+              tipId,
+              'planilhado',
+            );
+            await ctx.answerCbQuery(`✅ ${label} planilhada!`);
+            undo = { tipId, kind: 'planilhar', label };
+          } catch (err) {
+            // processBetText ja respondeu no chat com o motivo; o toast so
+            // aponta pra la, mas o log guarda a causa.
+            console.error('❌ Erro ao planilhar do /pendentes:', err);
+            await ctx.answerCbQuery(
+              `❌ ${label}: não deu pra planilhar. Veja a resposta no chat.`,
+            );
+            return;
+          }
+        }
+      } finally {
+        this.inFlight.delete(lock);
       }
 
-      try {
-        const { text: summaryText, keyboard } =
-          await this.pendentesService.buildMessage(user, page);
-        await ctx.editMessageText(summaryText, {
-          parse_mode: 'HTML',
-          link_preview_options: { is_disabled: true },
-          reply_markup: keyboard,
-        });
-      } catch (err) {
-        console.error('❌ Erro ao atualizar lista de pendentes:', err);
+      await this.refreshList(ctx, user, page, undo);
+      return;
+    }
+
+    // Desfazer da ultima acao da lista: apaga a aposta criada ou remove a
+    // marcacao de caiu — nos dois casos a tip volta a aparecer em /pendentes.
+    if (action === 'lista_desfazer') {
+      if (tipId === null || !Number.isInteger(tipId) || tipId <= 0) {
+        await ctx.answerCbQuery('❌ Referência inválida.');
+        return;
       }
+      const page = args[1] ?? 0;
+      const wasCaiu = args[2] === 1;
+      const user = await this.usersService.findByTelegramUserId(ctx.from.id);
+      if (!user) {
+        await ctx.answerCbQuery('❌ Conta não vinculada.');
+        return;
+      }
+      const lock = `${user.id}:${tipId}`;
+      if (this.inFlight.has(lock)) {
+        await ctx.answerCbQuery('⏳ Já estou processando esse item.');
+        return;
+      }
+      this.inFlight.add(lock);
+      try {
+        if (wasCaiu) {
+          await this.tipsService.undismissTip(tipId, user.id);
+          await ctx.answerCbQuery('↩️ Voltou pra pendentes.');
+        } else {
+          const removed = await this.betService.deleteBetByTip(tipId, user.id);
+          await ctx.answerCbQuery(
+            removed
+              ? '↩️ Aposta removida e tip de volta em pendentes.'
+              : '❌ A aposta não está mais lá — talvez já tenha sido apagada.',
+          );
+        }
+      } catch (err) {
+        console.error('❌ Erro ao desfazer:', err);
+        await ctx.answerCbQuery('❌ Não deu pra desfazer.');
+      } finally {
+        this.inFlight.delete(lock);
+      }
+      await this.refreshList(ctx, user, page);
       return;
     }
   }

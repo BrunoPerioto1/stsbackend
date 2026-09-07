@@ -51,7 +51,10 @@ export class TipsRepository {
   // (se já planilhou) e o id do dismissal (se marcou "aposta caiu") — quem
   // chama decide o que é "pendente" a partir desses dois campos.
   async findSummaryForUser(userId: UserId, minPercentFilter: number | null) {
-    return this.dbRead
+    // Writer, nao a replica: a lista e reconstruida no mesmo clique que criou
+    // a aposta, e com lag de replicacao o item recem-planilhado reaparecia.
+    // E um comando manual, entao o custo extra no writer e desprezivel.
+    return this.dbWrite
       .selectFrom('tips as t')
       .leftJoin('bets as b', (join) =>
         join.onRef('b.tipId', '=', 't.id').on('b.userId', '=', userId),

@@ -10,6 +10,7 @@ import { isNotEmpty } from "class-validator";
 import { UserId } from "../../db_types/Users";
 import { BetId, NewBet, UpdateBet } from "../../db_types/Bet";
 import { ResultId } from "../../db_types/Results";
+import { TipId } from "../../db_types/Tips";
 import { BettingHouseId } from "../../db_types/BettingHouse";
 import { NewBetResult } from "../../db_types/BetsResults";
 import type { Database } from "../db/database.types";
@@ -279,6 +280,17 @@ export class BetRepository {
     }
 
     return query.execute();
+  }
+
+  // Aposta que uma tip gerou pra esse usuario. Serve pra barrar clique
+  // repetido no /pendentes e pra achar o que apagar no Desfazer.
+  async findByTipId(tipId: TipId, userId: UserId) {
+    return this.dbWrite
+      .selectFrom('bets')
+      .select(['id', 'game', 'createdAt'])
+      .where('tipId', '=', tipId)
+      .where('userId', '=', userId)
+      .executeTakeFirst();
   }
 
   async delete(betId: BetId, userId: UserId) {

@@ -91,6 +91,7 @@ describe('Telegram ingestion through existing house resolver', () => {
         service,
         {} as Dependencies[3],
         {} as Dependencies[4],
+        {} as Dependencies[5],
       );
       await callback.handle({
         ...ctx,
