@@ -25,7 +25,9 @@ export const MATCH_MEDIUM = 0.55;
 
 const HOUR_MS = 60 * 60 * 1000;
 // Tip mais velha que isso nao e a aposta do print, mesmo com tudo batendo.
-const MAX_AGE_MS = 24 * HOUR_MS;
+// Exportado porque a query que busca candidatos usa a mesma janela — buscar
+// mais do que o scorer aceita seria trabalho jogado fora.
+export const MATCH_MAX_AGE_MS = 24 * HOUR_MS;
 // Nomes de casa vem do texto da tip e da legenda da foto — mesma regua do
 // resolveHouseId, pra "Superbet" e "Superbet Brasil" continuarem a mesma casa.
 const HOUSE_MIN_SIMILARITY = 0.8;
@@ -78,7 +80,7 @@ export function scoreBetMatch(
   candidate: PendingCandidate,
 ): number | null {
   const ageMs = Math.abs(bet.at.getTime() - candidate.at.getTime());
-  if (!Number.isFinite(ageMs) || ageMs > MAX_AGE_MS) return null;
+  if (!Number.isFinite(ageMs) || ageMs > MATCH_MAX_AGE_MS) return null;
 
   if (!sameHouse(bet.house, candidate.house)) return null;
 

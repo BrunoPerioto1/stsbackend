@@ -24,7 +24,11 @@ import {
   extractStakeFromText,
   parseBetLocal,
 } from './utils/tip-extractors.util';
-import { findBetMatches } from './utils/bet-match.util';
+import {
+  findBetMatches,
+  MATCH_MAX_AGE_MS,
+  type PendingCandidate,
+} from './utils/bet-match.util';
 import { TipsService } from '../tips/tips.service';
 import { BetImageService } from './bet-image.service';
 import { BetAudioService, MAX_AUDIO_BYTES } from './bet-audio.service';
@@ -51,71 +55,44 @@ export class BetTextService {
     private readonly tipsService?: TipsService,
   ) {}
 
-  // Pendencias do /pendentes parecidas com a aposta lida do print. Tudo local:
-  // reusa os extractors da tip e o scorer, sem uma segunda ida na IA. Falhar
-  // aqui nunca pode derrubar o reconhecimento — sem candidato o fluxo segue
-  // igual ao de antes.
-  private async findPendingMatches(
+  // Pendencias do usuario que ainda podem ser a aposta do print. So I/O: roda
+  // em paralelo com o download e a IA, e a janela e a mesma que o scorer ja
+  // exige (24h), pra nao varrer o historico inteiro de tips a cada foto.
+  private async loadPendingCandidates(
     ctx: any,
-    bet: {
-      evento: string | null;
-      mercado: string | null;
-      odd: number | null;
-      stake: number | null;
-    },
-    house: string,
-    unixDate: number,
-  ): Promise<PreviewMatch[]> {
-    try {
-      if (!this.tipsService) return [];
-      const user = await this.usersService.findByTelegramUserId(ctx.from.id);
-      if (!user) return [];
-      const [rows, userStake] = await Promise.all([
-        this.tipsService.getSummaryForUser(
-          user.id,
-          user.minPercentFilter != null ? Number(user.minPercentFilter) : null,
-        ),
-        this.usersService.getUserStake(user.id),
-      ]);
-      const candidates = rows
-        .filter((row: any) => row.betId == null && row.dismissalId == null)
-        .map((row: any) => {
-          // Mesma conta do processBetText: a tip so tem a % da banca, a stake
-          // absoluta vem dai (e do limite, quando ele corta).
-          const percent = row.percent != null ? Number(row.percent) : null;
-          const limit = extractLimitFromText(row.text);
-          let stake = percent !== null ? (percent / 100) * userStake : NaN;
-          if (limit !== null && Number.isFinite(stake))
-            stake = Math.min(stake, limit);
-          return {
-            tipId: row.id,
-            game: extractGameFromText(row.text) ?? '',
-            market: extractMarketFromText(row.text) ?? '',
-            house: extractHouseFromText(row.text) ?? '',
-            odd: extractOddFromText(row.text) ?? NaN,
-            stake,
-            at: new Date(row.createdAt),
-          };
-        });
-      return findBetMatches(
-        {
-          game: bet.evento ?? '',
-          market: bet.mercado ?? '',
-          house,
-          odd: bet.odd ?? NaN,
-          stake: bet.stake ?? NaN,
-          at: new Date(unixDate * 1000),
-        },
-        candidates,
-      ).map(({ candidate, score }) => ({
-        tipId: candidate.tipId,
-        score,
-        label: candidate.game || `#${candidate.tipId}`,
-      }));
-    } catch (err) {
-      console.warn('[BET_MATCH] falhou:', (err as Error).message);
-      return [];
-    }
+    at: Date,
+  ): Promise<PendingCandidate[]> {
+    if (!this.tipsService) return [];
+    const user = await this.usersService.findByTelegramUserId(ctx.from.id);
+    if (!user) return [];
+    const [rows, userStake] = await Promise.all([
+      this.tipsService.getSummaryForUser(
+        user.id,
+        user.minPercentFilter != null ? Number(user.minPercentFilter) : null,
+        new Date(at.getTime() - MATCH_MAX_AGE_MS),
+      ),
+      this.usersService.getUserStake(user.id),
+    ]);
+    return rows
+      .filter((row: any) => row.betId == null && row.dismissalId == null)
+      .map((row: any) => {
+        // Mesma conta do processBetText: a tip so tem a % da banca, a stake
+        // absoluta vem dai (e do limite, quando ele corta).
+        const percent = row.percent != null ? Number(row.percent) : null;
+        const limit = extractLimitFromText(row.text);
+        let stake = percent !== null ? (percent / 100) * userStake : NaN;
+        if (limit !== null && Number.isFinite(stake))
+          stake = Math.min(stake, limit);
+        return {
+          tipId: row.id,
+          game: extractGameFromText(row.text) ?? '',
+          market: extractMarketFromText(row.text) ?? '',
+          house: extractHouseFromText(row.text) ?? '',
+          odd: extractOddFromText(row.text) ?? NaN,
+          stake,
+          at: new Date(row.createdAt),
+        };
+      });
   }
 
   // Parsing + criação da aposta. Reaproveitado tanto pelo texto livre em DM
@@ -364,7 +341,7 @@ export class BetTextService {
 
     try {
       // Feedback, consulta da casa e download começam juntos. A IA só roda com casa válida.
-      const [notice, house, photo] = await Promise.allSettled([
+      const [notice, house, photo, pendentes] = await Promise.allSettled([
         deep
           ? Promise.resolve(null)
           : measure('feedback', () =>
@@ -389,6 +366,12 @@ export class BetTextService {
             mimeType: /\.png($|\?)/i.test(url) ? 'image/png' : 'image/jpeg',
           };
         })(),
+        measure('pendentes', () =>
+          this.loadPendingCandidates(
+            ctx,
+            new Date((msg.date as number) * 1000),
+          ),
+        ),
       ]);
       if (notice.status === 'fulfilled')
         feedback = notice.value as { message_id: number } | null;
@@ -443,9 +426,28 @@ export class BetTextService {
         return;
       }
 
-      const matches = await measure('match', () =>
-        this.findPendingMatches(ctx, extracted, caption, msg.date as number),
-      );
+      // Comparacao local pura (sem I/O, sem IA): so pontua o que ja veio.
+      // Pendencia indisponivel nao pode atrapalhar o print — segue sem sugestao.
+      if (pendentes.status === 'rejected')
+        console.warn('[BET_MATCH] pendentes_indisponiveis=true');
+      const matches =
+        pendentes.status === 'fulfilled'
+          ? findBetMatches(
+              {
+                game: extracted.evento ?? '',
+                market: extracted.mercado ?? '',
+                house: caption,
+                odd: extracted.odd ?? NaN,
+                stake: extracted.stake ?? NaN,
+                at: new Date((msg.date as number) * 1000),
+              },
+              pendentes.value,
+            ).map(({ candidate, score }) => ({
+              tipId: candidate.tipId,
+              score,
+              label: candidate.game || `#${candidate.tipId}`,
+            }))
+          : [];
       const preview = buildBetPreview(extracted, caption, msg.date as number, {
         deep,
         allowDeep: !deep,
