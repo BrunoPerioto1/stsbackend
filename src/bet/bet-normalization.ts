@@ -27,6 +27,23 @@ export function cleanBetText(value: unknown): string | null {
   return kept.join('').replace(/\s+/g, ' ').trim() || null;
 }
 
+// A IA devolve o mercado com a caixa que estava no bilhete, e casa nenhuma
+// escreve "Mais de 1.5 gols" — desce tudo minúsculo. Sobe só a inicial de cada
+// seleção (" / " é o separador de seleções em todo o fluxo de ingestão); o
+// resto do texto fica exatamente como veio, pra não estragar nome próprio,
+// sigla ("1x2", "BTTS") nem linha numérica.
+export function capitalizeMarket(value: string | null): string | null {
+  if (!value) return value;
+  return value
+    .split(' / ')
+    .map((selection) =>
+      selection.replace(/^\p{Ll}/u, (letter) =>
+        letter.toLocaleUpperCase('pt-BR'),
+      ),
+    )
+    .join(' / ');
+}
+
 export function normalizeBetNumber(value: unknown): number | null {
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
   if (typeof value !== 'string') return null;
@@ -60,7 +77,7 @@ export interface RawBetData {
 export function normalizeBetData(data: RawBetData, diagnostics = true) {
   const normalized = {
     game: cleanBetText(data.game),
-    market: cleanBetText(data.market),
+    market: capitalizeMarket(cleanBetText(data.market)),
     sport: cleanBetText(data.sport),
     odd: normalizeBetNumber(data.odd),
     stake: normalizeBetNumber(data.stake),

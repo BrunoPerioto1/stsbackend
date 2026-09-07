@@ -49,6 +49,31 @@ describe('bet normalization', () => {
   ])('parses %s without inventing zero', (input, expected) => {
     expect(normalizeBetNumber(input)).toBe(expected);
   });
+  it.each([
+    [
+      'mais de 1.5 gols / mais de 7.5 escanteios na partida',
+      'Mais de 1.5 gols / Mais de 7.5 escanteios na partida',
+    ],
+    ['ambas marcam', 'Ambas marcam'],
+    ['Mais de 2.5 gols', 'Mais de 2.5 gols'],
+    // Só a inicial sobe: linha numérica, sigla e nome próprio ficam intactos.
+    ['1x2 - casa / over 2.5', '1x2 - casa / Over 2.5'],
+    [
+      'Joaquin Piquerez - jogador a ser advertido',
+      'Joaquin Piquerez - jogador a ser advertido',
+    ],
+    ['ámbas marcam', 'Ámbas marcam'],
+  ])('capitalizes each market selection: %s', (input, expected) => {
+    expect(normalizeBetData({ market: input }).market).toBe(expected);
+  });
+  it('leaves an absent market null', () => {
+    expect(normalizeBetData({}).market).toBeNull();
+  });
+  it('does not capitalize the event', () => {
+    expect(normalizeBetData({ game: 'flamengo x palmeiras' }).game).toBe(
+      'flamengo x palmeiras',
+    );
+  });
   it('does not infer sport in the backend', () => {
     expect(normalizeBetData({ game: 'Flamengo x Palmeiras' }).sport).toBeNull();
   });
