@@ -1,3 +1,7 @@
+import {
+  normalizeBetData,
+  BET_EXTRACTION_RULES,
+} from '../bet/bet-normalization';
 import { Injectable } from '@nestjs/common';
 import { getOpenAIClient } from './openai-client';
 import * as dotenv from 'dotenv';
@@ -13,6 +17,7 @@ export const BET_IMAGE_PROMPT = `Analise somente a aposta efetivamente realizada
 Extraia evento, esporte, mercado, odd total e stake.
 
 Regras:
+${BET_EXTRACTION_RULES}
 - Nao invente dados; retorne null se nao identificar um campo com seguranca.
 - Ignore outros jogos, mercados disponiveis, saldo, retorno, cashout, limite, IDs, datas e horarios.
 - O esporte pode ser inferido pelo contexto.
@@ -126,24 +131,18 @@ export function parseExtractionObject(text: string): Record<string, unknown> {
 export function normalizeExtraction(
   obj: Record<string, unknown>,
 ): ExtractedBetImage {
-  const str = (v: unknown): string | null => {
-    const s = typeof v === 'string' ? v.trim() : '';
-    return s ? s : null;
-  };
-  const num = (v: unknown): number | null => {
-    if (typeof v === 'number') return Number.isFinite(v) ? v : null;
-    if (typeof v === 'string') {
-      const n = Number(v.replace(/[^\d.,-]/g, '').replace(',', '.'));
-      return Number.isFinite(n) ? n : null;
-    }
-    return null;
-  };
-
+  const data = normalizeBetData({
+    game: obj.evento,
+    market: obj.mercado,
+    sport: obj.esporte,
+    odd: obj.odd,
+    stake: obj.stake,
+  });
   return {
-    evento: str(obj.evento),
-    esporte: str(obj.esporte),
-    mercado: str(obj.mercado),
-    odd: num(obj.odd),
-    stake: num(obj.stake),
+    evento: data.game,
+    mercado: data.market,
+    esporte: data.sport,
+    odd: data.odd,
+    stake: data.stake,
   };
 }

@@ -181,7 +181,7 @@ describe('BetTextService.handleBetPhoto', () => {
     const [, , , text, extra] = ctx.telegram.editMessageText.mock.calls[0];
     expect(text).toContain('✅ Aposta identificada!');
     expect(extra.reply_markup.inline_keyboard[0][0].callback_data).toBe(
-      `planilhar_ts:${photoMsg.date}`,
+      `planilhar_ts:${photoMsg.date}:1`,
     );
 
     // O contrato de verdade: o card tem que ser reparseável pelo mesmo

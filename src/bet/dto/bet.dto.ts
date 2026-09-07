@@ -1,3 +1,4 @@
+import { normalizeBetNumber } from '../bet-normalization';
 import { IsNumber, IsString, IsPositive, IsNotEmpty, IsOptional, IsArray, ArrayNotEmpty, IsEnum, ValidateIf, } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Transform, Type } from 'class-transformer';
@@ -19,6 +20,7 @@ class CreateBetRequestDto {
     example: 50.00,
     required: true
   })
+  @Transform(({ value }) => normalizeBetNumber(value))
   @IsNumber()
   @IsPositive()
   stake!: number;
@@ -28,6 +30,7 @@ class CreateBetRequestDto {
     example: 2.50,
     required: true
   })
+  @Transform(({ value }) => normalizeBetNumber(value))
   @IsNumber()
   @IsPositive()
   odd!: number;

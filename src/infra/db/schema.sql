@@ -193,3 +193,10 @@ INSERT INTO betting_houses (name) VALUES
     ('BET365'), ('BETANO'), ('BETFAIR'), ('SUPERBET'), ('PIXBET'),
     ('KTO'), ('ESTRELABET'), ('NOVIBET'), ('SPORTINGBET'), ('RIVALO')
 ON CONFLICT (name) DO NOTHING;
+
+-- AI ingestion provenance: NULL means legacy/unknown; do not backfill guesses.
+ALTER TABLE bets ADD COLUMN IF NOT EXISTS source VARCHAR(16);
+ALTER TABLE bets ADD COLUMN IF NOT EXISTS source_type VARCHAR(16);
+ALTER TABLE bets ADD COLUMN IF NOT EXISTS telegram_message_id INTEGER;
+ALTER TABLE bets ADD COLUMN IF NOT EXISTS telegram_chat_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_bets_duplicate_candidates ON bets (user_id, house_id, created_at);

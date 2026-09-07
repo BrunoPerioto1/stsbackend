@@ -7,6 +7,18 @@ export type BetId = number & { __type: "BetId" };
 
 export default interface BetsTable {
   id: ColumnType<BetId, BetId | undefined, never>;
+  source: ColumnType<
+    'telegram' | 'app' | null,
+    'telegram' | 'app' | undefined,
+    never
+  >;
+  sourceType: ColumnType<
+    'text' | 'image' | 'audio' | 'manual' | null,
+    'text' | 'image' | 'audio' | 'manual' | undefined,
+    never
+  >;
+  telegramMessageId: ColumnType<number | null, number | undefined, never>;
+  telegramChatId: ColumnType<string | null, string | undefined, never>;
   game: ColumnType<string, string, string>;
   stake: ColumnType<number, number, number>; // DECIMAL(10,2)
   odd: ColumnType<number, number, number>;   // DECIMAL(5,2)

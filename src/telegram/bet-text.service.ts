@@ -1,3 +1,8 @@
+import {
+  normalizeBetData,
+  type BetOrigin,
+  type RawBetData,
+} from '../bet/bet-normalization';
 import { Injectable } from '@nestjs/common';
 import { GrokService } from './grok.service';
 import { BetService } from '../bet/bet.service';
@@ -45,6 +50,7 @@ export class BetTextService {
     replyToMessageId?: number,
     tipId?: number,
     betTime?: Date,
+    origin?: BetOrigin,
   ) {
     try {
       const resolvedHouseId =
@@ -54,15 +60,17 @@ export class BetTextService {
       // AVISO) são posicionais, então dá pra extrair tudo com regex e pular
       // a ida na IA. O Groq fica só de fallback pra texto fora do padrão.
       const local = parseBetLocal(userMessage);
-      const jsonResult = local
-        ? { ...local, houseId: resolvedHouseId }
-        : await this.grokService.parseBetMessage(userMessage, resolvedHouseId);
+      const jsonResult: RawBetData = local
+        ? local
+        : ((await this.grokService.parseBetMessage(
+            userMessage,
+            resolvedHouseId,
+          )) as RawBetData);
 
-      const houseId = Number(jsonResult.houseId);
-      const odd = Number(jsonResult.odd);
-      const game = String(jsonResult.game ?? '').trim();
-      const market = String(jsonResult.market ?? '').trim();
-      const sport = String(jsonResult.sport ?? '').trim();
+      const normalized = normalizeBetData(jsonResult);
+      const houseId = resolvedHouseId;
+      const { game, market, sport } = normalized;
+      const odd = normalized.odd ?? NaN;
 
       const percent = extractPercent(userMessage);
       const user = await this.usersService.findByTelegramUserId(ctx.from.id);
@@ -72,7 +80,7 @@ export class BetTextService {
       let stake =
         percent !== null
           ? (percent / 100) * userStake
-          : Number(jsonResult.stake);
+          : (normalized.stake ?? NaN);
 
       // Card vindo de print: não tem % pra converter pela banca, o valor
       // apostado já está no texto ("💰 Stake: R$ 14,83").
@@ -82,7 +90,7 @@ export class BetTextService {
       const limit = extractLimitFromText(userMessage);
       if (limit !== null) stake = Math.min(stake, limit);
 
-      if (!Number.isFinite(houseId) || houseId <= 0)
+      if (houseId === null || !Number.isFinite(houseId) || houseId <= 0)
         throw new Error('CASA_INVALIDA');
       if (!Number.isFinite(stake) || stake <= 0)
         throw new Error('stake inválida');
@@ -104,7 +112,20 @@ export class BetTextService {
         ...(betTime ? { betTime: betTime.toISOString() } : {}),
       };
 
-      const aposta = await this.betService.createBet(apostaData, tipId);
+      const telegramContext = ctx as Context;
+      const callback = telegramContext.callbackQuery;
+      const message =
+        telegramContext.message ??
+        (callback && 'message' in callback ? callback.message : undefined);
+      const source: BetOrigin = origin ?? {
+        source: 'telegram',
+        sourceType: 'text',
+        telegramMessageId: message?.message_id,
+        telegramChatId: telegramContext.chat
+          ? String(telegramContext.chat.id)
+          : undefined,
+      };
+      const aposta = await this.betService.createBet(apostaData, tipId, source);
 
       let houseName = 'N/A';
       try {
@@ -121,14 +142,28 @@ export class BetTextService {
         timeZone: 'America/Sao_Paulo',
       });
 
+      // Consultivo: a aposta já foi gravada, o aviso só sinaliza pro usuário
+      // conferir e apagar a repetida se for o caso.
+      const duplicado = aposta.duplicate.isPotentialDuplicate
+        ? `⚠️ Possível aposta duplicada — você planilhou uma igual há ${Math.max(
+            1,
+            Math.round(
+              (Date.now() - aposta.duplicate.existingCreatedAt!.getTime()) /
+                60000,
+            ),
+          )} min.
+
+`
+        : '';
+
       await ctx.reply(
-        `✅ Aposta salva!\n\n🎮 Jogo: ${aposta.game}\n🕐 Horário: ${horario}\n💰 Stake: R$ ${aposta.stake}\n📈 Odd: ${aposta.odd}\n🏆 Mercado: ${aposta.market}\n⚽ Esporte: ${aposta.sport}\n🏢 Casa: ${houseName}`,
+        `${duplicado}✅ Aposta salva!\n\n🎮 Jogo: ${aposta.game}\n🕐 Horário: ${horario}\n💰 Stake: R$ ${aposta.stake}\n📈 Odd: ${aposta.odd}\n🏆 Mercado: ${aposta.market}\n⚽ Esporte: ${aposta.sport}\n🏢 Casa: ${houseName}`,
         replyToMessageId
           ? { reply_parameters: { message_id: replyToMessageId } }
           : undefined,
       );
     } catch (err) {
-      console.error('❌ Erro ao processar aposta:', err);
+      console.error('[VALIDATION_FAILED] stage=telegram_bet', err);
       const extra = replyToMessageId
         ? { reply_parameters: { message_id: replyToMessageId } }
         : undefined;
@@ -446,7 +481,9 @@ export class BetTextService {
         );
         return;
       }
-      const preview = buildBetPreview(extracted, extracted.casa!, msg.date);
+      const preview = buildBetPreview(extracted, extracted.casa!, msg.date, {
+        sourceType: 'audio',
+      });
       await reply(preview.text, preview.reply_markup);
       status = 'ok';
     } catch (error) {

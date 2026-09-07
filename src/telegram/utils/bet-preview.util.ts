@@ -16,7 +16,11 @@ export function buildBetPreview(
   bet: ExtractedBetImage,
   house: string,
   timestamp: number,
-  options: { deep?: boolean; allowDeep?: boolean } = {},
+  options: {
+    deep?: boolean;
+    allowDeep?: boolean;
+    sourceType?: 'image' | 'audio';
+  } = {},
 ) {
   if (!house.trim() || missingBetFields(bet).length)
     throw new Error('APOSTA_INCOMPLETA');
@@ -31,7 +35,12 @@ export function buildBetPreview(
     text: `${options.deep ? '✅ Análise profunda concluída!' : '✅ Aposta identificada!'}\n\n${card}`,
     reply_markup: {
       inline_keyboard: [
-        [{ text: '📊 Planilhar', callback_data: `planilhar_ts:${timestamp}` }],
+        [
+          {
+            text: '📊 Planilhar',
+            callback_data: `planilhar_ts:${timestamp}:${options.sourceType === 'audio' ? 2 : 1}`,
+          },
+        ],
         ...(options.allowDeep
           ? [[{ text: '🔎 Análise profunda', callback_data: 'bet_image_deep' }]]
           : []),

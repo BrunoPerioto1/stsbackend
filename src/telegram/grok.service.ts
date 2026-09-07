@@ -1,3 +1,4 @@
+import { BET_EXTRACTION_RULES } from '../bet/bet-normalization';
 import { Injectable } from '@nestjs/common';
 import Groq from 'groq-sdk';
 import * as dotenv from 'dotenv';
@@ -92,6 +93,7 @@ export class GrokService {
 
   async parseBetMessage(message: string, houseId: number | null): Promise<any> {
     const prompt = `Você é um parser de mensagens de apostas.
+${BET_EXTRACTION_RULES}
 Receberá um texto e deve devolver APENAS um objeto JSON válido, sem explicações.
 NUNCA envolva o JSON em blocos de código (sem crases).
 
@@ -148,11 +150,12 @@ ${message}`;
 
     try {
       const obj = JSON.parse(extracted ?? aiText);
-      console.log('📊 JSON Gerado pelo Groq:', JSON.stringify(obj, null, 2));
       return obj;
     } catch {
-      console.log('📊 JSON retornado pelo Groq (não é JSON válido):', aiText);
-      return aiText;
+      console.warn(
+        '[VALIDATION_FAILED] stage=extraction code=IA_JSON_INVALIDO',
+      );
+      throw new Error('IA_JSON_INVALIDO');
     }
   }
 }

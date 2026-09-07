@@ -43,6 +43,33 @@ export class BetRepository {
     private readonly dbRead: Kysely<Database>,
   ) {}
 
+  async findRecentCandidates(
+    userId: UserId,
+    houseId: BettingHouseId,
+    since: Date,
+    until: Date,
+  ) {
+    // Read the writer so a just-created bet is visible despite replica lag.
+    return this.dbWrite
+      .selectFrom('bets')
+      .select([
+        'id',
+        'userId',
+        'houseId',
+        'game',
+        'market',
+        'odd',
+        'stake',
+        'createdAt',
+      ])
+      .where('userId', '=', userId)
+      .where('houseId', '=', houseId)
+      .where('createdAt', '>=', since)
+      .where('createdAt', '<=', until)
+      .orderBy('createdAt', 'desc')
+      .execute();
+  }
+
   async create(newBet: NewBet) {
     const result = await this.dbWrite.transaction().execute(async (trx) => {
       const createdBet = await trx

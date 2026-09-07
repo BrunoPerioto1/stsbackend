@@ -1,3 +1,4 @@
+import type { Message } from 'telegraf/types';
 import { Injectable } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { TipsService } from '../tips/tips.service';
@@ -53,6 +54,9 @@ export class TelegramCallbackService {
         return;
       }
       const isTs = action === 'planilhar_ts';
+      const previewMessage = msg as Message.TextMessage;
+      const original = previewMessage.reply_to_message;
+      const isAudio = original && ('voice' in original || 'audio' in original);
       try {
         await this.betTextService.processBetText(
           ctx,
@@ -60,6 +64,18 @@ export class TelegramCallbackService {
           msg.message_id,
           isTs ? undefined : (tipId ?? undefined),
           isTs && tipId ? new Date(tipId * 1000) : undefined,
+          {
+            source: 'telegram',
+            sourceType: isTs
+              ? args[1] === 2 || isAudio
+                ? 'audio'
+                : 'image'
+              : 'text',
+            telegramMessageId:
+              (isTs ? original?.message_id : undefined) ??
+              previewMessage.message_id,
+            telegramChatId: String(previewMessage.chat.id),
+          },
         );
         const novoTexto = `✅ PLANILHADO\n\n${text}`;
         const doneKeyboard = {
