@@ -112,6 +112,22 @@ type ComparableBet = RawBetData & {
   houseId?: number | null;
 };
 
+// Forma canonica de comparacao de texto de aposta. Usada pela impressao
+// digital de duplicata e pelo matching com pendencias do /pendentes — os dois
+// precisam enxergar "Bahia x Palmeiras" e "Bahia vs Palmeiras" como iguais.
+export function comparableText(text: string): string {
+  return text
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/(\d),(?=\d)/g, '$1.')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function comparableGame(text: string): string {
+  return comparableText(text).replace(/\s+(?:x|vs\.?|versus)\s+/g, ' vs ');
+}
+
 export function betFingerprint(bet: ComparableBet): string | null {
   const data = normalizeBetData(bet, false);
   if (
@@ -123,18 +139,11 @@ export function betFingerprint(bet: ComparableBet): string | null {
     data.stake === null
   )
     return null;
-  const comparable = (text: string) =>
-    text
-      .normalize('NFKC')
-      .toLowerCase()
-      .replace(/(\d),(?=\d)/g, '$1.')
-      .replace(/\s+/g, ' ')
-      .trim();
   return JSON.stringify([
     bet.userId,
     bet.houseId,
-    comparable(data.game).replace(/\s+(?:x|vs\.?|versus)\s+/g, ' vs '),
-    comparable(data.market),
+    comparableGame(data.game),
+    comparableText(data.market),
     data.odd,
     data.stake,
   ]);

@@ -15,14 +15,24 @@ import {
   UNLINKED_INSTRUCTIONS,
 } from './messages.const';
 import {
+  extractGameFromText,
+  extractHouseFromText,
   extractLimitFromText,
+  extractMarketFromText,
+  extractOddFromText,
   extractPercent,
   extractStakeFromText,
   parseBetLocal,
 } from './utils/tip-extractors.util';
+import { findBetMatches } from './utils/bet-match.util';
+import { TipsService } from '../tips/tips.service';
 import { BetImageService } from './bet-image.service';
 import { BetAudioService, MAX_AUDIO_BYTES } from './bet-audio.service';
-import { buildBetPreview, missingBetFields } from './utils/bet-preview.util';
+import {
+  buildBetPreview,
+  missingBetFields,
+  type PreviewMatch,
+} from './utils/bet-preview.util';
 import type { Context } from 'telegraf';
 import type { Message } from 'telegraf/types';
 
@@ -38,7 +48,75 @@ export class BetTextService {
     private readonly tipFanoutService: TipFanoutService,
     private readonly betImageService: BetImageService,
     private readonly betAudioService: BetAudioService,
+    private readonly tipsService?: TipsService,
   ) {}
+
+  // Pendencias do /pendentes parecidas com a aposta lida do print. Tudo local:
+  // reusa os extractors da tip e o scorer, sem uma segunda ida na IA. Falhar
+  // aqui nunca pode derrubar o reconhecimento — sem candidato o fluxo segue
+  // igual ao de antes.
+  private async findPendingMatches(
+    ctx: any,
+    bet: {
+      evento: string | null;
+      mercado: string | null;
+      odd: number | null;
+      stake: number | null;
+    },
+    house: string,
+    unixDate: number,
+  ): Promise<PreviewMatch[]> {
+    try {
+      if (!this.tipsService) return [];
+      const user = await this.usersService.findByTelegramUserId(ctx.from.id);
+      if (!user) return [];
+      const [rows, userStake] = await Promise.all([
+        this.tipsService.getSummaryForUser(
+          user.id,
+          user.minPercentFilter != null ? Number(user.minPercentFilter) : null,
+        ),
+        this.usersService.getUserStake(user.id),
+      ]);
+      const candidates = rows
+        .filter((row: any) => row.betId == null && row.dismissalId == null)
+        .map((row: any) => {
+          // Mesma conta do processBetText: a tip so tem a % da banca, a stake
+          // absoluta vem dai (e do limite, quando ele corta).
+          const percent = row.percent != null ? Number(row.percent) : null;
+          const limit = extractLimitFromText(row.text);
+          let stake = percent !== null ? (percent / 100) * userStake : NaN;
+          if (limit !== null && Number.isFinite(stake))
+            stake = Math.min(stake, limit);
+          return {
+            tipId: row.id,
+            game: extractGameFromText(row.text) ?? '',
+            market: extractMarketFromText(row.text) ?? '',
+            house: extractHouseFromText(row.text) ?? '',
+            odd: extractOddFromText(row.text) ?? NaN,
+            stake,
+            at: new Date(row.createdAt),
+          };
+        });
+      return findBetMatches(
+        {
+          game: bet.evento ?? '',
+          market: bet.mercado ?? '',
+          house,
+          odd: bet.odd ?? NaN,
+          stake: bet.stake ?? NaN,
+          at: new Date(unixDate * 1000),
+        },
+        candidates,
+      ).map(({ candidate, score }) => ({
+        tipId: candidate.tipId,
+        score,
+        label: candidate.game || `#${candidate.tipId}`,
+      }));
+    } catch (err) {
+      console.warn('[BET_MATCH] falhou:', (err as Error).message);
+      return [];
+    }
+  }
 
   // Parsing + criação da aposta. Reaproveitado tanto pelo texto livre em DM
   // quanto pelo clique em "Enviar ao Planilhador" na cópia individual do
@@ -365,9 +443,13 @@ export class BetTextService {
         return;
       }
 
+      const matches = await measure('match', () =>
+        this.findPendingMatches(ctx, extracted, caption, msg.date as number),
+      );
       const preview = buildBetPreview(extracted, caption, msg.date as number, {
         deep,
         allowDeep: !deep,
+        matches,
       });
       await reply(preview.text, { reply_markup: preview.reply_markup });
       status = 'ok';

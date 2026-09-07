@@ -16,6 +16,9 @@ import {
 } from './utils/tip-extractors.util';
 import { parseCallbackAction } from './utils/callback-parsing.util';
 
+// Não existe rota por aposta no front — o botão leva pra lista de apostas.
+const BETS_URL = 'https://stsfront.vercel.app/bets';
+
 // Dispatcher de callback_query: os botões da cópia individual (Planilhar /
 // Editar / Aposta Caiu / Voltar) e os da lista compacta do /pendentes
 // (lista_planilhar / lista_caiu / lista_editar / lista_pagina).
@@ -88,15 +91,38 @@ export class TelegramCallbackService {
         return;
       }
       const isTs = action === 'planilhar_ts';
+      // No card de print o args[0] é o timestamp da foto; o tipId (quando o
+      // usuário confirmou que é a mesma aposta de uma pendência) vem em
+      // args[2]. No card de tip o tipId continua sendo o args[0].
+      const linkTipId = isTs ? (args[2] ?? undefined) : (tipId ?? undefined);
       const previewMessage = msg as Message.TextMessage;
       const original = previewMessage.reply_to_message;
       const isAudio = original && ('voice' in original || 'audio' in original);
+      // Clique duplo no mesmo card criaria duas apostas: a checagem por tip
+      // ainda não vê nada gravado quando o segundo callback entra.
+      const lock = `planilhar:${previewMessage.chat.id}:${msg.message_id}`;
+      if (this.inFlight.has(lock)) {
+        await ctx.answerCbQuery('⏳ Já estou planilhando essa aposta.');
+        return;
+      }
+      this.inFlight.add(lock);
       try {
+        if (isTs && linkTipId) {
+          const user = await this.usersService.findByTelegramUserId(
+            ctx.from.id,
+          );
+          const existing =
+            user && (await this.betService.findBetByTip(linkTipId, user.id));
+          if (existing) {
+            await ctx.answerCbQuery('✅ Essa pendência já está planilhada.');
+            return;
+          }
+        }
         await this.betTextService.processBetText(
           ctx,
           text,
           msg.message_id,
-          isTs ? undefined : (tipId ?? undefined),
+          linkTipId,
           isTs && tipId ? new Date(tipId * 1000) : undefined,
           {
             source: 'telegram',
@@ -111,10 +137,30 @@ export class TelegramCallbackService {
             telegramChatId: String(previewMessage.chat.id),
           },
         );
-        const novoTexto = `✅ PLANILHADO\n\n${text}`;
-        const doneKeyboard = {
-          inline_keyboard: [[{ text: '✅ Planilhado', callback_data: 'done' }]],
-        };
+        // Só o caminho "print vinculado a uma pendência" ganha Ver aposta /
+        // Desfazer — é o único onde a confirmação do usuário tirou algo do
+        // /pendentes e pode precisar ser revertida.
+        const vinculado = isTs && !!linkTipId;
+        const novoTexto = vinculado
+          ? `✅ PLANILHADO (pendência vinculada)\n\n${text}`
+          : `✅ PLANILHADO\n\n${text}`;
+        const doneKeyboard = vinculado
+          ? {
+              inline_keyboard: [
+                [{ text: '📊 Ver aposta', url: BETS_URL }],
+                [
+                  {
+                    text: '↩️ Desfazer',
+                    callback_data: `img_desfazer:${tipId ?? 0}:${args[1] ?? 1}:${linkTipId}`,
+                  },
+                ],
+              ],
+            }
+          : {
+              inline_keyboard: [
+                [{ text: '✅ Planilhado', callback_data: 'done' }],
+              ],
+            };
         if (isMedia)
           await ctx.editMessageCaption(novoTexto, {
             reply_markup: doneKeyboard,
@@ -127,6 +173,66 @@ export class TelegramCallbackService {
         await ctx.answerCbQuery(
           '❌ Erro ao planilhar. Veja o chat para detalhes.',
         );
+      } finally {
+        this.inFlight.delete(lock);
+      }
+      return;
+    }
+
+    // Desfazer do card de print vinculado: apaga a aposta criada, a tip volta
+    // pro /pendentes e o card volta a oferecer as duas opções.
+    if (action === 'img_desfazer') {
+      const [timestamp, sourceType, linkTipId] = args;
+      if (!linkTipId || !text) {
+        await ctx.answerCbQuery('❌ Referência inválida.');
+        return;
+      }
+      const user = await this.usersService.findByTelegramUserId(ctx.from.id);
+      if (!user) {
+        await ctx.answerCbQuery('❌ Conta não vinculada.');
+        return;
+      }
+      const lock = `img_desfazer:${msg.chat.id}:${msg.message_id}`;
+      if (this.inFlight.has(lock)) {
+        await ctx.answerCbQuery('⏳ Já estou desfazendo.');
+        return;
+      }
+      this.inFlight.add(lock);
+      try {
+        const removed = await this.betService.deleteBetByTip(
+          linkTipId,
+          user.id,
+        );
+        const restaurado = text.replace(/^✅ PLANILHADO[^\n]*\n\n/, '');
+        const keyboard = {
+          inline_keyboard: [
+            [
+              {
+                text: '🔁 Sim — vincular à pendência',
+                callback_data: `planilhar_ts:${timestamp}:${sourceType}:${linkTipId}`,
+              },
+            ],
+            [
+              {
+                text: '🆕 Não — planilhar como nova',
+                callback_data: `planilhar_ts:${timestamp}:${sourceType}`,
+              },
+            ],
+          ],
+        };
+        if (isMedia)
+          await ctx.editMessageCaption(restaurado, { reply_markup: keyboard });
+        else await ctx.editMessageText(restaurado, { reply_markup: keyboard });
+        await ctx.answerCbQuery(
+          removed
+            ? '↩️ Aposta removida e pendência de volta.'
+            : '❌ A aposta não está mais lá — talvez já tenha sido apagada.',
+        );
+      } catch (err) {
+        console.error('❌ Erro ao desfazer print vinculado:', err);
+        await ctx.answerCbQuery('❌ Não deu pra desfazer.');
+      } finally {
+        this.inFlight.delete(lock);
       }
       return;
     }
