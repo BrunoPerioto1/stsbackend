@@ -19,7 +19,7 @@ Extraia evento, esporte, mercado, odd total e stake.
 Regras:
 ${BET_EXTRACTION_RULES}
 - Nao invente dados; retorne null se nao identificar um campo com seguranca.
-- Ignore outros jogos, mercados disponiveis, saldo, retorno, cashout, limite, IDs, datas e horarios.
+- Ignore jogos fora do bilhete, mercados disponiveis, saldo, retorno, cashout, limite, IDs, datas e horarios. Numa multipla, todas as selecoes do bilhete fazem parte da aposta.
 - O esporte pode ser inferido pelo contexto.
 - No evento, remova sufixos geograficos redundantes dos times quando a identidade estiver clara: "Sao Paulo SP vs Palmeiras" deve ser "Sao Paulo vs Palmeiras". Preserve acentos do nome e siglas que sejam parte do nome ou necessarias para distinguir equipes.
 - Mercado deve conter somente as condicoes esportivas para a aposta vencer, preservando jogadores, linhas, periodos e tipo de estatistica.

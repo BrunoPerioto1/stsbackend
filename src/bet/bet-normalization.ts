@@ -175,4 +175,4 @@ export function detectPotentialDuplicate(
     : { isPotentialDuplicate: false };
 }
 
-export const BET_EXTRACTION_RULES = `Evento contém somente o confronto/participantes; mercado contém seleção, jogador, linha e condição, preservando negações e conectivos. Ignore botões, títulos da tela e promoções em ambos. Esporte só pode ser inferido com contexto forte; participantes ambíguos devem retornar null. Não invente dados ausentes.`;
+export const BET_EXTRACTION_RULES = `Evento contém somente o confronto/participantes; mercado contém seleção, jogador, linha e condição, preservando negações e conectivos. Ignore botões, títulos da tela e promoções em ambos. Esporte só pode ser inferido com contexto forte; participantes ambíguos devem retornar null. Em aposta múltipla, liste todos os confrontos no evento separados por " / "; se as seleções forem de esportes diferentes, esporte é "Vários". Não invente dados ausentes.`;
