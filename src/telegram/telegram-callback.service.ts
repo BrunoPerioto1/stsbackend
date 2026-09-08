@@ -107,10 +107,11 @@ export class TelegramCallbackService {
       }
       this.inFlight.add(lock);
       try {
+        const user =
+          isTs && linkTipId
+            ? await this.usersService.findByTelegramUserId(ctx.from.id)
+            : null;
         if (isTs && linkTipId) {
-          const user = await this.usersService.findByTelegramUserId(
-            ctx.from.id,
-          );
           const existing =
             user && (await this.betService.findBetByTip(linkTipId, user.id));
           if (existing) {
@@ -141,6 +142,14 @@ export class TelegramCallbackService {
         // Desfazer — é o único onde a confirmação do usuário tirou algo do
         // /pendentes e pode precisar ser revertida.
         const vinculado = isTs && !!linkTipId;
+        // A tip original ainda aparece como pendente na cópia que o usuário
+        // recebeu antes do print — mesmo banner que o /pendentes já marca.
+        if (vinculado && user)
+          await this.tipFanoutService.markDeliveredMessage(
+            user,
+            linkTipId,
+            'planilhado',
+          );
         const novoTexto = vinculado
           ? `✅ PLANILHADO (pendência vinculada)\n\n${text}`
           : `✅ PLANILHADO\n\n${text}`;
