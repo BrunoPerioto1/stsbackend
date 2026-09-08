@@ -77,6 +77,41 @@ describe('bet normalization', () => {
   it('does not infer sport in the backend', () => {
     expect(normalizeBetData({ game: 'Flamengo x Palmeiras' }).sport).toBeNull();
   });
+  it('turns a multi-event game into a labelled multipla', () => {
+    const bet = normalizeBetData({
+      game: 'Real Madrid vs Osasuna / Barcelona vs Getafe',
+      market:
+        'Real Madrid vs Osasuna - vitória / Barcelona vs Getafe - vitória',
+    });
+    expect(bet.game).toBe('Múltipla (2 jogos)');
+    expect(bet.market).toBe(
+      'Real Madrid vs Osasuna - vitória / Barcelona vs Getafe - vitória',
+    );
+  });
+  it('keeps the confrontos when the model left them out of the market', () => {
+    const bet = normalizeBetData({
+      game: 'Real Madrid x Osasuna / Barcelona x Getafe',
+      market: 'vitória / vitória',
+    });
+    expect(bet.game).toBe('Múltipla (2 jogos)');
+    expect(bet.market).toBe(
+      'Real Madrid x Osasuna / Barcelona x Getafe · Vitória / Vitória',
+    );
+  });
+  it('keeps a single-event multipla showing the confronto', () => {
+    const bet = normalizeBetData({
+      game: 'Vitória vs Grêmio',
+      market: 'mais de 1.5 gols / mais de 7.5 escanteios',
+    });
+    expect(bet.game).toBe('Vitória vs Grêmio');
+    expect(bet.market).toBe('Mais de 1.5 gols / Mais de 7.5 escanteios');
+  });
+  it('falls back to the confrontos when there is no market', () => {
+    expect(
+      normalizeBetData({ game: 'Real Madrid vs Osasuna / Barcelona vs Getafe' })
+        .market,
+    ).toBe('Real Madrid vs Osasuna / Barcelona vs Getafe');
+  });
 });
 
 describe('potential duplicates', () => {

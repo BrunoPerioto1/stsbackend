@@ -44,6 +44,36 @@ export function capitalizeMarket(value: string | null): string | null {
     .join(' / ');
 }
 
+// Uma multipla de jogos diferentes nao tem "o jogo" da aposta: o evento vira o
+// rotulo com a contagem e os confrontos descem pro mercado, junto das selecoes.
+// Multipla do mesmo confronto (varias selecoes de "Vitoria vs Gremio") nao e
+// afetada — ali o evento continua sendo o jogo.
+export function foldMultiEventGame(
+  game: string | null,
+  market: string | null,
+): { game: string | null; market: string | null } {
+  if (!game) return { game, market };
+  const events = game
+    .split(' / ')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (events.length < 2) return { game, market };
+
+  const list = events.join(' / ');
+  // O prompt ja pede cada selecao prefixada pelo confronto; a lista so e
+  // acrescentada quando o modelo devolveu o mercado sem ela, pra nao repetir
+  // nem tentar adivinhar qual selecao pertence a qual jogo.
+  const mentioned =
+    market != null &&
+    events.some((event) =>
+      comparableGame(market).includes(comparableGame(event)),
+    );
+  return {
+    game: `Múltipla (${events.length} jogos)`,
+    market: !market ? list : mentioned ? market : `${list} · ${market}`,
+  };
+}
+
 export function normalizeBetNumber(value: unknown): number | null {
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
   if (typeof value !== 'string') return null;
@@ -75,9 +105,13 @@ export interface RawBetData {
 }
 
 export function normalizeBetData(data: RawBetData, diagnostics = true) {
+  const multi = foldMultiEventGame(
+    cleanBetText(data.game),
+    capitalizeMarket(cleanBetText(data.market)),
+  );
   const normalized = {
-    game: cleanBetText(data.game),
-    market: capitalizeMarket(cleanBetText(data.market)),
+    game: multi.game,
+    market: multi.market,
     sport: cleanBetText(data.sport),
     odd: normalizeBetNumber(data.odd),
     stake: normalizeBetNumber(data.stake),
@@ -175,4 +209,4 @@ export function detectPotentialDuplicate(
     : { isPotentialDuplicate: false };
 }
 
-export const BET_EXTRACTION_RULES = `Evento contém somente o confronto/participantes; mercado contém seleção, jogador, linha e condição, preservando negações e conectivos. Ignore botões, títulos da tela e promoções em ambos. Esporte só pode ser inferido com contexto forte; participantes ambíguos devem retornar null. Em aposta múltipla, liste todos os confrontos no evento separados por " / "; se as seleções forem de esportes diferentes, esporte é "Vários". Não invente dados ausentes.`;
+export const BET_EXTRACTION_RULES = `Evento contém somente o confronto/participantes; mercado contém seleção, jogador, linha e condição, preservando negações e conectivos. Ignore botões, títulos da tela e promoções em ambos. Esporte só pode ser inferido com contexto forte; participantes ambíguos devem retornar null. Em aposta múltipla de mais de um confronto não existe um jogo: o evento é o rótulo "Múltipla (N jogos)", com N = quantidade de confrontos, e cada seleção no mercado vem prefixada pelo seu confronto, separadas por " / " — "Real Madrid vs Osasuna - vitória / Barcelona vs Getafe - vitória". Se todas as seleções forem do mesmo confronto, o evento é esse confronto normalmente. Se as seleções forem de esportes diferentes, esporte é "Vários". Não invente dados ausentes.`;
