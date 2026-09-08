@@ -314,7 +314,6 @@ export class BetTextService {
         timings[stage] = Math.round(performance.now() - start);
       }
     };
-    let feedback: { message_id: number } | null = null;
     const extra = { reply_parameters: { message_id: msg.message_id } };
     const deepButton = [
       { text: '🔎 Análise profunda', callback_data: 'bet_image_deep' },
@@ -324,14 +323,33 @@ export class BetTextService {
       reply_markup: { inline_keyboard: [deepButton] },
     };
 
+    // Feedback e pendentes rodam de lado: nada na leitura do print depende
+    // deles, então não podem segurar a chamada da IA.
+    const noticePromise = deep
+      ? Promise.resolve(null)
+      : measure('feedback', () => ctx.reply('⏳ Analisando a foto…', extra))
+          .then((m: any) => m as { message_id: number })
+          .catch(() => {
+            console.warn('[BET_IMAGE_FLOW] feedback_failed=true');
+            return null;
+          });
+    const pendentesPromise = measure('pendentes', () =>
+      this.loadPendingCandidates(ctx, new Date((msg.date as number) * 1000)),
+    ).catch((err) => {
+      console.warn('[BET_MATCH] pendentes_indisponiveis=true');
+      throw err;
+    });
+    pendentesPromise.catch(() => {});
+
     const reply = async (text: string, options: any = {}) =>
       measure('preview', async () => {
         const { reply_parameters: _replyParameters, ...editOptions } = options;
         if (deep) return ctx.editMessageText(text, editOptions);
-        if (feedback)
+        const notice = await noticePromise;
+        if (notice)
           return ctx.telegram.editMessageText(
             ctx.chat.id,
-            feedback.message_id,
+            notice.message_id,
             undefined,
             text,
             editOptions,
@@ -340,18 +358,17 @@ export class BetTextService {
       });
 
     try {
-      // Feedback, consulta da casa e download começam juntos. A IA só roda com casa válida.
-      const [notice, house, photo, pendentes] = await Promise.allSettled([
-        deep
-          ? Promise.resolve(null)
-          : measure('feedback', () =>
-              ctx.reply('⏳ Analisando a foto…', extra),
-            ),
+      // Só casa e download bloqueiam a IA. A IA só roda com casa válida.
+      const [house, photo] = await Promise.allSettled([
         measure('house', () =>
           this.grokService.resolveHouseId(`🏠 ${caption}`),
         ),
         (async () => {
-          const fileId = msg.photo[msg.photo.length - 1].file_id;
+          const fileId = pickPhotoSize<{
+            file_id: string;
+            width: number;
+            height: number;
+          }>(msg.photo).file_id;
           const link: any = await measure('get_file', () =>
             ctx.telegram.getFileLink(fileId),
           );
@@ -366,16 +383,7 @@ export class BetTextService {
             mimeType: /\.png($|\?)/i.test(url) ? 'image/png' : 'image/jpeg',
           };
         })(),
-        measure('pendentes', () =>
-          this.loadPendingCandidates(
-            ctx,
-            new Date((msg.date as number) * 1000),
-          ),
-        ),
       ]);
-      if (notice.status === 'fulfilled')
-        feedback = notice.value as { message_id: number } | null;
-      else console.warn('[BET_IMAGE_FLOW] feedback_failed=true');
 
       let extracted: Awaited<
         ReturnType<typeof this.betImageService.extractBetFromImage>
@@ -428,8 +436,9 @@ export class BetTextService {
 
       // Comparacao local pura (sem I/O, sem IA): so pontua o que ja veio.
       // Pendencia indisponivel nao pode atrapalhar o print — segue sem sugestao.
-      if (pendentes.status === 'rejected')
-        console.warn('[BET_MATCH] pendentes_indisponiveis=true');
+      const pendentes = await Promise.allSettled([pendentesPromise]).then(
+        ([r]) => r,
+      );
       const matches =
         pendentes.status === 'fulfilled'
           ? findBetMatches(
@@ -697,4 +706,21 @@ export class BetTextService {
       await ctx.reply('❌ Erro ao atualizar. Tenta de novo.');
     }
   }
+}
+
+// Telegram entrega o mesmo print em vários tamanhos. O maior (às vezes 2000px+)
+// só engorda download e tokens de imagem sem ganhar legibilidade no bilhete —
+// pega o menor que ainda passa de ~1100px de lado maior.
+// ponytail: sem redimensionar nada localmente; se 1100 ficar ilegível em alguma
+// casa, sobe o limite ou aí sim entra um resize (sharp).
+export function pickPhotoSize<T extends { width: number; height: number }>(
+  sizes: T[],
+): T {
+  const sorted = [...sizes].sort(
+    (a, b) => Math.max(a.width, a.height) - Math.max(b.width, b.height),
+  );
+  return (
+    sorted.find((s) => Math.max(s.width, s.height) >= 1100) ??
+    sorted[sorted.length - 1]
+  );
 }

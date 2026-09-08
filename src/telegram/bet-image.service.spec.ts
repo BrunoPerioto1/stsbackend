@@ -1,6 +1,6 @@
 import { normalizeExtraction } from './bet-image.service';
 import { BetAudioService } from './bet-audio.service';
-import { BetTextService } from './bet-text.service';
+import { BetTextService, pickPhotoSize } from './bet-text.service';
 import { TelegramService } from './telegram.service';
 import {
   extractStakeFromText,
@@ -299,4 +299,18 @@ it('inicializa handlers sem registrar webhook nem chamar rede', () => {
   expect(bot.on).toHaveBeenCalledWith('message', expect.any(Function));
   expect(bot.on).toHaveBeenCalledWith('callback_query', expect.any(Function));
   expect(bot.telegram.setWebhook).not.toHaveBeenCalled();
+});
+
+describe('pickPhotoSize', () => {
+  const size = (w: number) => ({ file_id: `f${w}`, width: w, height: w * 2 });
+
+  it('pega o menor tamanho a partir de 1100px', () => {
+    expect(
+      pickPhotoSize([size(320), size(2560), size(1280), size(90)]).file_id,
+    ).toBe('f1280');
+  });
+
+  it('cai no maior disponivel quando nenhum chega a 1100px', () => {
+    expect(pickPhotoSize([size(90), size(320), size(800)]).file_id).toBe('f800');
+  });
 });
