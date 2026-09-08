@@ -35,8 +35,12 @@ export function buildBetPreview(
     throw new Error('APOSTA_INCOMPLETA');
   // Mantém o contrato do parser textual e evita tratar stake como percentual.
   const oneLine = (s: string) => s.replace(/\s*\n\s*/g, ' ').replace(/%/g, '');
+  // A legenda vem como o usuário digitou ("betano"); no card a casa aparece
+  // com inicial maiúscula. Só exibição — o resolveHouseId já normaliza.
+  const titleCase = (s: string) =>
+    s.replace(/\p{L}\S*/gu, (w) => w[0].toUpperCase() + w.slice(1));
   const card =
-    `🏠 ${oneLine(house)}\n` +
+    `🏠 ${titleCase(oneLine(house))}\n` +
     `🆚 ${oneLine(bet.evento!)}\n⚽️ ${oneLine(bet.esporte!)}\n` +
     `📌 ${oneLine(bet.mercado!)}\n🏷 ${bet.odd!.toFixed(2)}\n` +
     `💰 Stake: R$ ${bet.stake!.toFixed(2).replace('.', ',')}`;
