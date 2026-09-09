@@ -72,6 +72,31 @@ const CANDIDATOS: CandidateEvent[] = [
   ),
   evento('10', 'FC Barcelona', 'Feyenoord', '2026-09-09T16:45:00Z'),
   evento('11', 'VfB Stuttgart', 'Viking FK', '2026-09-09T18:45:00Z'),
+  // Basquete e futebol americano no mesmo cache: o filtro de esporte tem que
+  // separar "Atlanta Hawks" de "Atlanta United".
+  evento('12', 'Atlanta Hawks', 'Boston Celtics', '2026-09-14T23:00:00Z', {
+    sport: 'Basketball',
+    homeShort: 'Hawks',
+    homeCode: 'ATL',
+    awayShort: 'Celtics',
+    awayCode: 'BOS',
+  }),
+  evento('13', 'Atlanta United', 'Inter Miami', '2026-09-14T20:00:00Z', {
+    homeCode: 'ATL',
+  }),
+  evento(
+    '14',
+    'Seattle Seahawks',
+    'New England Patriots',
+    '2026-09-15T20:00:00Z',
+    {
+      sport: 'American football',
+      homeShort: 'Seahawks',
+      homeCode: 'SEA',
+      awayShort: 'Patriots',
+      awayCode: 'NE',
+    },
+  ),
   evento('7', 'Real Madrid', 'Osasuna', '2026-09-19T19:00:00Z'),
   evento('8', 'Barcelona', 'Getafe', '2026-09-12T19:00:00Z'),
 ];
@@ -190,6 +215,34 @@ describe('matchEvent', () => {
       const parcial =
         'Real Madrid vs Osasuna - vitória / Time Inventado vs Outro - vitória';
       expect(matchEvent(game, parcial, CANDIDATOS)).toBeNull();
+    });
+  });
+
+  describe('filtro de esporte', () => {
+    it.each([
+      ['Atlanta Hawks x Boston Celtics', 'Basquete', '12'],
+      ['Atlanta Hawks x Celtics', 'Basketball', '12'],
+      ['Atlanta United x Inter Miami', 'Futebol', '13'],
+      ['Seahawks x Patriots', 'Futebol Americano', '14'],
+    ])('casa "%s" (%s) com o evento %s', (game, sport, esperado) => {
+      expect(matchEvent(game, '', CANDIDATOS, sport)?.externalId).toBe(
+        esperado,
+      );
+    });
+
+    it('nao cruza esportes', () => {
+      // Existe "Atlanta United" no futebol, mas o adversario e' de basquete.
+      expect(
+        matchEvent('Atlanta x Boston Celtics', '', CANDIDATOS, 'Futebol'),
+      ).toBeNull();
+    });
+
+    it('esporte desconhecido nao filtra nada', () => {
+      // Multipla de esportes diferentes vem como "Varios".
+      expect(
+        matchEvent('Atlanta Hawks x Boston Celtics', '', CANDIDATOS, 'Varios')
+          ?.externalId,
+      ).toBe('12');
     });
   });
 

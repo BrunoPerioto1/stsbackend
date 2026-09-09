@@ -70,6 +70,10 @@ LIGAS = {
     480: "CONMEBOL Sudamericana",
     242: "MLS",
     955: "Saudi Pro League",
+    # Fora do futebol. Mesma estrutura de evento (dois lados, shortName e
+    # nameCode), entao entram sem mudanca no coletor.
+    132: "NBA",
+    9464: "NFL",
 }
 
 requests_feitos = 0

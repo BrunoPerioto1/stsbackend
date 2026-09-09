@@ -55,7 +55,8 @@ Trocar de fonte é trocar `jobs/sofascore/collect.py`, sem tocar no backend.
 
 ## Coleta
 
-24 competições, IDs verificados via `/search/all` do próprio SofaScore. Por
+26 competições — 24 de futebol mais NBA e NFL — com IDs verificados via
+`/search/all` do próprio SofaScore. Por
 competição são 2 requests (`/seasons` + `/events/next/0`), janela de 30 dias —
 uma página traz 30 jogos, ~3 rodadas. Total ~48 requests, ~3min, 1x por dia.
 
@@ -90,6 +91,12 @@ SofaScore mantém (`Manchester City` / `Man City` / `MCI`), o que dispensa
 tabela de alias pra maioria dos nomes. `ALIASES` cobre só o que o provider não
 tem: nome em português de clube estrangeiro (`Inter de Milão`, `Nápoles`).
 
+**O esporte filtra os candidatos antes de tudo.** A extração escreve em
+português (`Futebol`, `Basquete`) e o provider em inglês (`Football`,
+`Basketball`); `SPORTS` faz a ponte. Esporte fora do mapa — múltipla de
+esportes diferentes vem como `Vários` — não filtra nada, porque perder recall
+ali é pior que o risco: os dois lados ainda precisam casar.
+
 **Os dois times precisam casar** — é o que separa `Botafogo-PB` de
 `Botafogo-SP`. Se o segundo colocado fica a menos de `0.03` do primeiro, os dois
 são plausíveis e o match é descartado.
@@ -110,6 +117,21 @@ adversariais (`Botafogo-PB x Botafogo-SP`, `Athletic Club x Athletico`).
 
 Custo medido contra os 543 candidatos: **~23ms de CPU** por aposta, mais a query
 no Postgres. O mesmo `createBet` já espera 1-3s de Groq/OpenAI.
+
+## Esportes que não entram no modelo
+
+**Tênis.** O SofaScore não expõe agenda por data nessa API (`/sport/{x}/scheduled-events/{data}`
+dá 404, testado também com futebol), e `events/next` por torneio dá 404 porque
+torneio de tênis termina — não existe "próximos". Só há `/sport/tennis/events/live`,
+que serve para jogo em andamento. Suportar tênis exige achar outra fonte de
+agenda, além de lidar com nome de jogador (`Sinner J.` no provider contra
+`Jannik Sinner` na casa), duplas e qualificatórias.
+
+**Fórmula 1.** Modelo diferente: `uniqueStage` (id 40) com `stage` filhos (os
+GPs), sem `homeTeam`/`awayTeam`. O matcher inteiro assume que os dois lados
+precisam casar, e num GP não existe lado. Suportar F1 significa um segundo
+caminho de matching, casando nome de GP/circuito, com aposta do tipo "fulano
+vence" em vez de confronto.
 
 ## Antes de subir
 

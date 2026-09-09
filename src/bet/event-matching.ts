@@ -60,6 +60,33 @@ const NOISE_TOKENS = new Set([
   'esportivo',
 ]);
 
+// A extracao escreve o esporte em portugues ("Futebol", "Basquete") e o
+// provider grava em ingles ("Football", "Basketball"). Com mais de um esporte
+// no cache, filtrar importa: sem isso "Atlanta Hawks" poderia disputar pontos
+// com "Atlanta United". Esporte que nao esta no mapa (multipla de esportes
+// diferentes vem como "Varios") nao filtra nada — perder recall aqui e' pior
+// que o risco, porque os dois lados ainda precisam casar.
+const SPORTS: Record<string, string> = {
+  futebol: 'football',
+  football: 'football',
+  soccer: 'football',
+  basquete: 'basketball',
+  basquetebol: 'basketball',
+  basketball: 'basketball',
+  nba: 'basketball',
+  'futebol americano': 'american football',
+  'american football': 'american football',
+  nfl: 'american football',
+};
+
+export function normalizeSport(value: string | null | undefined): string {
+  return (value ?? '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
 // Nome em portugues de clube estrangeiro. O provider nao tem traducao pt (o
 // SofaScore so traduz pra ar/ru/hi/bn), entao essa lista e' manual. Cresce sob
 // demanda, quando aparecer aposta que nao casou.
@@ -293,16 +320,23 @@ export function matchEvent(
   game: string,
   market: string,
   candidatos: CandidateEvent[],
+  sport?: string,
 ): EventMatch | null {
   if (!game || !candidatos.length) return null;
+
+  const esporte = SPORTS[normalizeSport(sport)];
+  const elegiveis = esporte
+    ? candidatos.filter((c) => normalizeSport(c.sport) === esporte)
+    : candidatos;
+  if (!elegiveis.length) return null;
 
   const confrontos = extractConfrontos(game, market ?? '');
   if (!confrontos.length) return null;
 
-  const index = buildTokenIndex(candidatos);
+  const index = buildTokenIndex(elegiveis);
   const casados: EventMatch[] = [];
   for (const confronto of confrontos) {
-    const match = matchConfronto(confronto, candidatos, index);
+    const match = matchConfronto(confronto, elegiveis, index);
     if (!match) return null;
     casados.push(match);
   }

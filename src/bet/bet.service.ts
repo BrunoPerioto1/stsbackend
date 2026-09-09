@@ -38,7 +38,12 @@ export class BetService {
   // Descobre a data/hora real do jogo a partir do cache de eventos. Consultivo
   // por definicao: sem match confiavel devolve tudo null, e qualquer falha aqui
   // e' engolida — planilhar a aposta nunca pode depender disso.
-  private async resolveEvent(game: string, market: string, betTime: Date) {
+  private async resolveEvent(
+    game: string,
+    market: string,
+    sport: string,
+    betTime: Date,
+  ) {
     const vazio = {
       eventExternalId: null,
       eventProvider: null,
@@ -46,8 +51,9 @@ export class BetService {
       eventMatchConfidence: null,
     };
     try {
-      const candidatos = await this.sportEventRepository.findCandidates(betTime);
-      const match = matchEvent(game, market, candidatos);
+      const candidatos =
+        await this.sportEventRepository.findCandidates(betTime);
+      const match = matchEvent(game, market, candidatos, sport);
       if (!match) {
         console.info('[EVENT_MATCH] result=no_match');
         return vazio;
@@ -116,6 +122,7 @@ export class BetService {
       await this.resolveEvent(
         betData.game,
         betData.market,
+        betData.sport,
         newBet.betTime ?? new Date(),
       ),
     );
