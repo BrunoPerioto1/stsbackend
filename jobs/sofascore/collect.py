@@ -218,10 +218,9 @@ LIMPA = "DELETE FROM sport_events WHERE start_at < CURRENT_TIMESTAMP - %s::inter
 
 
 def grava(linhas: list[tuple]) -> None:
-    # .strip() porque secret colada com Enter no fim guarda o 
-, e ai o
-    # ultimo parametro da URL vira "require
-" — psycopg recusa.
+    # .strip() porque secret colada com Enter no fim guarda a quebra de linha,
+    # e ai o ultimo parametro da URL vira "require<LF>": psycopg recusa com
+    # "invalid sslmode value".
     url = (os.environ.get("DATABASE_URL") or "").strip()
     if not url:
         raise SystemExit("DATABASE_URL nao definida")
