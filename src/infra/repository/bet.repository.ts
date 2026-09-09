@@ -232,6 +232,7 @@ export class BetRepository {
         "b.profit",
         "b.cashoutValue",
         "b.betTime",
+        "b.eventStartAt",
         "br.resultId",
         "r.name as resultName",
       ])

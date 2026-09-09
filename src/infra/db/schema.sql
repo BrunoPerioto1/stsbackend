@@ -200,3 +200,39 @@ ALTER TABLE bets ADD COLUMN IF NOT EXISTS source_type VARCHAR(16);
 ALTER TABLE bets ADD COLUMN IF NOT EXISTS telegram_message_id INTEGER;
 ALTER TABLE bets ADD COLUMN IF NOT EXISTS telegram_chat_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_bets_duplicate_candidates ON bets (user_id, house_id, created_at);
+
+-- === Event dates ========================================================
+-- `bet_time` is when the bet was placed; it is NOT when the match kicks off.
+-- The job in jobs/sofascore fills this cache; the API only reads it. Provider
+-- is a column, not a code path: swapping SofaScore out means swapping the job.
+CREATE TABLE IF NOT EXISTS sport_events (
+    id SERIAL PRIMARY KEY,
+    provider VARCHAR(32) NOT NULL,
+    external_id VARCHAR(64) NOT NULL,
+    sport VARCHAR(32) NOT NULL,
+    tournament_name VARCHAR(120),
+    -- name/short/code are the provider's own aliases ("Manchester City",
+    -- "Man City", "MCI"). The matcher scores against all three.
+    home_name VARCHAR(120) NOT NULL,
+    home_short VARCHAR(120),
+    home_code VARCHAR(16),
+    away_name VARCHAR(120) NOT NULL,
+    away_short VARCHAR(120),
+    away_code VARCHAR(16),
+    start_at TIMESTAMP NOT NULL,
+    status VARCHAR(24),
+    fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (provider, external_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sport_events_start ON sport_events (start_at);
+
+-- Matched event. NULL everywhere means "no confident match": the bet is still
+-- created, it just has no real kickoff time. Never backfilled with a guess.
+ALTER TABLE bets ADD COLUMN IF NOT EXISTS event_external_id VARCHAR(64);
+ALTER TABLE bets ADD COLUMN IF NOT EXISTS event_provider VARCHAR(32);
+ALTER TABLE bets ADD COLUMN IF NOT EXISTS event_start_at TIMESTAMP;
+ALTER TABLE bets ADD COLUMN IF NOT EXISTS event_match_confidence NUMERIC(4,3);
+
+-- The job rewrites event_start_at on the bets pointing at a rescheduled event.
+CREATE INDEX IF NOT EXISTS idx_bets_event ON bets (event_provider, event_external_id);

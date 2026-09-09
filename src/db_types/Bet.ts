@@ -30,6 +30,12 @@ export default interface BetsTable {
   userId: ColumnType<UserId | null, UserId | null | undefined, UserId | null>;
   tipId: ColumnType<TipId | null, TipId | null | undefined, TipId | null>;
   betTime: ColumnType<Date, Date | undefined, Date>;
+  // Evento real casado na criacao da aposta. Tudo null = sem match confiavel;
+  // a aposta existe do mesmo jeito, so nao tem horario de inicio do jogo.
+  eventExternalId: ColumnType<string | null, string | null | undefined, string | null>;
+  eventProvider: ColumnType<string | null, string | null | undefined, string | null>;
+  eventStartAt: ColumnType<Date | null, Date | null | undefined, Date | null>;
+  eventMatchConfidence: ColumnType<number | null, number | null | undefined, number | null>;
   createdAt: ColumnType<Date, Date | undefined, never>;
   updatedAt: ColumnType<Date, Date | undefined, Date>;
 }

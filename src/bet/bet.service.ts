@@ -19,6 +19,8 @@ import {
   BetRepository,
   type FilterGetBets,
 } from '../infra/repository/bet.repository';
+import { SportEventRepository } from '../infra/repository/sport-event.repository';
+import { matchEvent } from './event-matching';
 import { calculateProfit } from '../common/utils/bet.utils';
 import { BetFilterDto } from './dto/bet-filter.dto';
 import type { BetId, NewBet, UpdateBet } from '../db_types/Bet';
@@ -28,7 +30,43 @@ import type { TipId } from '../db_types/Tips';
 
 @Injectable()
 export class BetService {
-  constructor(private readonly betRepository: BetRepository) {}
+  constructor(
+    private readonly betRepository: BetRepository,
+    private readonly sportEventRepository: SportEventRepository,
+  ) {}
+
+  // Descobre a data/hora real do jogo a partir do cache de eventos. Consultivo
+  // por definicao: sem match confiavel devolve tudo null, e qualquer falha aqui
+  // e' engolida — planilhar a aposta nunca pode depender disso.
+  private async resolveEvent(game: string, market: string, betTime: Date) {
+    const vazio = {
+      eventExternalId: null,
+      eventProvider: null,
+      eventStartAt: null,
+      eventMatchConfidence: null,
+    };
+    try {
+      const candidatos = await this.sportEventRepository.findCandidates(betTime);
+      const match = matchEvent(game, market, candidatos);
+      if (!match) {
+        console.info('[EVENT_MATCH] result=no_match');
+        return vazio;
+      }
+      console.info(
+        '[EVENT_MATCH] result=matched confidence=%s',
+        match.confidence.toFixed(3),
+      );
+      return {
+        eventExternalId: match.externalId,
+        eventProvider: match.provider,
+        eventStartAt: match.startAt,
+        eventMatchConfidence: match.confidence,
+      };
+    } catch (error) {
+      console.warn('[EVENT_MATCH] result=error', (error as Error).message);
+      return vazio;
+    }
+  }
 
   // tipId é opcional e não faz parte do CreateBetDto público da API HTTP —
   // só o TelegramService passa isso, pra ligar a aposta à tip do grupo que
@@ -70,6 +108,17 @@ export class BetService {
       tipId: tipId != null ? (tipId as TipId) : null,
       betTime: betData.betTime ? new Date(betData.betTime) : undefined,
     };
+
+    // betTime segue sendo quando a aposta foi criada — o evento so acrescenta
+    // quando o jogo comeca, sem substituir nada.
+    Object.assign(
+      newBet,
+      await this.resolveEvent(
+        betData.game,
+        betData.market,
+        newBet.betTime ?? new Date(),
+      ),
+    );
 
     const now = new Date();
     const candidates =

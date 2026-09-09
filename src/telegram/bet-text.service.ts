@@ -191,11 +191,19 @@ export class BetTextService {
         console.error('Erro ao buscar casa:', err);
       }
 
-      const horario = new Date(aposta.betTime).toLocaleTimeString('pt-BR', {
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZone: 'America/Sao_Paulo',
-      });
+      const emBrasilia = (data: Date) =>
+        new Date(data).toLocaleTimeString('pt-BR', {
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: 'America/Sao_Paulo',
+        });
+
+      const horario = emBrasilia(aposta.betTime);
+      // So aparece quando o jogo foi identificado no cache de eventos. Sem
+      // match a linha some — nunca mostra data chutada.
+      const inicio = aposta.eventStartAt
+        ? `\n🏟 Começa: ${emBrasilia(aposta.eventStartAt)}`
+        : '';
 
       // Consultivo: a aposta já foi gravada, o aviso só sinaliza pro usuário
       // conferir e apagar a repetida se for o caso.
@@ -212,7 +220,7 @@ export class BetTextService {
         : '';
 
       await ctx.reply(
-        `${duplicado}✅ Aposta salva!\n\n🎮 Jogo: ${aposta.game}\n🕐 Horário: ${horario}\n💰 Stake: R$ ${aposta.stake}\n📈 Odd: ${aposta.odd}\n🏆 Mercado: ${aposta.market}\n⚽ Esporte: ${aposta.sport}\n🏢 Casa: ${houseName}`,
+        `${duplicado}✅ Aposta salva!\n\n🎮 Jogo: ${aposta.game}\n🕐 Planilhado: ${horario}${inicio}\n💰 Stake: R$ ${aposta.stake}\n📈 Odd: ${aposta.odd}\n🏆 Mercado: ${aposta.market}\n⚽ Esporte: ${aposta.sport}\n🏢 Casa: ${houseName}`,
         replyToMessageId
           ? { reply_parameters: { message_id: replyToMessageId } }
           : undefined,

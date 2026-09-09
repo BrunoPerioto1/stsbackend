@@ -1,5 +1,6 @@
 import { BetService } from './bet.service';
 import { BetRepository } from '../infra/repository/bet.repository';
+import { SportEventRepository } from '../infra/repository/sport-event.repository';
 import { CreateBetDto } from './dto/bet.dto';
 
 describe('BetService ingestion', () => {
@@ -21,9 +22,16 @@ describe('BetService ingestion', () => {
           Promise.resolve({ ...data, id: 43 }),
         ),
     };
+    // Cache de eventos vazio: nenhum jogo casa, e a aposta tem que ser criada
+    // do mesmo jeito. E' o caminho padrao pra esporte/liga fora da coleta.
+    const sportEvents = { findCandidates: jest.fn().mockResolvedValue([]) };
     return {
       repository,
-      service: new BetService(repository as unknown as BetRepository),
+      sportEvents,
+      service: new BetService(
+        repository as unknown as BetRepository,
+        sportEvents as unknown as SportEventRepository,
+      ),
     };
   }
   it('normalizes and records app origin without trusting payload provenance', async () => {

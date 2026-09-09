@@ -2,6 +2,7 @@ import { BetTextService } from './bet-text.service';
 import { TelegramCallbackService } from './telegram-callback.service';
 import { BetService } from '../bet/bet.service';
 import { BetRepository } from '../infra/repository/bet.repository';
+import { SportEventRepository } from '../infra/repository/sport-event.repository';
 import { buildBetPreview } from './utils/bet-preview.util';
 
 describe('Telegram ingestion through existing house resolver', () => {
@@ -28,7 +29,9 @@ describe('Telegram ingestion through existing house resolver', () => {
     type Dependencies = ConstructorParameters<typeof BetTextService>;
     const service = new BetTextService(
       grok as unknown as Dependencies[0],
-      new BetService(repository as unknown as BetRepository),
+      new BetService(repository as unknown as BetRepository, {
+        findCandidates: jest.fn().mockResolvedValue([]),
+      } as unknown as SportEventRepository),
       {
         findByTelegramUserId: jest.fn().mockResolvedValue({ id: 10 }),
         getUserStake: jest.fn().mockResolvedValue(1000),
