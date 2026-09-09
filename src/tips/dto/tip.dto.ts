@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsNumber, IsOptional, IsPositive, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export const TIP_STATUSES = ['pending', 'planilhada', 'caiu'] as const;
@@ -28,6 +28,31 @@ export class TipFilterDto {
   @Min(1)
   @Max(200)
   perPage = 30;
+}
+
+// Todos opcionais: sem nada no corpo, planilha exatamente como o bot faria.
+// O "Editar" da tela manda só o que o usuário mexeu.
+export class PlanilharTipDto {
+  @ApiPropertyOptional({ description: 'Valor apostado, se diferente do sugerido' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @IsPositive()
+  stake?: number;
+
+  @ApiPropertyOptional({ description: 'Odd real pega na casa, se mudou' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1.01)
+  odd?: number;
+
+  @ApiPropertyOptional({ description: 'Casa, quando a da tip não foi reconhecida' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @IsPositive()
+  houseId?: number;
 }
 
 export class TipItemDto {

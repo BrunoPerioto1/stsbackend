@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Delete,
   Get,
@@ -22,7 +23,7 @@ import {
 } from '@nestjs/swagger';
 import { User } from '../common/decorators/user.decorator';
 import { TipsService } from './tips.service';
-import { TipFilterDto, TipsListResponseDto } from './dto/tip.dto';
+import { PlanilharTipDto, TipFilterDto, TipsListResponseDto } from './dto/tip.dto';
 
 @ApiTags('Tips')
 @Controller('tips')
@@ -38,6 +39,20 @@ export class TipsController {
   @ApiResponse({ status: HttpStatus.OK, type: TipsListResponseDto })
   async list(@Query() filters: TipFilterDto, @User('userId') userId: number) {
     return this.tipsService.listForUser(userId, filters);
+  }
+
+  @Post(':id/planilhar')
+  @ApiOperation({
+    summary: 'Cria a aposta a partir da tip, igual ao botão Planilhar do bot',
+  })
+  @ApiResponse({ status: HttpStatus.CREATED, description: 'Aposta criada.' })
+  @ApiNotFoundResponse({ description: 'Tip não encontrada.' })
+  async planilhar(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() overrides: PlanilharTipDto,
+    @User('userId') userId: number,
+  ) {
+    return this.tipsService.planilharTip(id, userId, overrides);
   }
 
   @Post(':id/dismiss')

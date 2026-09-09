@@ -1,6 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { TipsRepository } from '../infra/repository/tips.repository';
 import { UsersService } from '../users/users.service';
+import { BetService } from '../bet/bet.service';
+import { GrokService } from '../telegram/grok.service';
+import { normalizeBetData } from '../bet/bet-normalization';
+import { parseBetLocal } from '../telegram/utils/tip-extractors.util';
+import type { PlanilharTipDto } from './dto/tip.dto';
 import {
   extractGameFromText,
   extractHouseFromText,
@@ -41,7 +46,81 @@ export class TipsService {
   constructor(
     private readonly tipsRepository: TipsRepository,
     private readonly usersService: UsersService,
+    private readonly betService: BetService,
+    private readonly grokService: GrokService,
   ) {}
+
+  // Equivalente do botão "Planilhar" do /pendentes: grava a aposta na hora,
+  // sem etapa de confirmação — é o clique que confirma. Os overrides existem
+  // pro "Editar" da tela, que ajusta stake/odd/casa antes de gravar; sem eles
+  // a conta é idêntica à do bot (banca × % da tip, cortada pelo 🚦).
+  async planilharTip(
+    tipId: number,
+    userId: number,
+    overrides: PlanilharTipDto = {},
+  ) {
+    const tip = await this.findById(tipId);
+    if (!tip) throw new NotFoundException('Tip não encontrada.');
+
+    // O bot trata segundo clique como no-op em vez de erro (mensagem antiga,
+    // clique duplo). Mesma coisa aqui: devolve a aposta que já existe.
+    const existing = await this.betService.findBetByTip(tipId, userId);
+    if (existing) return { bet: existing, alreadyExisted: true };
+
+    const parsed = parseBetLocal(tip.text);
+    if (!parsed)
+      throw new BadRequestException(
+        'Não consegui ler jogo/mercado/odd dessa tip. Planilhe manualmente em Apostas.',
+      );
+
+    const houseId =
+      overrides.houseId ?? (await this.grokService.resolveHouseId(tip.text));
+    if (!houseId)
+      throw new BadRequestException(
+        'Não reconheci a casa dessa tip. Escolha a casa em Editar.',
+      );
+
+    const stake = overrides.stake ?? (await this.resolveStake(tip, userId));
+    if (stake === null)
+      throw new BadRequestException(
+        'Não consegui calcular a stake dessa tip. Informe o valor em Editar.',
+      );
+
+    const odd = overrides.odd ?? parsed.odd;
+    const { game, market, sport } = normalizeBetData(parsed);
+    if (!game || !market || !sport)
+      throw new BadRequestException('Dados da tip incompletos.');
+
+    const bet = await this.betService.createBet(
+      {
+        userId,
+        game,
+        market,
+        sport,
+        odd,
+        houseId,
+        stake: Number(stake.toFixed(2)),
+      } as any,
+      tipId,
+      { source: 'app', sourceType: 'manual' },
+    );
+
+    return { bet, alreadyExisted: false };
+  }
+
+  // Mesma conta do processBetText: a tip carrega só a % da banca, o valor
+  // absoluto sai dela e o 🚦 corta por cima quando existe.
+  private async resolveStake(
+    tip: { text: string; percent: number | null },
+    userId: number,
+  ): Promise<number | null> {
+    if (tip.percent === null) return null;
+    const banca = await this.usersService.getUserStake(userId);
+    let stake = (Number(tip.percent) / 100) * banca;
+    const limit = extractLimitFromText(tip.text);
+    if (limit !== null) stake = Math.min(stake, limit);
+    return Number.isFinite(stake) && stake > 0 ? stake : null;
+  }
 
   // Mesma lista que o /pendentes do bot monta, só que estruturada em vez de
   // formatada em HTML: a tela do app precisa dos campos separados pra desenhar
