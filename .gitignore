@@ -59,3 +59,7 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 # Playwright MCP browsing artifacts
 .playwright-mcp/
+
+# Bytecode dos jobs em jobs/ — o .pyc chegou a ser commitado sem esta regra.
+__pycache__/
+*.pyc

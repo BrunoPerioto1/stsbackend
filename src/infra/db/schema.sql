@@ -236,3 +236,49 @@ ALTER TABLE bets ADD COLUMN IF NOT EXISTS event_match_confidence NUMERIC(4,3);
 
 -- The job rewrites event_start_at on the bets pointing at a rescheduled event.
 CREATE INDEX IF NOT EXISTS idx_bets_event ON bets (event_provider, event_external_id);
+
+-- === Final scores =======================================================
+-- Placar de jogo ja' terminado. Tabela separada de sport_events de proposito:
+-- aquela e' cache de jogos FUTUROS e se apaga sozinha 2 dias depois do jogo,
+-- enquanto o placar precisa sobreviver enquanto houver aposta apontando pra
+-- ele. A chave e' a mesma que a aposta ja' guarda (provider + external_id),
+-- entao liquidar nao refaz o matching de time — ele ja' foi feito na criacao.
+CREATE TABLE IF NOT EXISTS event_results (
+    provider VARCHAR(32) NOT NULL,
+    external_id VARCHAR(64) NOT NULL,
+    -- Tempo normal (90min). O provider tambem expoe o placar com prorrogacao;
+    -- mercado de futebol liquida em tempo normal, entao e' este que vale.
+    home_score SMALLINT NOT NULL,
+    away_score SMALLINT NOT NULL,
+    -- Status do provider: so' 'finished' libera liquidacao. 'postponed' e
+    -- 'canceled' ficam gravados pra nao rebuscar o mesmo evento toda hora.
+    status VARCHAR(24) NOT NULL,
+    fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (provider, external_id)
+);
+
+-- === Settlement suggestions =============================================
+-- Liquidacao NUNCA escreve em bet_results: ela propoe aqui e o usuario
+-- confirma na tela de conferencia. Errar um resultado mexe no lucro sem
+-- ninguem perceber, entao a decisao continua sendo humana.
+CREATE TABLE IF NOT EXISTS bet_settlement_suggestions (
+    bet_id INTEGER PRIMARY KEY REFERENCES bets(id) ON DELETE CASCADE,
+    -- results(id): 1=WON, 2=LOST. NULL = nao deu pra decidir; `reason` explica.
+    suggested_result_id INTEGER REFERENCES results(id),
+    -- Codigo curto quando nao ha sugestao (MERCADO_NAO_RECONHECIDO,
+    -- FORA_DE_ESCOPO, JOGO_NAO_FINALIZADO, SEM_PLACAR...).
+    reason VARCHAR(40),
+    -- Frase que a tela mostra: "3 gols no jogo, mais de 2.5". E' o que deixa o
+    -- usuario conferir sem abrir a casa de aposta.
+    explanation TEXT,
+    home_score SMALLINT,
+    away_score SMALLINT,
+    computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- Usuario recusou a sugestao: nao some da lista por acidente na proxima
+    -- recomputacao, e nao volta a aparecer.
+    dismissed_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_settlement_pending
+    ON bet_settlement_suggestions (suggested_result_id)
+    WHERE dismissed_at IS NULL;

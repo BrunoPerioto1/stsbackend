@@ -8,6 +8,7 @@ import { TransactionModule } from './module/transaction.module';
 import { AuthModule } from './module/auth.module';
 import { TelegramLinkModule } from './module/telegram-link.module';
 import { TipsModule } from './module/tips.module';
+import { SettlementModule } from './module/settlement.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { TipsModule } from './module/tips.module';
     AuthModule,
     TelegramLinkModule,
     TipsModule,
+    SettlementModule,
   ],
   controllers: [],
   providers: [],

@@ -1,0 +1,35 @@
+# Busca o placar dos jogos que ja' terminaram e alimenta event_results.
+#
+# Companheiro do sofascore.yml: aquele traz os jogos que VAO acontecer, este
+# traz o placar dos que JA' aconteceram. Mesmo runner self-hosted e mesmo
+# motivo — o Cloudflare do SofaScore pontua reputacao de IP, e as faixas do
+# GitHub tomam 403.
+#
+# Nada aqui liquida aposta: o job so' grava placar. Quem propoe resultado e' a
+# API (POST /settlement/compute), e quem decide e' o usuario, na tela de
+# conferencia.
+name: sofascore-results
+
+on:
+  schedule:
+    # 3x ao dia, cobrindo os fins de jogo de tarde, noite e madrugada (BRT).
+    # O job so' busca evento com aposta pendente, entao rodada sem jogo novo
+    # sai em segundos.
+    - cron: '0 1,14,23 * * *'
+  workflow_dispatch:
+
+jobs:
+  collect-results:
+    runs-on: self-hosted
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: jobs/sofascore/requirements.txt
+      - run: pip install -r jobs/sofascore/requirements.txt
+      - run: python jobs/sofascore/results.py
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
