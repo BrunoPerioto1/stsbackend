@@ -218,7 +218,11 @@ LIMPA = "DELETE FROM sport_events WHERE start_at < CURRENT_TIMESTAMP - %s::inter
 
 
 def grava(linhas: list[tuple]) -> None:
-    url = os.environ.get("DATABASE_URL")
+    # .strip() porque secret colada com Enter no fim guarda o 
+, e ai o
+    # ultimo parametro da URL vira "require
+" — psycopg recusa.
+    url = (os.environ.get("DATABASE_URL") or "").strip()
     if not url:
         raise SystemExit("DATABASE_URL nao definida")
     with psycopg.connect(url) as conn, conn.cursor() as cur:
