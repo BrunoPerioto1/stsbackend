@@ -1,16 +1,23 @@
 # Alimenta sport_events com os proximos 30 dias de jogos.
-# Nao roda no Vercel: o plano Hobby tem teto de 60s por funcao e 1 cron/dia,
-# e o coletor precisa do fingerprint TLS do wreq pra passar pelo Cloudflare.
+#
+# Nao roda no Vercel: o plano Hobby tem teto de 60s por funcao e 1 cron/dia, e o
+# coletor precisa do fingerprint TLS do wreq pra passar pelo Cloudflare.
+#
+# Nem em runner hospedado: o fingerprint resolve o "parece um browser", mas o
+# Cloudflare tambem pontua reputacao de IP, e as faixas do GitHub (Azure) tomam
+# 403 em todo request. Daí o self-hosted — precisa de IP residencial.
 name: sofascore
 
 on:
   schedule:
-    - cron: '0 6 * * *' # 03:00 BRT
+    # 11:00 BRT. Horario de maquina ligada, nao de madrugada: execucao agendada
+    # com o runner offline fica na fila e so roda quando ele voltar.
+    - cron: '0 14 * * *'
   workflow_dispatch:
 
 jobs:
   collect:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4

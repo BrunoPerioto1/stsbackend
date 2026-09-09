@@ -35,12 +35,19 @@ O matching acontece na criação, contra o cache já no Postgres. Nenhuma chamad
 ao provider no caminho do usuário: rate limit externo não afeta o Telegram nem
 a API, e provider fora do ar não impede planilhar.
 
-## Por que o coletor é Python e roda fora do Vercel
+## Por que o coletor é Python e roda num runner self-hosted
 
 O que passa pelo Cloudflare do SofaScore é o fingerprint TLS/JA3 do `wreq`
 (binding do crate Rust). `axios`/`fetch` tomam 403 — não existe equivalente em
 JS. Além disso o plano Hobby do Vercel tem teto de 60s por função e 1 cron por
 dia, e o coletor precisa de delay de 3-5s entre requests pra não ser bloqueado.
+
+Runner hospedado do GitHub também não serve: o fingerprint resolve o "parece um
+browser", mas o Cloudflare pontua reputação de IP em separado, e as faixas da
+Azure usadas pelos runners tomam 403 em todo request — testado, 403 nos dois
+hosts, em todas as ligas. O job roda em **self-hosted runner**, que usa IP
+residencial. O agendamento é 11:00 BRT em vez de madrugada porque execução com
+o runner offline fica na fila até ele voltar.
 
 Por isso a camada de provider **não é uma interface no Nest**. A fronteira é a
 tabela `sport_events` com a coluna `provider`: o job escreve, a API só lê.
