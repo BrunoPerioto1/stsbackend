@@ -69,6 +69,12 @@ export class TipsRepository {
       .leftJoin('tipDismissals as d', (join) =>
         join.onRef('d.tipId', '=', 't.id').on('d.userId', '=', userId),
       )
+      // A cópia que o fan-out mandou pra ESTE usuário: é só nela que existe a
+      // "🎯 Recomendação de aposta" (banca do usuário × % da tip). O texto da
+      // tabela `tips` é a mensagem crua do canal, igual pra todo mundo.
+      .leftJoin('tipDeliveries as td', (join) =>
+        join.onRef('td.tipId', '=', 't.id').on('td.userId', '=', userId),
+      )
       .select([
         't.id',
         't.text',
@@ -80,6 +86,7 @@ export class TipsRepository {
         't.createdAt',
         'b.id as betId',
         'd.id as dismissalId',
+        'td.text as deliveryText',
       ])
       .where('t.percent', 'is not', null)
       .$if(since !== undefined, (qb) => qb.where('t.createdAt', '>=', since!))

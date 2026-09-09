@@ -121,7 +121,22 @@ export function parseBetLocal(
 // Casa o rótulo inteiro de propósito: card de tip tem "💰 Lucro potencial:
 // R$ X", que NÃO é stake e não pode ser confundido com uma.
 export function extractStakeFromText(text: string): number | null {
-  const m = text?.match(/^💰\s*Stake:\s*R?\$?\s*([\d.,]+)/im);
+  return matchMoneyLine(text, /^💰\s*Stake:\s*R?\$?\s*([\d.,]+)/im);
+}
+
+// A stake de verdade da tip: linha que o fan-out acrescenta na cópia enviada
+// pro usuário, já com a banca dele aplicada. O 💰 sem rótulo que vem do canal
+// NÃO é isso — o valor certo é sempre esta última recomendação.
+export function extractRecommendedStakeFromText(text: string): number | null {
+  return matchMoneyLine(text, /^🎯\s*Recomendação de aposta:\s*R?\$?\s*([\d.,]+)/im);
+}
+
+export function extractPotentialProfitFromText(text: string): number | null {
+  return matchMoneyLine(text, /^💰\s*Lucro potencial:\s*R?\$?\s*([\d.,]+)/im);
+}
+
+function matchMoneyLine(text: string, regex: RegExp): number | null {
+  const m = text?.match(regex);
   if (!m) return null;
   const raw = m[1];
   const normalized = raw.includes(',')
