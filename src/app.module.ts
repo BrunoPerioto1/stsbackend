@@ -6,6 +6,7 @@ import { DashboardModule } from './module/dashboard.module';
 import { TransactionModule } from './module/transaction.module';
 import { AuthModule } from './module/auth.module';
 import { TelegramLinkModule } from './module/telegram-link.module';
+import { SettlementModule } from './module/settlement.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { TelegramLinkModule } from './module/telegram-link.module';
     TransactionModule,
     AuthModule,
     TelegramLinkModule,
+    SettlementModule,
   ],
   controllers: [],
   providers: [],
