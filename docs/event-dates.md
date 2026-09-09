@@ -4,9 +4,25 @@
 aposta feita dia 01/09 num jogo do dia 03/09 era agrupada como 01/09 e não
 havia onde guardar o 03/09.
 
-`event_start_at` passa a guardar o início real do evento. `bet_time` não muda
-de significado nem de uso: **dashboard, filtros e agrupamento continuam em
-`bet_time`**. Nada retroativo — aposta antiga fica com `event_start_at` nulo.
+`event_start_at` passa a guardar o início real do evento, e é ele que manda:
+**dashboard, filtros, ordenação e agrupamento usam a data do jogo**, caindo em
+`bet_time` quando o evento não foi identificado. `bet_time` deixa de significar
+"a data da aposta" e passa a significar só "quando foi planilhada".
+
+A expressão vive num lugar só, `src/infra/repository/bet-date.ts`:
+
+```sql
+coalesce(b."event_start_at", b."bet_time")
+```
+
+Os três repositórios (`dashboard`, `bet`, `house`) importam essa constante em
+vez de referenciar a coluna. O front repete a mesma regra em
+`bet-grouping.ts:betDate()` — filtro, ordenação e agrupamento das duas pontas
+precisam concordar, senão o total do dia no dashboard não bate com a soma dos
+cards da lista.
+
+Nada retroativo: aposta antiga fica com `event_start_at` nulo e continua caindo
+no `bet_time`, exatamente onde estava antes.
 
 ## Fluxo
 

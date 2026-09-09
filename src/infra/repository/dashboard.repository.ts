@@ -7,13 +7,13 @@ import { BettingHouseId } from '../../db_types/BettingHouse';
 import { UserId } from '../../db_types/Users';
 import { isNotEmpty } from 'class-validator';
 import { endOfDay, startOfDay } from '../../common/utils/bet.utils';
+import { betDate } from './bet-date';
 
-// `bet_time` e' TIMESTAMP sem timezone guardando instante UTC, entao a conversao
+// A coluna e' TIMESTAMP sem timezone guardando instante UTC, entao a conversao
 // precisa dos dois `AT TIME ZONE`: o primeiro rotula o valor como UTC, o segundo
-// o traz pro horario civil de Sao Paulo. E a referencia da coluna tem que sair de
-// `sql.ref` — dentro de um fragmento sql cru o CamelCasePlugin nao atua e o
-// Postgres rebaixaria `b.betTime` pra `b.bettime`, que nao existe.
-const betTimeBr = sql`(${sql.ref('b.betTime')} AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo'`;
+// o traz pro horario civil de Sao Paulo. O que entra na conversao e' o `betDate`
+// (data do jogo, com fallback pra data de planilhamento), nao a coluna crua.
+const betTimeBr = sql`(${betDate} AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo'`;
 const betCalendarDateBr = sql<string>`to_char(${betTimeBr}, 'YYYY-MM-DD')`;
 const betCalendarMonthBr = sql<string>`to_char(date_trunc('month', ${betTimeBr}), 'YYYY-MM-DD')`;
 
@@ -46,10 +46,10 @@ async findDailySummary(filters: FilterDashboard) {
       qb.where("b.houseId", "=", houseId!),
     )
     .$if(isNotEmpty(startDate), (qb) =>
-      qb.where("b.betTime", ">=", startOfDay(new Date(startDate!))),
+      qb.where(betDate, ">=", startOfDay(new Date(startDate!))),
     )
     .$if(isNotEmpty(endDate), (qb) =>
-      qb.where("b.betTime", "<", endOfDay(new Date(endDate!))),
+      qb.where(betDate, "<", endOfDay(new Date(endDate!))),
     )
     .select(({ fn }) => [
       betCalendarDateBr.as("date"),
@@ -72,10 +72,10 @@ async findMonthlySummary(filters: FilterDashboard) {
       qb.where("b.houseId", "=", houseId!),
     )
     .$if(isNotEmpty(startDate), (qb) =>
-      qb.where("b.betTime", ">=", startOfDay(new Date(startDate!))),
+      qb.where(betDate, ">=", startOfDay(new Date(startDate!))),
     )
     .$if(isNotEmpty(endDate), (qb) =>
-      qb.where("b.betTime", "<", endOfDay(new Date(endDate!))),
+      qb.where(betDate, "<", endOfDay(new Date(endDate!))),
     )
     .select(({ fn }) => [
       betCalendarMonthBr.as("month"),
@@ -91,8 +91,8 @@ async findBetDateRange(userId: UserId) {
     .selectFrom("bets as b")
     .where("b.userId", "=", userId)
     .select((eb) => [
-      eb.fn.min("b.betTime").as("firstBetDate"),
-      eb.fn.max("b.betTime").as("lastBetDate"),
+      eb.fn.min(betDate).as("firstBetDate"),
+      eb.fn.max(betDate).as("lastBetDate"),
     ])
     .executeTakeFirst();
 }
@@ -110,10 +110,10 @@ async findDashboardMetrics(filters: FilterDashboard) {
       qb.where("b.houseId", "=", houseId!),
     )
     .$if(isNotEmpty(startDate), (qb) =>
-      qb.where("b.betTime", ">=", startOfDay(new Date(startDate!))),
+      qb.where(betDate, ">=", startOfDay(new Date(startDate!))),
     )
     .$if(isNotEmpty(endDate), (qb) =>
-      qb.where("b.betTime", "<", endOfDay(new Date(endDate!))),
+      qb.where(betDate, "<", endOfDay(new Date(endDate!))),
     )
     .select((eb) => [
       eb.fn.count("b.id").as("totalBets"),
