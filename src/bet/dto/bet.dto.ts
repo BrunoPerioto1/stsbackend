@@ -1,3 +1,4 @@
+import { normalizeBetNumber } from '../bet-normalization';
 import { IsNumber, IsString, IsPositive, IsNotEmpty, IsOptional, IsArray, ArrayNotEmpty, IsEnum, ValidateIf, } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Transform, Type } from 'class-transformer';
@@ -19,6 +20,7 @@ class CreateBetRequestDto {
     example: 50.00,
     required: true
   })
+  @Transform(({ value }) => normalizeBetNumber(value))
   @IsNumber()
   @IsPositive()
   stake!: number;
@@ -28,6 +30,7 @@ class CreateBetRequestDto {
     example: 2.50,
     required: true
   })
+  @Transform(({ value }) => normalizeBetNumber(value))
   @IsNumber()
   @IsPositive()
   odd!: number;
@@ -242,8 +245,15 @@ export class BetItem {
   @ApiPropertyOptional({ description: 'Valor recebido no cash-out, quando aplicável', nullable: true })
   cashoutValue?: number | null;
 
-  @ApiProperty({ description: 'Data e hora da aposta' })
+  @ApiProperty({ description: 'Data e hora em que a aposta foi criada' })
   betTime!: Date;
+
+  @ApiPropertyOptional({
+    description:
+      'Data e hora real do inicio do evento. null quando o jogo nao foi identificado com confianca.',
+    nullable: true,
+  })
+  eventStartAt?: Date | null;
 
   @ApiPropertyOptional({ description: 'ID do resultado da aposta' })
   resultId?: number;

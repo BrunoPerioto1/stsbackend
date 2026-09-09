@@ -44,10 +44,15 @@ export class TipsService {
     return this.tipsRepository.findById(tipId as TipId);
   }
 
-  async getSummaryForUser(userId: number, minPercentFilter: number | null) {
+  async getSummaryForUser(
+    userId: number,
+    minPercentFilter: number | null,
+    since?: Date,
+  ) {
     return this.tipsRepository.findSummaryForUser(
       userId as UserId,
       minPercentFilter,
+      since,
     );
   }
 

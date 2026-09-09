@@ -12,26 +12,63 @@ export function missingBetFields(bet: ExtractedBetImage): string[] {
   return fields;
 }
 
+// Pendências parecidas com o print, já ordenadas por score. Só sugestão: o
+// usuário responde clicando, nada é vinculado sozinho.
+export interface PreviewMatch {
+  tipId: number;
+  score: number;
+  label: string;
+}
+
 export function buildBetPreview(
   bet: ExtractedBetImage,
   house: string,
   timestamp: number,
-  options: { deep?: boolean; allowDeep?: boolean } = {},
+  options: {
+    deep?: boolean;
+    allowDeep?: boolean;
+    sourceType?: 'image' | 'audio';
+    matches?: PreviewMatch[];
+  } = {},
 ) {
   if (!house.trim() || missingBetFields(bet).length)
     throw new Error('APOSTA_INCOMPLETA');
   // Mantém o contrato do parser textual e evita tratar stake como percentual.
   const oneLine = (s: string) => s.replace(/\s*\n\s*/g, ' ').replace(/%/g, '');
+  // A legenda vem como o usuário digitou ("betano"); no card a casa aparece
+  // com inicial maiúscula. Só exibição — o resolveHouseId já normaliza.
+  const titleCase = (s: string) =>
+    s.replace(/\p{L}\S*/gu, (w) => w[0].toUpperCase() + w.slice(1));
   const card =
-    `🏠 ${oneLine(house)}\n` +
+    `🏠 ${titleCase(oneLine(house))}\n` +
     `🆚 ${oneLine(bet.evento!)}\n⚽️ ${oneLine(bet.esporte!)}\n` +
     `📌 ${oneLine(bet.mercado!)}\n🏷 ${bet.odd!.toFixed(2)}\n` +
     `💰 Stake: R$ ${bet.stake!.toFixed(2).replace('.', ',')}`;
+  const sourceType = options.sourceType === 'audio' ? 2 : 1;
+  const matches = options.matches ?? [];
+  const pergunta = matches.length
+    ? `\n\n❓ Isso parece uma pendência que você já recebeu. É a mesma aposta?`
+    : '';
   return {
-    text: `${options.deep ? '✅ Análise profunda concluída!' : '✅ Aposta identificada!'}\n\n${card}`,
+    text: `${options.deep ? '✅ Análise profunda concluída!' : '✅ Aposta identificada!'}\n\n${card}${pergunta}`,
     reply_markup: {
       inline_keyboard: [
-        [{ text: '📊 Planilhar', callback_data: `planilhar_ts:${timestamp}` }],
+        // Vincular à pendência é o mesmo Planilhar, só com o tipId no
+        // callback — nada de estado novo entre a pergunta e a resposta.
+        ...matches.map((match) => [
+          {
+            text: `🔁 Sim — ${match.label}`,
+            callback_data: `planilhar_ts:${timestamp}:${sourceType}:${match.tipId}`,
+          },
+        ]),
+        [
+          {
+            text: matches.length
+              ? '🆕 Não — planilhar como nova'
+              : '📊 Planilhar',
+            callback_data: `planilhar_ts:${timestamp}:${sourceType}`,
+          },
+        ],
         ...(options.allowDeep
           ? [[{ text: '🔎 Análise profunda', callback_data: 'bet_image_deep' }]]
           : []),

@@ -1,5 +1,18 @@
+import { Type } from 'class-transformer';
+import { DashboardPreferencesDTO } from './dashboard-preferences.dto';
 import { ApiProperty, PartialType } from '@nestjs/swagger';
-import { IsEmail, IsInt, IsNumber, IsOptional, IsString, Max, Min, MinLength } from 'class-validator';
+import {
+  IsObject,
+  ValidateNested,
+  IsEmail,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+  MinLength,
+} from 'class-validator';
 
 export class CreateUserRequestDTO {
   @ApiProperty()
@@ -26,6 +39,17 @@ export class CreateUserRequestDTO {
 }
 
 export class UpdateUserRequestDTO extends PartialType(CreateUserRequestDTO) {
+  @ApiProperty({
+    required: false,
+    nullable: true,
+    type: DashboardPreferencesDTO,
+  })
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => DashboardPreferencesDTO)
+  dashboardPreferences?: DashboardPreferencesDTO | null;
+
   // Stake padrão sugerido ao registrar uma aposta (também usado pelo bot pra
   // calcular a recomendação de valor de uma tip a partir da % dela).
   @ApiProperty({ required: false, description: 'Stake padrão do usuário' })
@@ -36,12 +60,14 @@ export class UpdateUserRequestDTO extends PartialType(CreateUserRequestDTO) {
 
   // % mínima (da banca) que o sinal de uma tip precisa indicar pro bot notificar
   // o usuário — mesmo campo usado pelo comando /filtro do bot do Telegram.
-  @ApiProperty({ required: false, description: 'Filtro de % mínima da banca para notificação de sinal (0.01–5.00)' })
+  @ApiProperty({
+    required: false,
+    description:
+      'Filtro de % mínima da banca para notificação de sinal (0.01–5.00)',
+  })
   @IsOptional()
   @IsNumber()
   @Min(0.01)
   @Max(5)
   minPercentFilter?: number;
 }
-
-

@@ -1,3 +1,4 @@
+import { BET_EXTRACTION_RULES } from '../bet/bet-normalization';
 import { Injectable } from '@nestjs/common';
 import { toFile } from 'openai';
 import { basename, extname } from 'node:path';
@@ -38,6 +39,7 @@ export function audioMetadata(filename: string, mimeType?: string) {
 }
 
 const TRANSCRIPT_PROMPT = `Extraia a aposta descrita na transcrição, com campos em qualquer ordem.
+${BET_EXTRACTION_RULES}
 Não invente dados; retorne null para informação ausente ou incerta, inclusive casa.
 Formate os campos como um bilhete de aposta, sem copiar o jeito informal da fala.
 Evento: use "Time A x Time B" para confrontos, preservando nomes e ordem; "Palmeiras contra Corinthians" vira "Palmeiras x Corinthians". Não invente adversário.

@@ -7,6 +7,7 @@ import type { UserId } from '../../db_types/Users';
 import type { BettingHouseId } from '../../db_types/BettingHouse';
 import { HouseFilterRequestDto } from '../../house/dto/house.filter.dto';
 import { endOfDay, startOfDay } from '../../common/utils/bet.utils';
+import { betDate } from './bet-date';
 
 @Injectable()
 export class HouseRepository {
@@ -134,8 +135,8 @@ export class HouseRepository {
       .innerJoin('betResults as br', 'br.betId', 'b.id')
       .where('bh.isActive', '=', true)
       .where('br.resultId', 'in', [1, 2, 4, 5, 6] as any)
-      .$if(!!startDate, (qb) => qb.where('b.betTime', '>=', startOfDay(startDate!)))
-      .$if(!!endDate, (qb) => qb.where('b.betTime', '<', endOfDay(endDate!)))
+      .$if(!!startDate, (qb) => qb.where(betDate, '>=', startOfDay(startDate!)))
+      .$if(!!endDate, (qb) => qb.where(betDate, '<', endOfDay(endDate!)))
       .groupBy(['bh.id', 'bh.name'])
       .select((eb) => [
         'bh.id as houseId',

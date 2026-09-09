@@ -1,9 +1,15 @@
-import type { ColumnType, Insertable, Selectable, Updateable } from "kysely";
-import type { RoleId } from "./Roles";
+import type { DashboardPreferencesDTO } from '../users/dto/dashboard-preferences.dto';
+import type { ColumnType, Insertable, Selectable, Updateable } from 'kysely';
+import type { RoleId } from './Roles';
 
 export type UserId = number & { __type: 'UserId' };
 
 export default interface UsersTable {
+  dashboardPreferences: ColumnType<
+    DashboardPreferencesDTO | null,
+    DashboardPreferencesDTO | null | undefined,
+    DashboardPreferencesDTO | null
+  >;
   id: ColumnType<UserId, UserId | undefined, never>;
   username: ColumnType<string, string, string>;
   email: ColumnType<string, string, string>;
@@ -24,6 +30,6 @@ export default interface UsersTable {
   telegramLinkedAt: ColumnType<Date | null, Date | null, Date | null>;
 }
 
-export type User = Selectable<UsersTable>;      // SELECT
-export type NewUser = Insertable<UsersTable>;   // INSERT
+export type User = Selectable<UsersTable>; // SELECT
+export type NewUser = Insertable<UsersTable>; // INSERT
 export type UpdateUser = Updateable<UsersTable>; // UPDATE

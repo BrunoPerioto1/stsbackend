@@ -10,10 +10,12 @@ import { isNotEmpty } from "class-validator";
 import { UserId } from "../../db_types/Users";
 import { BetId, NewBet, UpdateBet } from "../../db_types/Bet";
 import { ResultId } from "../../db_types/Results";
+import { TipId } from "../../db_types/Tips";
 import { BettingHouseId } from "../../db_types/BettingHouse";
 import { NewBetResult } from "../../db_types/BetsResults";
 import type { Database } from "../db/database.types";
 import { endOfDay, startOfDay } from "../../common/utils/bet.utils";
+import { betDate } from "./bet-date";
 
 // isNotEmpty (class-validator) considera [] "não vazio" — errado pro nosso
 // caso, onde array vazio deve equivaler a "filtro não aplicado".
@@ -42,6 +44,33 @@ export class BetRepository {
     @Inject(DATABASE_READ_CONNECTION)
     private readonly dbRead: Kysely<Database>,
   ) {}
+
+  async findRecentCandidates(
+    userId: UserId,
+    houseId: BettingHouseId,
+    since: Date,
+    until: Date,
+  ) {
+    // Read the writer so a just-created bet is visible despite replica lag.
+    return this.dbWrite
+      .selectFrom('bets')
+      .select([
+        'id',
+        'userId',
+        'houseId',
+        'game',
+        'market',
+        'odd',
+        'stake',
+        'createdAt',
+      ])
+      .where('userId', '=', userId)
+      .where('houseId', '=', houseId)
+      .where('createdAt', '>=', since)
+      .where('createdAt', '<=', until)
+      .orderBy('createdAt', 'desc')
+      .execute();
+  }
 
   async create(newBet: NewBet) {
     const result = await this.dbWrite.transaction().execute(async (trx) => {
@@ -204,13 +233,14 @@ export class BetRepository {
         "b.profit",
         "b.cashoutValue",
         "b.betTime",
+        "b.eventStartAt",
         "br.resultId",
         "r.name as resultName",
       ])
       .$if(isNotEmpty(betId), (qb) => qb.where("b.id", "=", betId!))
       .$if(isNotEmpty(userId), (qb) => qb.where("b.userId", "=", userId!))
-      .$if(isNotEmpty(startDate), (qb) => qb.where("b.betTime", ">=", startOfDay(startDate!)))
-      .$if(isNotEmpty(endDate), (qb) => qb.where("b.betTime", "<", endOfDay(endDate!)))
+      .$if(isNotEmpty(startDate), (qb) => qb.where(betDate, ">=", startOfDay(startDate!)))
+      .$if(isNotEmpty(endDate), (qb) => qb.where(betDate, "<", endOfDay(endDate!)))
       .$if(hasItems(resultIds), (qb) => qb.where("br.resultId", "in", resultIds!))
       .$if(!hasItems(resultIds) && isNotEmpty(resultId), (qb) => qb.where("br.resultId", "=", resultId!))
       .$if(hasItems(houseIds), (qb) => qb.where("b.houseId", "in", houseIds!))
@@ -225,7 +255,7 @@ export class BetRepository {
       .$if(isNotEmpty(page) && isNotEmpty(perPage), (qb) =>
         qb.limit(perPage!).offset((page! - 1) * perPage!),
       )
-      .orderBy("b.betTime", "desc")
+      .orderBy(betDate, "desc")
       .execute();
   }
 
@@ -252,6 +282,17 @@ export class BetRepository {
     }
 
     return query.execute();
+  }
+
+  // Aposta que uma tip gerou pra esse usuario. Serve pra barrar clique
+  // repetido no /pendentes e pra achar o que apagar no Desfazer.
+  async findByTipId(tipId: TipId, userId: UserId) {
+    return this.dbWrite
+      .selectFrom('bets')
+      .select(['id', 'game', 'createdAt'])
+      .where('tipId', '=', tipId)
+      .where('userId', '=', userId)
+      .executeTakeFirst();
   }
 
   async delete(betId: BetId, userId: UserId) {
@@ -303,8 +344,8 @@ export class BetRepository {
       .select(({ fn }) => [fn.count("b.id").as("total")])
       .$if(isNotEmpty(betId), (qb) => qb.where("b.id", "=", betId!))
       .$if(isNotEmpty(userId), (qb) => qb.where("b.userId", "=", userId!))
-      .$if(isNotEmpty(startDate), (qb) => qb.where("b.betTime", ">=", startOfDay(startDate!)))
-      .$if(isNotEmpty(endDate), (qb) => qb.where("b.betTime", "<", endOfDay(endDate!)))
+      .$if(isNotEmpty(startDate), (qb) => qb.where(betDate, ">=", startOfDay(startDate!)))
+      .$if(isNotEmpty(endDate), (qb) => qb.where(betDate, "<", endOfDay(endDate!)))
       .$if(hasItems(resultIds), (qb) => qb.where("br.resultId", "in", resultIds!))
       .$if(!hasItems(resultIds) && isNotEmpty(resultId), (qb) => qb.where("br.resultId", "=", resultId!))
       .$if(hasItems(houseIds), (qb) => qb.where("b.houseId", "in", houseIds!))

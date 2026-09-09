@@ -244,7 +244,9 @@ describe('Entrada de áudio no preview comum', () => {
       string,
       { reply_markup: unknown },
     ];
-    const common = buildBetPreview(bet, 'Ginga', msg.date);
+    const common = buildBetPreview(bet, 'Ginga', msg.date, {
+      sourceType: 'audio',
+    });
     expect(text).toBe(common.text);
     expect(options.reply_markup).toEqual(common.reply_markup);
     expect(JSON.stringify(options)).toContain(`planilhar_ts:${msg.date}`);

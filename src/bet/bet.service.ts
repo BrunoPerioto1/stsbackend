@@ -1,3 +1,11 @@
+import { plainToInstance } from 'class-transformer';
+import { validateSync } from 'class-validator';
+import {
+  normalizeBetData,
+  detectPotentialDuplicate,
+  DUPLICATE_WINDOW_MS,
+  type BetOrigin,
+} from './bet-normalization';
 import {
   Injectable,
   NotFoundException,
@@ -11,23 +19,84 @@ import {
   BetRepository,
   type FilterGetBets,
 } from '../infra/repository/bet.repository';
+import { SportEventRepository } from '../infra/repository/sport-event.repository';
+import { matchEvent } from './event-matching';
 import { calculateProfit } from '../common/utils/bet.utils';
 import { BetFilterDto } from './dto/bet-filter.dto';
 import type { BetId, NewBet, UpdateBet } from '../db_types/Bet';
 import type { BettingHouseId } from '../db_types/BettingHouse';
 import type { UserId } from '../db_types/Users';
-import type { ResultId } from '../db_types/Results';
 import type { TipId } from '../db_types/Tips';
 
 @Injectable()
 export class BetService {
-  constructor(private readonly betRepository: BetRepository) {}
+  constructor(
+    private readonly betRepository: BetRepository,
+    private readonly sportEventRepository: SportEventRepository,
+  ) {}
+
+  // Descobre a data/hora real do jogo a partir do cache de eventos. Consultivo
+  // por definicao: sem match confiavel devolve tudo null, e qualquer falha aqui
+  // e' engolida — planilhar a aposta nunca pode depender disso.
+  private async resolveEvent(game: string, market: string, betTime: Date) {
+    const vazio = {
+      eventExternalId: null,
+      eventProvider: null,
+      eventStartAt: null,
+      eventMatchConfidence: null,
+    };
+    try {
+      const candidatos = await this.sportEventRepository.findCandidates(betTime);
+      const match = matchEvent(game, market, candidatos);
+      if (!match) {
+        console.info('[EVENT_MATCH] result=no_match');
+        return vazio;
+      }
+      console.info(
+        '[EVENT_MATCH] result=matched confidence=%s',
+        match.confidence.toFixed(3),
+      );
+      return {
+        eventExternalId: match.externalId,
+        eventProvider: match.provider,
+        eventStartAt: match.startAt,
+        eventMatchConfidence: match.confidence,
+      };
+    } catch (error) {
+      console.warn('[EVENT_MATCH] result=error', (error as Error).message);
+      return vazio;
+    }
+  }
 
   // tipId é opcional e não faz parte do CreateBetDto público da API HTTP —
   // só o TelegramService passa isso, pra ligar a aposta à tip do grupo que
   // deu origem a ela (usado pelo /pendentes pra saber o que já foi tratado).
-  async createBet(betData: CreateBetDto, tipId?: number) {
+  async createBet(
+    betData: CreateBetDto,
+    tipId?: number,
+    origin: BetOrigin = { source: 'app', sourceType: 'manual' },
+  ) {
+    const normalized = normalizeBetData(betData);
+    const validated = plainToInstance(CreateBetDto, {
+      ...betData,
+      ...normalized,
+    });
+    const errors = validateSync(validated);
+    if (errors.length || normalized.odd === null || normalized.odd <= 1) {
+      console.warn(
+        '[VALIDATION_FAILED] stage=create_bet fields=%s',
+        errors.map((error) => error.property).join(',') || 'odd',
+      );
+      throw new BadRequestException('Dados da aposta inválidos.');
+    }
+    betData = validated;
     const newBet: NewBet = {
+      source: origin.source,
+      sourceType: origin.sourceType,
+      telegramMessageId:
+        origin.source === 'telegram' ? origin.telegramMessageId : undefined,
+      telegramChatId:
+        origin.source === 'telegram' ? origin.telegramChatId : undefined,
       game: betData.game,
       stake: betData.stake,
       odd: betData.odd,
@@ -40,6 +109,32 @@ export class BetService {
       betTime: betData.betTime ? new Date(betData.betTime) : undefined,
     };
 
+    // betTime segue sendo quando a aposta foi criada — o evento so acrescenta
+    // quando o jogo comeca, sem substituir nada.
+    Object.assign(
+      newBet,
+      await this.resolveEvent(
+        betData.game,
+        betData.market,
+        newBet.betTime ?? new Date(),
+      ),
+    );
+
+    const now = new Date();
+    const candidates =
+      betData.houseId == null
+        ? []
+        : await this.betRepository.findRecentCandidates(
+            betData.userId as UserId,
+            betData.houseId as BettingHouseId,
+            new Date(now.getTime() - DUPLICATE_WINDOW_MS),
+            now,
+          );
+    const duplicate = detectPotentialDuplicate(betData, candidates, now);
+    if (duplicate.isPotentialDuplicate)
+      console.info(
+        '[DUPLICATE_DETECTED] reason=same_event_market_odd_stake_recent',
+      );
     const result = await this.betRepository.create(newBet);
 
     if (!result) {
@@ -48,7 +143,7 @@ export class BetService {
 
     const { id, ...createdParams } = result;
 
-    return { id, ...createdParams };
+    return { id, ...createdParams, duplicate };
   }
 
   async updateBet(betId: number, updateData: UpdateApostaDto, userId: number) {
@@ -73,7 +168,9 @@ export class BetService {
         const stake = updateData.stake ?? Number(current.stake);
         const odd = updateData.odd ?? Number(current.odd);
         const cashoutValue =
-          current.cashoutValue == null ? undefined : Number(current.cashoutValue);
+          current.cashoutValue == null
+            ? undefined
+            : Number(current.cashoutValue);
 
         patch.profit = calculateProfit(
           current.resultId as ResultIdEnum,
@@ -206,6 +303,19 @@ export class BetService {
         : 1,
       data: bets as PaginatedBetsResponseDto['data'],
     };
+  }
+
+  // Usadas pelo /pendentes: saber se a tip ja virou aposta (clique repetido)
+  // e desfazer o planilhamento devolvendo a tip pra lista.
+  async findBetByTip(tipId: number, userId: number) {
+    return this.betRepository.findByTipId(tipId as TipId, userId as UserId);
+  }
+
+  async deleteBetByTip(tipId: number, userId: number) {
+    const bet = await this.findBetByTip(tipId, userId);
+    if (!bet) return null;
+    await this.betRepository.delete(bet.id, userId as UserId);
+    return bet;
   }
 
   async deleteBet(betId: number, userId: number) {

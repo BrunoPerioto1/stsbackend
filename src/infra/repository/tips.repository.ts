@@ -50,8 +50,18 @@ export class TipsRepository {
   // Todas as tips relevantes pro filtro de % do usuário, com o id da aposta
   // (se já planilhou) e o id do dismissal (se marcou "aposta caiu") — quem
   // chama decide o que é "pendente" a partir desses dois campos.
-  async findSummaryForUser(userId: UserId, minPercentFilter: number | null) {
-    return this.dbRead
+  async findSummaryForUser(
+    userId: UserId,
+    minPercentFilter: number | null,
+    // Só o matching de print usa: ele já descarta candidato de mais de 24h,
+    // então não faz sentido varrer o histórico inteiro de tips por isso. O
+    // /pendentes continua sem janela (uma tip antiga não pode sumir da lista).
+    since?: Date,
+  ) {
+    // Writer, nao a replica: a lista e reconstruida no mesmo clique que criou
+    // a aposta, e com lag de replicacao o item recem-planilhado reaparecia.
+    // E um comando manual, entao o custo extra no writer e desprezivel.
+    return this.dbWrite
       .selectFrom('tips as t')
       .leftJoin('bets as b', (join) =>
         join.onRef('b.tipId', '=', 't.id').on('b.userId', '=', userId),
@@ -72,6 +82,7 @@ export class TipsRepository {
         'd.id as dismissalId',
       ])
       .where('t.percent', 'is not', null)
+      .$if(since !== undefined, (qb) => qb.where('t.createdAt', '>=', since!))
       .$if(minPercentFilter !== null, (qb) =>
         qb.where('t.percent', '>=', minPercentFilter as number),
       )

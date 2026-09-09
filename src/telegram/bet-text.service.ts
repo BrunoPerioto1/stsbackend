@@ -1,3 +1,8 @@
+import {
+  normalizeBetData,
+  type BetOrigin,
+  type RawBetData,
+} from '../bet/bet-normalization';
 import { Injectable } from '@nestjs/common';
 import { GrokService } from './grok.service';
 import { BetService } from '../bet/bet.service';
@@ -10,14 +15,28 @@ import {
   UNLINKED_INSTRUCTIONS,
 } from './messages.const';
 import {
+  extractGameFromText,
+  extractHouseFromText,
   extractLimitFromText,
+  extractMarketFromText,
+  extractOddFromText,
   extractPercent,
   extractStakeFromText,
   parseBetLocal,
 } from './utils/tip-extractors.util';
+import {
+  findBetMatches,
+  MATCH_MAX_AGE_MS,
+  type PendingCandidate,
+} from './utils/bet-match.util';
+import { TipsService } from '../tips/tips.service';
 import { BetImageService } from './bet-image.service';
 import { BetAudioService, MAX_AUDIO_BYTES } from './bet-audio.service';
-import { buildBetPreview, missingBetFields } from './utils/bet-preview.util';
+import {
+  buildBetPreview,
+  missingBetFields,
+  type PreviewMatch,
+} from './utils/bet-preview.util';
 import type { Context } from 'telegraf';
 import type { Message } from 'telegraf/types';
 
@@ -33,7 +52,48 @@ export class BetTextService {
     private readonly tipFanoutService: TipFanoutService,
     private readonly betImageService: BetImageService,
     private readonly betAudioService: BetAudioService,
+    private readonly tipsService?: TipsService,
   ) {}
+
+  // Pendencias do usuario que ainda podem ser a aposta do print. So I/O: roda
+  // em paralelo com o download e a IA, e a janela e a mesma que o scorer ja
+  // exige (24h), pra nao varrer o historico inteiro de tips a cada foto.
+  private async loadPendingCandidates(
+    ctx: any,
+    at: Date,
+  ): Promise<PendingCandidate[]> {
+    if (!this.tipsService) return [];
+    const user = await this.usersService.findByTelegramUserId(ctx.from.id);
+    if (!user) return [];
+    const [rows, userStake] = await Promise.all([
+      this.tipsService.getSummaryForUser(
+        user.id,
+        user.minPercentFilter != null ? Number(user.minPercentFilter) : null,
+        new Date(at.getTime() - MATCH_MAX_AGE_MS),
+      ),
+      this.usersService.getUserStake(user.id),
+    ]);
+    return rows
+      .filter((row: any) => row.betId == null && row.dismissalId == null)
+      .map((row: any) => {
+        // Mesma conta do processBetText: a tip so tem a % da banca, a stake
+        // absoluta vem dai (e do limite, quando ele corta).
+        const percent = row.percent != null ? Number(row.percent) : null;
+        const limit = extractLimitFromText(row.text);
+        let stake = percent !== null ? (percent / 100) * userStake : NaN;
+        if (limit !== null && Number.isFinite(stake))
+          stake = Math.min(stake, limit);
+        return {
+          tipId: row.id,
+          game: extractGameFromText(row.text) ?? '',
+          market: extractMarketFromText(row.text) ?? '',
+          house: extractHouseFromText(row.text) ?? '',
+          odd: extractOddFromText(row.text) ?? NaN,
+          stake,
+          at: new Date(row.createdAt),
+        };
+      });
+  }
 
   // Parsing + criação da aposta. Reaproveitado tanto pelo texto livre em DM
   // quanto pelo clique em "Enviar ao Planilhador" na cópia individual do
@@ -45,6 +105,7 @@ export class BetTextService {
     replyToMessageId?: number,
     tipId?: number,
     betTime?: Date,
+    origin?: BetOrigin,
   ) {
     try {
       const resolvedHouseId =
@@ -54,15 +115,17 @@ export class BetTextService {
       // AVISO) são posicionais, então dá pra extrair tudo com regex e pular
       // a ida na IA. O Groq fica só de fallback pra texto fora do padrão.
       const local = parseBetLocal(userMessage);
-      const jsonResult = local
-        ? { ...local, houseId: resolvedHouseId }
-        : await this.grokService.parseBetMessage(userMessage, resolvedHouseId);
+      const jsonResult: RawBetData = local
+        ? local
+        : ((await this.grokService.parseBetMessage(
+            userMessage,
+            resolvedHouseId,
+          )) as RawBetData);
 
-      const houseId = Number(jsonResult.houseId);
-      const odd = Number(jsonResult.odd);
-      const game = String(jsonResult.game ?? '').trim();
-      const market = String(jsonResult.market ?? '').trim();
-      const sport = String(jsonResult.sport ?? '').trim();
+      const normalized = normalizeBetData(jsonResult);
+      const houseId = resolvedHouseId;
+      const { game, market, sport } = normalized;
+      const odd = normalized.odd ?? NaN;
 
       const percent = extractPercent(userMessage);
       const user = await this.usersService.findByTelegramUserId(ctx.from.id);
@@ -72,7 +135,7 @@ export class BetTextService {
       let stake =
         percent !== null
           ? (percent / 100) * userStake
-          : Number(jsonResult.stake);
+          : (normalized.stake ?? NaN);
 
       // Card vindo de print: não tem % pra converter pela banca, o valor
       // apostado já está no texto ("💰 Stake: R$ 14,83").
@@ -82,7 +145,7 @@ export class BetTextService {
       const limit = extractLimitFromText(userMessage);
       if (limit !== null) stake = Math.min(stake, limit);
 
-      if (!Number.isFinite(houseId) || houseId <= 0)
+      if (houseId === null || !Number.isFinite(houseId) || houseId <= 0)
         throw new Error('CASA_INVALIDA');
       if (!Number.isFinite(stake) || stake <= 0)
         throw new Error('stake inválida');
@@ -104,7 +167,20 @@ export class BetTextService {
         ...(betTime ? { betTime: betTime.toISOString() } : {}),
       };
 
-      const aposta = await this.betService.createBet(apostaData, tipId);
+      const telegramContext = ctx as Context;
+      const callback = telegramContext.callbackQuery;
+      const message =
+        telegramContext.message ??
+        (callback && 'message' in callback ? callback.message : undefined);
+      const source: BetOrigin = origin ?? {
+        source: 'telegram',
+        sourceType: 'text',
+        telegramMessageId: message?.message_id,
+        telegramChatId: telegramContext.chat
+          ? String(telegramContext.chat.id)
+          : undefined,
+      };
+      const aposta = await this.betService.createBet(apostaData, tipId, source);
 
       let houseName = 'N/A';
       try {
@@ -115,20 +191,42 @@ export class BetTextService {
         console.error('Erro ao buscar casa:', err);
       }
 
-      const horario = new Date(aposta.betTime).toLocaleTimeString('pt-BR', {
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZone: 'America/Sao_Paulo',
-      });
+      const emBrasilia = (data: Date) =>
+        new Date(data).toLocaleTimeString('pt-BR', {
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: 'America/Sao_Paulo',
+        });
+
+      const horario = emBrasilia(aposta.betTime);
+      // So aparece quando o jogo foi identificado no cache de eventos. Sem
+      // match a linha some — nunca mostra data chutada.
+      const inicio = aposta.eventStartAt
+        ? `\n🏟 Começa: ${emBrasilia(aposta.eventStartAt)}`
+        : '';
+
+      // Consultivo: a aposta já foi gravada, o aviso só sinaliza pro usuário
+      // conferir e apagar a repetida se for o caso.
+      const duplicado = aposta.duplicate.isPotentialDuplicate
+        ? `⚠️ Possível aposta duplicada — você planilhou uma igual há ${Math.max(
+            1,
+            Math.round(
+              (Date.now() - aposta.duplicate.existingCreatedAt!.getTime()) /
+                60000,
+            ),
+          )} min.
+
+`
+        : '';
 
       await ctx.reply(
-        `✅ Aposta salva!\n\n🎮 Jogo: ${aposta.game}\n🕐 Horário: ${horario}\n💰 Stake: R$ ${aposta.stake}\n📈 Odd: ${aposta.odd}\n🏆 Mercado: ${aposta.market}\n⚽ Esporte: ${aposta.sport}\n🏢 Casa: ${houseName}`,
+        `${duplicado}✅ Aposta salva!\n\n🎮 Jogo: ${aposta.game}\n🕐 Planilhado: ${horario}${inicio}\n💰 Stake: R$ ${aposta.stake}\n📈 Odd: ${aposta.odd}\n🏆 Mercado: ${aposta.market}\n⚽ Esporte: ${aposta.sport}\n🏢 Casa: ${houseName}`,
         replyToMessageId
           ? { reply_parameters: { message_id: replyToMessageId } }
           : undefined,
       );
     } catch (err) {
-      console.error('❌ Erro ao processar aposta:', err);
+      console.error('[VALIDATION_FAILED] stage=telegram_bet', err);
       const extra = replyToMessageId
         ? { reply_parameters: { message_id: replyToMessageId } }
         : undefined;
@@ -224,7 +322,6 @@ export class BetTextService {
         timings[stage] = Math.round(performance.now() - start);
       }
     };
-    let feedback: { message_id: number } | null = null;
     const extra = { reply_parameters: { message_id: msg.message_id } };
     const deepButton = [
       { text: '🔎 Análise profunda', callback_data: 'bet_image_deep' },
@@ -234,14 +331,33 @@ export class BetTextService {
       reply_markup: { inline_keyboard: [deepButton] },
     };
 
+    // Feedback e pendentes rodam de lado: nada na leitura do print depende
+    // deles, então não podem segurar a chamada da IA.
+    const noticePromise = deep
+      ? Promise.resolve(null)
+      : measure('feedback', () => ctx.reply('⏳ Analisando a foto…', extra))
+          .then((m: any) => m as { message_id: number })
+          .catch(() => {
+            console.warn('[BET_IMAGE_FLOW] feedback_failed=true');
+            return null;
+          });
+    const pendentesPromise = measure('pendentes', () =>
+      this.loadPendingCandidates(ctx, new Date((msg.date as number) * 1000)),
+    ).catch((err) => {
+      console.warn('[BET_MATCH] pendentes_indisponiveis=true');
+      throw err;
+    });
+    pendentesPromise.catch(() => {});
+
     const reply = async (text: string, options: any = {}) =>
       measure('preview', async () => {
         const { reply_parameters: _replyParameters, ...editOptions } = options;
         if (deep) return ctx.editMessageText(text, editOptions);
-        if (feedback)
+        const notice = await noticePromise;
+        if (notice)
           return ctx.telegram.editMessageText(
             ctx.chat.id,
-            feedback.message_id,
+            notice.message_id,
             undefined,
             text,
             editOptions,
@@ -250,18 +366,17 @@ export class BetTextService {
       });
 
     try {
-      // Feedback, consulta da casa e download começam juntos. A IA só roda com casa válida.
-      const [notice, house, photo] = await Promise.allSettled([
-        deep
-          ? Promise.resolve(null)
-          : measure('feedback', () =>
-              ctx.reply('⏳ Analisando a foto…', extra),
-            ),
+      // Só casa e download bloqueiam a IA. A IA só roda com casa válida.
+      const [house, photo] = await Promise.allSettled([
         measure('house', () =>
           this.grokService.resolveHouseId(`🏠 ${caption}`),
         ),
         (async () => {
-          const fileId = msg.photo[msg.photo.length - 1].file_id;
+          const fileId = pickPhotoSize<{
+            file_id: string;
+            width: number;
+            height: number;
+          }>(msg.photo).file_id;
           const link: any = await measure('get_file', () =>
             ctx.telegram.getFileLink(fileId),
           );
@@ -277,9 +392,6 @@ export class BetTextService {
           };
         })(),
       ]);
-      if (notice.status === 'fulfilled')
-        feedback = notice.value as { message_id: number } | null;
-      else console.warn('[BET_IMAGE_FLOW] feedback_failed=true');
 
       let extracted: Awaited<
         ReturnType<typeof this.betImageService.extractBetFromImage>
@@ -330,9 +442,33 @@ export class BetTextService {
         return;
       }
 
+      // Comparacao local pura (sem I/O, sem IA): so pontua o que ja veio.
+      // Pendencia indisponivel nao pode atrapalhar o print — segue sem sugestao.
+      const pendentes = await Promise.allSettled([pendentesPromise]).then(
+        ([r]) => r,
+      );
+      const matches =
+        pendentes.status === 'fulfilled'
+          ? findBetMatches(
+              {
+                game: extracted.evento ?? '',
+                market: extracted.mercado ?? '',
+                house: caption,
+                odd: extracted.odd ?? NaN,
+                stake: extracted.stake ?? NaN,
+                at: new Date((msg.date as number) * 1000),
+              },
+              pendentes.value,
+            ).map(({ candidate, score }) => ({
+              tipId: candidate.tipId,
+              score,
+              label: candidate.game || `#${candidate.tipId}`,
+            }))
+          : [];
       const preview = buildBetPreview(extracted, caption, msg.date as number, {
         deep,
         allowDeep: !deep,
+        matches,
       });
       await reply(preview.text, { reply_markup: preview.reply_markup });
       status = 'ok';
@@ -446,7 +582,9 @@ export class BetTextService {
         );
         return;
       }
-      const preview = buildBetPreview(extracted, extracted.casa!, msg.date);
+      const preview = buildBetPreview(extracted, extracted.casa!, msg.date, {
+        sourceType: 'audio',
+      });
       await reply(preview.text, preview.reply_markup);
       status = 'ok';
     } catch (error) {
@@ -576,4 +714,21 @@ export class BetTextService {
       await ctx.reply('❌ Erro ao atualizar. Tenta de novo.');
     }
   }
+}
+
+// Telegram entrega o mesmo print em vários tamanhos. O maior (às vezes 2000px+)
+// só engorda download e tokens de imagem sem ganhar legibilidade no bilhete —
+// pega o menor que ainda passa de ~1100px de lado maior.
+// ponytail: sem redimensionar nada localmente; se 1100 ficar ilegível em alguma
+// casa, sobe o limite ou aí sim entra um resize (sharp).
+export function pickPhotoSize<T extends { width: number; height: number }>(
+  sizes: T[],
+): T {
+  const sorted = [...sizes].sort(
+    (a, b) => Math.max(a.width, a.height) - Math.max(b.width, b.height),
+  );
+  return (
+    sorted.find((s) => Math.max(s.width, s.height) >= 1100) ??
+    sorted[sorted.length - 1]
+  );
 }

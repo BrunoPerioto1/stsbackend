@@ -1,0 +1,4 @@
+# wreq pinado: e' o fingerprint TLS que passa pelo Cloudflare, e a API muda
+# entre releases (Emulation.Chrome149 e' desta).
+wreq==0.12.1
+psycopg[binary]>=3.2,<4
