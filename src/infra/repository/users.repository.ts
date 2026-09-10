@@ -42,7 +42,7 @@ async findById(id: UserId) {
   const update: UpdateUser = {
     telegramUserId,
     telegramLinkedAt: new Date(),
-    // O código morre no ato: um mesmo código não vincula dois Telegrams.
+    // O código morre no ato: um msesmo código não vincula dois Telegrams.
     telegramLinkCode: null,
     telegramLinkExpiresAt: null,
     updatedAt: new Date(),
