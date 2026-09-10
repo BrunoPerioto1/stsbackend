@@ -1,0 +1,4 @@
+# Todo o repositorio pertence ao dono. Combinado com a regra de branch
+# protegida ("require review from Code Owners"), isso faz com que nenhum PR
+# entre na branch padrao sem a aprovacao do @BrunoPerioto1.
+* @BrunoPerioto1
