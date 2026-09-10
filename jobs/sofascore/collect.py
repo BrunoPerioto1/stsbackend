@@ -1,6 +1,6 @@
 """Alimenta a tabela sport_events com os proximos jogos do SofaScore.
 
-Roda no GitHub Actions, 1x por dia — nao no Vercel. Dois motivos: o teto de
+Roda no GitHub Actions, 2x por semana — nao no Vercel. Dois motivos: o teto de
 60s da funcao serverless nao comporta o delay anti-bloqueio, e o que passa pelo
 Cloudflare do SofaScore e' o fingerprint TLS do wreq (crate Rust). Node/axios
 tomam 403; nao existe equivalente em JS.
