@@ -4,8 +4,8 @@ import {
   MATCH_HIGH,
   MATCH_MEDIUM,
   type PendingCandidate,
-} from './utils/bet-match.util';
-import { buildBetPreview } from './utils/bet-preview.util';
+} from './matching.util';
+import { buildBetPreview } from '../telegram/utils/bet-preview.util';
 
 const AT = new Date('2026-09-07T18:00:00Z');
 
@@ -25,7 +25,7 @@ function candidate(over: Partial<PendingCandidate> = {}): PendingCandidate {
     market: 'Mais de 2.5 gols',
     house: 'Superbet Brasil',
     odd: 2.1,
-    stake: 50,
+      stake: 50,
     at: new Date(AT.getTime() - 30 * 60 * 1000),
     ...over,
   };
@@ -89,6 +89,7 @@ describe('buildBetPreview com candidatos', () => {
     esporte: 'Futebol',
     mercado: 'Mais de 2.5 gols',
     odd: 2.1,
+    oddOriginal: null,
     stake: 50,
   };
 

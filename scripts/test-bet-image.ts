@@ -1,11 +1,11 @@
 // Testa o extrator de print isoladamente, sem passar pelo Telegram:
 //   npm run test:bet-image -- ./aposta.png
-// Usa exatamente o mesmo BetImageService de produção (mesmo prompt, mesmo
+// Usa exatamente o mesmo BetSlipParserService de produção (mesmo prompt, mesmo
 // schema, mesmo log de usage) — não duplique a chamada da OpenAI aqui.
 import { readFileSync } from 'fs';
 import { extname, resolve } from 'path';
 import * as dotenv from 'dotenv';
-import { BetImageService } from '../src/telegram/bet-image.service';
+import { BetSlipParserService } from '../src/bet-slip/bet-slip-parser.service';
 
 dotenv.config();
 
@@ -20,7 +20,7 @@ async function main() {
   const mimeType = extname(path).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
   const startedAt = Date.now();
 
-  const result = await new BetImageService().extractBetFromImage({
+  const result = await new BetSlipParserService().extractBetFromImage({
     imageBuffer: readFileSync(path),
     mimeType,
   });

@@ -1,11 +1,11 @@
-import { normalizeExtraction } from './bet-image.service';
-import { BetAudioService } from './bet-audio.service';
-import { BetTextService, pickPhotoSize } from './bet-text.service';
-import { TelegramService } from './telegram.service';
+import { normalizeExtraction } from './bet-slip-parser.service';
+import { BetAudioService } from '../telegram/bet-audio.service';
+import { BetTextService, pickPhotoSize } from '../telegram/bet-text.service';
+import { TelegramService } from '../telegram/telegram.service';
 import {
   extractStakeFromText,
   parseBetLocal,
-} from './utils/tip-extractors.util';
+} from '../telegram/utils/tip-extractors.util';
 
 describe('normalizeExtraction', () => {
   it('mantém os campos já tipados corretamente', () => {
@@ -22,6 +22,7 @@ describe('normalizeExtraction', () => {
       esporte: 'Futebol',
       mercado: 'Hulk tocar na bola + marcar ou dar assistência',
       odd: 3.0,
+      oddOriginal: null,
       stake: 14.83,
     });
   });
@@ -61,7 +62,7 @@ function buildService(overrides: Record<string, any> = {}) {
     usersService: {},
     houseService: {},
     tipFanoutService: {},
-    betImageService: { extractBetFromImage: jest.fn() },
+    betSlipParser: { extractBetFromImage: jest.fn() },
     ...overrides,
   };
   const service = new BetTextService(
@@ -70,8 +71,12 @@ function buildService(overrides: Record<string, any> = {}) {
     deps.usersService as any,
     deps.houseService as any,
     deps.tipFanoutService as any,
-    deps.betImageService as any,
+    deps.betSlipParser as any,
     {} as BetAudioService,
+    {
+      loadCandidates: jest.fn().mockResolvedValue([]),
+      findMatches: jest.fn().mockResolvedValue([]),
+    } as any,
   );
   return { service, deps };
 }
@@ -118,7 +123,7 @@ describe('BetTextService.handleBetPhoto', () => {
 
     await service.handleBetPhoto(ctx, { ...photoMsg, caption: '' });
 
-    expect(deps.betImageService.extractBetFromImage).not.toHaveBeenCalled();
+    expect(deps.betSlipParser.extractBetFromImage).not.toHaveBeenCalled();
     expect(ctx.reply.mock.calls[0][0]).toContain('nome da casa na legenda');
   });
 
@@ -130,7 +135,7 @@ describe('BetTextService.handleBetPhoto', () => {
 
     await service.handleBetPhoto(ctx, photoMsg);
 
-    expect(deps.betImageService.extractBetFromImage).not.toHaveBeenCalled();
+    expect(deps.betSlipParser.extractBetFromImage).not.toHaveBeenCalled();
     expect(ctx.telegram.editMessageText.mock.calls[0][3]).toContain(
       'Erro ao ler a casa',
     );
@@ -138,7 +143,7 @@ describe('BetTextService.handleBetPhoto', () => {
 
   it('lista os campos críticos faltando em vez de mostrar o botão', async () => {
     const { service } = buildService({
-      betImageService: {
+      betSlipParser: {
         extractBetFromImage: jest.fn().mockResolvedValue({
           evento: 'Fluminense x Vasco',
           esporte: 'Futebol',
@@ -162,7 +167,7 @@ describe('BetTextService.handleBetPhoto', () => {
 
   it('usa a maior resolução e gera um card que o fluxo de Planilhar relê', async () => {
     const { service, deps } = buildService({
-      betImageService: {
+      betSlipParser: {
         extractBetFromImage: jest.fn().mockResolvedValue({
           evento: 'Fluminense x Vasco',
           esporte: 'Futebol',
@@ -198,7 +203,7 @@ describe('BetTextService.handleBetPhoto', () => {
 
   it('avisa sem stack trace quando a OpenAI falha', async () => {
     const { service } = buildService({
-      betImageService: {
+      betSlipParser: {
         extractBetFromImage: jest.fn().mockRejectedValue(new Error('boom')),
       },
     });
@@ -220,7 +225,7 @@ describe('BetTextService.handleBetPhoto', () => {
     const { service, deps } = buildService({
       grokService: { resolveHouseId: jest.fn().mockReturnValue(house) },
     });
-    deps.betImageService.extractBetFromImage.mockResolvedValue({
+    deps.betSlipParser.extractBetFromImage.mockResolvedValue({
       evento: 'Cruz Azul x Flamengo',
       esporte: 'Futebol',
       mercado: 'Cruz Azul mais de 0,5 gols',
@@ -234,7 +239,7 @@ describe('BetTextService.handleBetPhoto', () => {
       reply_parameters: { message_id: photoMsg.message_id },
     });
     expect(ctx.telegram.getFileLink).toHaveBeenCalledWith('big');
-    expect(deps.betImageService.extractBetFromImage).not.toHaveBeenCalled();
+    expect(deps.betSlipParser.extractBetFromImage).not.toHaveBeenCalled();
     resolveHouse(7);
     await pending;
     expect(ctx.reply).toHaveBeenCalledTimes(1);
@@ -264,7 +269,7 @@ describe('BetTextService.handleBetPhoto', () => {
 
   it('continua a leitura se o feedback imediato falhar', async () => {
     const { service, deps } = buildService();
-    deps.betImageService.extractBetFromImage.mockResolvedValue({
+    deps.betSlipParser.extractBetFromImage.mockResolvedValue({
       evento: 'Jogo',
       esporte: 'Futebol',
       mercado: 'Mercado',

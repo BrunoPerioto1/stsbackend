@@ -42,6 +42,10 @@ describe('Telegram ingestion through existing house resolver', () => {
       {} as Dependencies[4],
       {} as Dependencies[5],
       {} as Dependencies[6],
+      {
+        loadCandidates: jest.fn().mockResolvedValue([]),
+        findMatches: jest.fn().mockResolvedValue([]),
+      } as any,
     );
     const ctx = {
       from: { id: 20 },
@@ -81,6 +85,7 @@ describe('Telegram ingestion through existing house resolver', () => {
           esporte: 'Futebol',
           mercado: 'Mais de 2.5 gols',
           odd: 2.1,
+          oddOriginal: null,
           stake: 50,
         },
         'Betfair',

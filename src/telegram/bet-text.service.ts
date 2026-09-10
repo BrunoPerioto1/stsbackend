@@ -28,9 +28,10 @@ import {
   findBetMatches,
   MATCH_MAX_AGE_MS,
   type PendingCandidate,
-} from './utils/bet-match.util';
+} from '../bet-slip/matching.util';
 import { TipsService } from '../tips/tips.service';
-import { BetImageService } from './bet-image.service';
+import { BetSlipParserService } from '../bet-slip/bet-slip-parser.service';
+import { PendingMatchService } from '../bet-slip/pending-match.service';
 import { BetAudioService, MAX_AUDIO_BYTES } from './bet-audio.service';
 import {
   buildBetPreview,
@@ -50,50 +51,12 @@ export class BetTextService {
     private readonly usersService: UsersService,
     private readonly houseService: HouseService,
     private readonly tipFanoutService: TipFanoutService,
-    private readonly betImageService: BetImageService,
+    private readonly betSlipParser: BetSlipParserService,
     private readonly betAudioService: BetAudioService,
+    private readonly pendingMatchService: PendingMatchService,
     private readonly tipsService?: TipsService,
   ) {}
 
-  // Pendencias do usuario que ainda podem ser a aposta do print. So I/O: roda
-  // em paralelo com o download e a IA, e a janela e a mesma que o scorer ja
-  // exige (24h), pra nao varrer o historico inteiro de tips a cada foto.
-  private async loadPendingCandidates(
-    ctx: any,
-    at: Date,
-  ): Promise<PendingCandidate[]> {
-    if (!this.tipsService) return [];
-    const user = await this.usersService.findByTelegramUserId(ctx.from.id);
-    if (!user) return [];
-    const [rows, userStake] = await Promise.all([
-      this.tipsService.getSummaryForUser(
-        user.id,
-        user.minPercentFilter != null ? Number(user.minPercentFilter) : null,
-        new Date(at.getTime() - MATCH_MAX_AGE_MS),
-      ),
-      this.usersService.getUserStake(user.id),
-    ]);
-    return rows
-      .filter((row: any) => row.betId == null && row.dismissalId == null)
-      .map((row: any) => {
-        // Mesma conta do processBetText: a tip so tem a % da banca, a stake
-        // absoluta vem dai (e do limite, quando ele corta).
-        const percent = row.percent != null ? Number(row.percent) : null;
-        const limit = extractLimitFromText(row.text);
-        let stake = percent !== null ? (percent / 100) * userStake : NaN;
-        if (limit !== null && Number.isFinite(stake))
-          stake = Math.min(stake, limit);
-        return {
-          tipId: row.id,
-          game: extractGameFromText(row.text) ?? '',
-          market: extractMarketFromText(row.text) ?? '',
-          house: extractHouseFromText(row.text) ?? '',
-          odd: extractOddFromText(row.text) ?? NaN,
-          stake,
-          at: new Date(row.createdAt),
-        };
-      });
-  }
 
   // Parsing + criação da aposta. Reaproveitado tanto pelo texto livre em DM
   // quanto pelo clique em "Enviar ao Planilhador" na cópia individual do
@@ -341,9 +304,14 @@ export class BetTextService {
             console.warn('[BET_IMAGE_FLOW] feedback_failed=true');
             return null;
           });
-    const pendentesPromise = measure('pendentes', () =>
-      this.loadPendingCandidates(ctx, new Date((msg.date as number) * 1000)),
-    ).catch((err) => {
+    const pendentesPromise = measure('pendentes', async () => {
+      const user = await this.usersService.findByTelegramUserId(ctx.from.id);
+      if (!user) return [] as PendingCandidate[];
+      return this.pendingMatchService.loadCandidates(
+        user.id,
+        new Date((msg.date as number) * 1000),
+      );
+    }).catch((err) => {
       console.warn('[BET_MATCH] pendentes_indisponiveis=true');
       throw err;
     });
@@ -394,7 +362,7 @@ export class BetTextService {
       ]);
 
       let extracted: Awaited<
-        ReturnType<typeof this.betImageService.extractBetFromImage>
+        ReturnType<typeof this.betSlipParser.extractBetFromImage>
       >;
       try {
         if (house.status === 'rejected') throw house.reason;
@@ -408,7 +376,7 @@ export class BetTextService {
         }
         if (photo.status === 'rejected') throw photo.reason;
         extracted = await measure('ai', () =>
-          this.betImageService.extractBetFromImage({ ...photo.value, deep }),
+          this.betSlipParser.extractBetFromImage({ ...photo.value, deep }),
         );
       } catch (err) {
         const reason = (err as Error).message;

@@ -1,6 +1,6 @@
-import type { ExtractedBetImage } from '../bet-image.service';
+import type { ExtractedBetSlip } from '../../bet-slip/bet-slip-parser.service';
 
-export function missingBetFields(bet: ExtractedBetImage): string[] {
+export function missingBetFields(bet: ExtractedBetSlip): string[] {
   const fields: string[] = [];
   if (!bet.evento) fields.push('Jogo');
   if (!bet.esporte) fields.push('Esporte');
@@ -21,7 +21,7 @@ export interface PreviewMatch {
 }
 
 export function buildBetPreview(
-  bet: ExtractedBetImage,
+  bet: ExtractedBetSlip,
   house: string,
   timestamp: number,
   options: {
