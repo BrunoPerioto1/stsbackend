@@ -57,7 +57,10 @@ LIGAS = {
     238: "Liga Portugal Betclic",
     37: "Eredivisie",
     52: "Trendyol Super Lig",
+    36: "Scottish Premiership",
+    185: "Stoiximan Super League",
     21: "EFL Cup",
+    217: "DFB Pokal",
     7: "UEFA Champions League",
     679: "UEFA Europa League",
     17015: "UEFA Conference League",
@@ -74,6 +77,8 @@ LIGAS = {
     # nameCode), entao entram sem mudanca no coletor.
     132: "NBA",
     9464: "NFL",
+    2449: "US Open, Men",
+    2601: "US Open, Women",
 }
 
 requests_feitos = 0
