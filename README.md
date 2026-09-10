@@ -259,5 +259,6 @@ Sobre os testes: cobrem normalização, matching, cálculo de lucro e os handler
 
 Projeto pessoal, em desenvolvimento ativo. Não é feito pra uso de terceiros, está aqui como portfólio.
 
-A API está no ar, mas sem acesso público: a instância guarda movimentação financeira real, então não publico
-credenciais de demonstração. Os prints acima são do sistema rodando. Se quiser ver por dentro, me chama.
+Não publico link de demonstração: a instância que uso guarda movimentação financeira real. Os prints acima
+são do sistema rodando — e quem quiser explorar a API sobe o projeto localmente com os passos acima, onde a
+documentação do Scalar fica disponível em `/doc`.
