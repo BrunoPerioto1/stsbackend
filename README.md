@@ -12,6 +12,10 @@ Eu registrava aposta em planilha e sempre parava depois de duas semanas. O probl
 
 Então a API aceita as três formas e joga todas no mesmo domínio.
 
+O resultado, visto do [dashboard](https://github.com/BrunoPerioto1/sts): o print vira formulário preenchido, com a origem de cada campo marcada e a tip pendente correspondente oferecida para vínculo.
+
+![Leitura do bilhete no app web](docs/screenshots/04-nova-aposta-ia.png)
+
 ```mermaid
 graph LR
     subgraph Entradas
@@ -105,6 +109,8 @@ Acabou num **self-hosted runner**, que é o único lugar com IP residencial. Rod
 
 **Tips.** Distribuição das tips para os inscritos filtrando pelo percentual mínimo de cada um, fila de pendências, descarte, e o vínculo aposta↔tip que fecha o ciclo de volta no canal.
 
+![Fila de tips](docs/screenshots/06-tips.png)
+
 **Conta.** Cadastro, perfil, troca de senha, exclusão de conta, e o fluxo de código de uso único que liga a conta do Telegram à conta web.
 
 Autenticação JWT, validação de DTO com `class-validator`, e OpenAPI gerado.
@@ -186,7 +192,9 @@ Sobre validar magic bytes em vez do mimetype: o mimetype do multipart é escolhi
 
 ## Rotas
 
-Quase tudo exige JWT `Bearer`. Documentação interativa em `/api`.
+Quase tudo exige JWT `Bearer`. A documentação interativa (Scalar) fica em `/doc`, protegida por
+Basic Auth, e **só sobe fora de produção** — o pacote do Scalar quebra o boot serverless com
+`ERR_REQUIRE_ESM`, então ele é carregado por import dinâmico apenas quando `NODE_ENV !== 'production'`.
 
 | Recurso | Endpoints |
 |---|---|
