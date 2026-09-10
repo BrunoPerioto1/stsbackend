@@ -10,9 +10,10 @@ name: sofascore
 
 on:
   schedule:
-    # 11:00 BRT. Horario de maquina ligada, nao de madrugada: execucao agendada
-    # com o runner offline fica na fila e so roda quando ele voltar.
-    - cron: '0 14 * * *'
+    # Seg e qui, 11:00 BRT. A coleta pega os proximos 30 dias, entao 2x por
+    # semana ja cobre. Horario de maquina ligada, nao de madrugada: execucao
+    # agendada com o runner offline fica na fila e so roda quando ele voltar.
+    - cron: '0 14 * * 1,4'
   workflow_dispatch:
 
 jobs:
