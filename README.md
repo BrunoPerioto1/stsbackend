@@ -1,196 +1,233 @@
-# Betting Tracker — API
+# SportsBet Manager — API
 
-A NestJS backend for tracking sports bets: bankroll, bookmaker balances, deposits/withdrawals, and performance analytics — with a Telegram bot that uses an LLM to auto-log bets straight from a tipster channel.
+Backend em NestJS para controle de apostas esportivas: banca, saldo por casa, depósitos/saques e análise de desempenho — com uma camada de ingestão multimodal que transforma **um print do bilhete, um áudio ou um texto de tip** numa aposta estruturada.
 
-Companion frontend: **sts** (React + TypeScript dashboard) — separate repository.
+Frontend companheiro: **[sts](https://github.com/BrunoPerioto1/sts)** (dashboard em React + TypeScript).
 
-## Features
+---
 
-- **Bet lifecycle** — create, edit, delete, and settle bets as Won, Lost, Half-Won, Half-Lost, Cashout (with the actual cashed-out amount), Canceled, or Pending, with profit computed automatically for each outcome.
-- **Bulk settlement** — resolve many pending bets at once.
-- **Bookmaker accounts** — balance per bookmaker (deposits − withdrawals + bet profit), plus a ranking view (ROI, hit rate, average odd/stake) to compare where you actually perform.
-- **Financial transactions** — deposits, withdrawals, and manual adjustments per bookmaker, with insufficient-balance validation on withdrawals.
-- **Dashboard analytics** — daily/monthly profit summaries and aggregate metrics (ROI, hit rate, average stake/odd) over a date range.
-- **Telegram bot** — parses free-text tip messages (an emoji-tagged format posted by a tipster channel) into structured bets using an LLM, resolves the bookmaker by fuzzy name matching, sizes the stake from a percentage of the user's bankroll, and confirms back with the logged details.
-- **Account linking** — one-time code flow to link a Telegram account to a web account.
-- JWT authentication, request validation via `class-validator`/`class-transformer`, and a generated Swagger/OpenAPI doc.
+## O problema
 
-## Tech stack
+Registrar aposta na mão é a parte que mata o hábito. Uma aposta vive num print da tela de confirmação, numa mensagem de canal de tips, ou naquilo que você resmunga no celular andando na rua. Os três carregam os mesmos cinco fatos — evento, mercado, odd, stake, casa — em formatos completamente diferentes.
 
-- **NestJS 11** (TypeScript)
-- **PostgreSQL** via **Kysely** (typed query builder, not an ORM) with separate read/write connections
-- **Passport JWT** for auth, **bcrypt** for password hashing
-- **Telegraf** for the Telegram bot, **Groq SDK** (LLM) for parsing tip messages
-- **class-validator** / **class-transformer** for DTO validation
-- **Swagger** (`@nestjs/swagger`) for API docs
-
-## Architecture
+Esta API aceita os três e coloca todos no mesmo lugar.
 
 ```mermaid
 graph LR
-    WEB["sts frontend<br/>(React)"] -->|REST + JWT| API
-    TG["Telegram tipster<br/>channel"] -->|message| BOT["Telegram bot<br/>(Telegraf)"]
-    BOT -->|"parse message"| LLM["Groq LLM"]
-    LLM -->|"structured bet JSON"| BOT
-    BOT -->|"create bet"| API["NestJS API"]
-    API --> DB[("PostgreSQL<br/>(Kysely)")]
+    subgraph Entradas
+        IMG["📷 Print do bilhete"]
+        AUD["🎙️ Áudio"]
+        TXT["💬 Texto de tip"]
+    end
+    IMG --> P
+    AUD --> P
+    TXT --> P
+    P["Camada de ingestão<br/>parse → normaliza → casa com tip"] --> API["Domínio de apostas<br/>(NestJS)"]
+    WEB["dashboard sts"] -->|REST + JWT| API
+    API --> DB[("PostgreSQL<br/>Kysely")]
 ```
 
-The bot and the web frontend are just two entry points into the same bet/bookmaker domain — both end up calling the same services.
+---
 
-Feature modules follow a controller → service → repository layering, with Kysely-typed table interfaces under `src/db_types`:
+## Decisões de engenharia
+
+As partes que valem a leitura do código.
+
+### Nunca confie nos tipos que o modelo devolve
+
+Structured Outputs garante o *formato* do JSON, não a *sanidade* dele. Nada impede um modelo de visão de devolver `"3,00"` num campo numérico, `"Super Odds"` colado no nome do mercado, ou uma aposta em três confrontos diferentes sem um "evento" único.
+
+Por isso a saída do LLM nunca chega direto no domínio: passa por uma camada de normalização pura e testada ([`bet-normalization.ts`](src/bet/bet-normalization.ts)).
+
+| Função | Resolve |
+|---|---|
+| `normalizeBetNumber` | decimal pt-BR, separador de milhar, prefixo `R$` — desambiguando `1.500` (odd ou dinheiro?) pelo contexto |
+| `cleanBetText` | remove ruído de interface (`Criar Aposta`, `Super Odds`, `Cashout`) só como fragmento inteiro entre delimitadores, pra nunca estragar nome de time |
+| `foldMultiEventGame` | múltipla de vários jogos não tem um evento: vira `Múltipla (N jogos)` e os confrontos descem pro mercado |
+| `capitalizeMarket` | corrige caixa por seleção sem quebrar nome próprio, sigla (`1x2`, `BTTS`) nem linha numérica |
+
+Cada regra aqui existe porque um bilhete real quebrou a anterior. Tudo coberto por teste unitário, **sem nenhuma chamada de rede**.
+
+### Um prompt, três entradas
+
+As regras de extração vivem numa constante só (`BET_EXTRACTION_RULES`), compartilhada pelos caminhos de imagem, áudio e texto. A rota web e o bot usam o **mesmo serviço** — eles não têm como divergir, porque existe um prompt só e um parser só.
+
+### Casamento com tip sem IA
+
+Antes de registrar um bilhete, a API checa se aquilo é uma aposta que o usuário **já recebeu como tip** — senão a mesma aposta entra duas vezes. Essa checagem é de propósito **computação local pura, zero LLM** ([`matching.util.ts`](src/bet-slip/matching.util.ts)):
+
+- **Vetos** (elimina na hora): casa diferente, ou mais de 24h de distância.
+- **Score ponderado**: similaridade do confronto `0,30`, mercado `0,20`, odd `0,25`, stake `0,20`, proximidade no tempo `0,05`.
+- A odd usa tolerância relativa apertada (a casa mostra o número exato); a stake usa tolerância folgada, porque a stake da tip é estimada por % da banca e pode ter batido no limite.
+
+O score nunca decide sozinho — ele só decide se vale a pena *perguntar* ao usuário.
+
+### Um modelo para cada tarefa
+
+| Tarefa | Modelo | Por quê |
+|---|---|---|
+| Print → aposta | `gpt-5.6-luna` (visão, Structured Outputs) | precisa ler uma interface poluída e raciocinar sobre quais números importam |
+| Áudio → aposta | `gpt-transcribe` → `gpt-5.6-luna` | transcrição e depois o mesmo schema de extração |
+| Texto da tip → casa | `openai/gpt-oss-120b` via Groq | volume alto, sensível a latência, estrutura trivial |
+
+Cache de prompt (`prompt_cache_key`) mantém o bloco de regras compartilhado fora da conta a cada requisição.
+
+### Odd com boost
+
+Bilhete turbinado mostra duas odds — a riscada e a final. O parser devolve as duas, com uma checagem de sanidade que descarta uma "original" que não seja estritamente menor que a final. Assim, modelo repetindo o mesmo número nunca vira `4.52 → 4.52` na tela.
+
+---
+
+## Funcionalidades
+
+- **Ciclo da aposta** — criar, editar, excluir e liquidar como Ganha, Perdida, Meio Ganha, Meio Perdida, Cashout (com o valor efetivamente recebido), Cancelada ou Pendente, com lucro calculado por resultado. Liquidação em lote incluída.
+- **Casas de apostas** — saldo por casa (depósitos − saques + lucro das apostas) e ranking (ROI, taxa de acerto, odd/stake média).
+- **Transações** — depósitos, saques e ajustes manuais, com validação de saldo insuficiente.
+- **Dashboard** — resumos diários/mensais e métricas agregadas por período.
+- **Ingestão multimodal** — print, áudio ou texto de tip, via Telegram ou pela API web.
+- **Detecção de duplicata** — uma impressão digital de usuário + casa + confronto + mercado + odd + stake sinaliza provável duplo registro numa janela de 5 minutos, sem bloquear a inserção.
+- **Pipeline de tips** — distribuição de tips para os inscritos, fila de pendências e vínculo aposta↔tip que fecha o ciclo de volta no canal.
+- **Enriquecimento de evento** — um coletor agendado do SofaScore preenche o horário real de início do jogo, permitindo agrupar apostas por quando a partida começa e não por quando foram registradas.
+- **Vínculo de conta** — fluxo de código de uso único ligando conta do Telegram à conta web.
+
+Autenticação JWT, validação de DTO com `class-validator`/`class-transformer` e documentação OpenAPI gerada.
+
+---
+
+## Stack
+
+**NestJS 11** · TypeScript · **PostgreSQL** via **Kysely** (query builder tipado, não ORM, com conexões separadas de leitura e escrita) · **Passport JWT** + bcrypt · **Telegraf** · **OpenAI SDK** (visão, transcrição, Structured Outputs) · **Groq SDK** · `string-similarity` · **Swagger/Scalar** · deploy como serverless functions na **Vercel**.
+
+---
+
+## Arquitetura
+
+Os módulos seguem controller → service → repository, com as tabelas tipadas pelo Kysely:
 
 ```
 src/
-├── auth/            # login, JWT strategy, Telegram account linking
-├── bet/              # bet CRUD, settlement, result-status DTOs
-├── house/             # bookmakers, balances, ranking
-├── transactions/      # deposits / withdrawals / adjustments
-├── dashboard/         # aggregate analytics
-├── users/             # user profile
-├── telegram/           # bot, LLM-based message parsing
+├── auth/            # login, estratégia JWT, vínculo com Telegram
+├── bet/             # CRUD de aposta, liquidação, normalização, matching de evento
+├── bet-slip/        # ⭐ ingestão por IA compartilhada: parser, matching, rota parse-image
+├── house/           # casas, saldos, ranking
+├── transactions/    # depósitos / saques / ajustes
+├── dashboard/       # métricas agregadas
+├── tips/            # fila e distribuição de tips
+├── telegram/        # handlers do bot, callbacks, parsing de texto
+├── users/           # perfil do usuário
 ├── infra/
-│   ├── db/            # Kysely connection setup
-│   └── repository/    # one repository per aggregate, Kysely queries
-├── db_types/          # Kysely table type definitions
-└── common/            # shared decorators, utils (profit calc, date helpers)
+│   ├── db/          # conexão Kysely
+│   └── repository/  # um repositório por agregado
+├── db_types/        # tipos das tabelas
+└── common/          # decorators e utils compartilhados (cálculo de lucro, datas)
 ```
 
-### Telegram bet-logging flow
+`bet-slip/` é deliberadamente livre de Telegram e de HTTP — recebe bytes e um id de usuário, devolve dados estruturados. É isso que permite o bot e a rota web compartilharem o mesmo código.
+
+### Fluxo da leitura do bilhete
 
 ```mermaid
 sequenceDiagram
-    participant T as Tipster channel
-    participant B as Telegram bot
-    participant G as Groq LLM
-    participant A as API (Nest)
-    participant D as Database
+    participant C as Cliente (bot ou web)
+    participant S as BetSlipService
+    participant AI as Modelo de visão
+    participant M as Matching (local)
+    participant D as Banco
 
-    T->>B: emoji-tagged tip message
-    B->>G: parse message (extract game, sport,<br/>market, odd, bookmaker hint, stake %)
-    G-->>B: structured JSON
-    B->>B: resolve bookmaker by fuzzy name match
-    B->>A: look up user's bankroll
-    A-->>B: bankroll value
-    B->>B: stake = bankroll × percent (capped by any stated limit)
-    B->>A: POST /bets
-    A->>D: insert bet + pending result
-    A-->>B: created bet
-    B-->>T: confirmation reply (game, time, odd, stake, bookmaker)
+    C->>S: bytes da imagem + dica de casa
+    S->>S: valida magic bytes (não o mimetype do cliente)
+    S->>AI: prompt + JSON schema estrito
+    AI-->>S: extração bruta
+    S->>S: normaliza (números, ruído de UI, múltiplas, boost)
+    S->>D: carrega tips pendentes (janela de 24h)
+    S->>M: pontua candidatas — sem IA
+    M-->>S: matches ranqueados
+    S-->>C: campos + confiança por campo + candidatas
+    Note over C: nada é salvo — o usuário revisa e confirma
 ```
 
-## Result statuses
+A rota de leitura **nunca grava**. Persistir continua sendo do `POST /bets`, que aceita um `tipId` opcional pra vincular a aposta à tip que ela liquida.
 
-| Status | Profit calculation |
+---
+
+## Status de resultado
+
+| Status | Lucro |
 |---|---|
-| Won | `stake × (odd − 1)` |
-| Lost | `-stake` |
-| Half-Won | `(stake / 2) × (odd − 1)` |
-| Half-Lost | `-(stake / 2)` |
-| Cashout | `cashoutValue − stake` |
-| Canceled | `0` |
-| Pending | `0` (awaiting settlement) |
+| Ganha | `stake × (odd − 1)` |
+| Perdida | `-stake` |
+| Meio Ganha | `(stake / 2) × (odd − 1)` |
+| Meio Perdida | `-(stake / 2)` |
+| Cashout | `valorCashout − stake` |
+| Cancelada | `0` |
+| Pendente | `0` (aguardando liquidação) |
 
-## API reference
+---
 
-All endpoints are prefixed with the app's base URL; most require a `Bearer` JWT (see Swagger for the full contract).
+## Referência da API
 
-| Resource | Endpoints |
+A maioria dos endpoints exige um JWT `Bearer`.
+
+| Recurso | Endpoints |
 |---|---|
 | Auth | `POST /auth/login`, `POST /auth/link-telegram`, `POST /auth/link-telegram/confirm` |
-| Users | `POST /users`, `GET /users/me`, `PATCH /users/me`, `DELETE /users/me/telegram` |
-| Bets | `POST /bets`, `GET /bets`, `PUT /bets/:id`, `PUT /bets/finalize/:id`, `PUT /bets/finalize-multiple`, `DELETE /bets/:id`, `DELETE /bets/delete-multiple`, `GET /bets/result-types` |
-| Bookmakers | `GET /house/all`, `GET /house/balances`, `GET /house/metrics`, `GET /house/ranking`, `GET /house/:id`, `POST /house` |
-| Transactions | `POST /transactions/new`, `GET /transactions/all`, `GET /transactions/types` |
+| Usuários | `POST /users`, `GET /users/me`, `PATCH /users/me`, `DELETE /users/me/telegram` |
+| Apostas | `POST /bets`, `GET /bets`, `PUT /bets/:id`, `PUT /bets/finalize/:id`, `PUT /bets/finalize-multiple`, `DELETE /bets/:id`, `DELETE /bets/delete-multiple`, `GET /bets/result-types` |
+| Leitura de bilhete | `POST /bets/parse-image` — multipart (`image`, `houseHint` opcional); devolve campos + confiança + candidatas a vínculo, **não salva nada** |
+| Casas | `GET /house/all`, `GET /house/balances`, `GET /house/metrics`, `GET /house/ranking`, `GET /house/:id`, `POST /house` |
+| Transações | `POST /transactions/new`, `GET /transactions/all`, `GET /transactions/types` |
 | Dashboard | `GET /dashboard/metrics`, `GET /dashboard/daily-summary`, `GET /dashboard/monthly-summary`, `GET /dashboard/date-range` |
-| Telegram webhook | `POST /telegram/:token` |
+| Tips | `GET /tips`, rotas da fila e de descarte |
+| Webhook Telegram | `POST /telegram/:token` |
 
-Full interactive docs are served at `/api` once the app is running.
+Documentação interativa em `/api`.
 
-## Getting started
+---
 
-### Prerequisites
+## Rodando localmente
 
-- Node.js 18+
-- A PostgreSQL database
-- A Telegram bot token ([@BotFather](https://t.me/BotFather)) and a [Groq](https://groq.com) API key, if you want the bot running
-
-### Setup
+**Pré-requisitos** — Node.js 18+, um PostgreSQL e (para ingestão) uma chave da OpenAI. Token de bot do Telegram e chave Groq só são necessários para o bot.
 
 ```bash
 npm install
-cp env.example .env   # then fill in the values below
-npm run start:dev
+cp env.example .env   # preencha os valores abaixo
+npm run start:dev     # http://localhost:4000
 ```
 
-### Environment variables
-
-| Variable | Description |
+| Variável | Descrição |
 |---|---|
-| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | PostgreSQL connection |
-| `JWT_SECRET` | Signing secret for auth tokens |
-| `TELEGRAM_BOT_TOKEN` | Bot token from BotFather |
-| `APP_URL` | Public URL this app is reachable at (used to register the Telegram webhook) |
-| `API_URL` | Base URL the Telegram bot uses to call back into this API |
-| `GROQ_API_KEY` | Groq API key for parsing tip messages |
+| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | conexão com o PostgreSQL |
+| `JWT_SECRET` | segredo de assinatura dos tokens |
+| `OPENAI_API_KEY` | visão + transcrição (bilhete e áudio) |
+| `GROQ_API_KEY` | parsing de texto de tip e resolução de casa |
+| `TELEGRAM_BOT_TOKEN` | token do bot, via [@BotFather](https://t.me/BotFather) |
+| `APP_URL` | URL pública usada para registrar o webhook do Telegram |
+| `API_URL` | URL base que o bot usa para chamar de volta esta API |
 
-The database schema (tables, seed data for bookmakers and result statuses) lives in `src/infra/db/schema.sql`.
-
-### Scripts
+O schema (tabelas e seeds) fica em `src/infra/db/schema.sql`.
 
 ```bash
-npm run start:dev      # dev server with hot reload
-npm run build           # compile
-npm run start:prod      # run the compiled build
-npm run test             # unit tests
-npm run test:e2e         # e2e tests
-npm run lint              # lint
+npm run start:dev   # dev com hot reload
+npm run build       # compila
+npm run test        # testes unitários — sem rede, sem chave de API
+npm run lint        # lint
 ```
+
+### Sobre os testes
+
+A suíte cobre normalização, matching, cálculo de lucro e os caminhos completos dos handlers do bot com **toda chamada externa mockada** — sem OpenAI, sem Groq, sem Telegram, sem banco. É deliberado: a parte frágil deste sistema são as regras de parsing, e regra merece teste que roda em segundos e não custa nada.
+
+---
+
+## Documentação adicional
+
+- [`docs/bet-ingestion.md`](docs/bet-ingestion.md) — pipeline de ingestão em detalhe
+- [`docs/telegram-audio.md`](docs/telegram-audio.md) — fluxo de áudio
+- [`docs/telegram-operations.md`](docs/telegram-operations.md) — registro de webhook e formato dos logs
+- [`docs/event-dates.md`](docs/event-dates.md) — enriquecimento de evento via SofaScore
+
+---
 
 ## Status
 
-### Telegram: webhook e duração
-
-O backend não registra o webhook durante a inicialização. Depois do primeiro
-deploy, ou ao mudar `APP_URL`/`TELEGRAM_BOT_TOKEN`, configure usando o ambiente
-correto e a URL pública já disponível:
-
-```bash
-npm run telegram:webhook
-```
-
-O webhook já registrado continua válido; não precisa executar a cada deploy
-com a mesma URL. Não execute no build de previews, que poderiam redirecionar
-o bot de produção. O comando não descarta updates pendentes e não imprime token.
-
-Ao receber foto com legenda, o bot envia “⏳ Analisando a foto…” enquanto
-identifica a casa e baixa a imagem em paralelo. O resultado substitui essa
-mensagem. Se o aviso falhar, a leitura continua e o resultado é enviado
-normalmente.
-
-Logs (todos os valores em milissegundos):
-
-- `[APP_INIT] duration_ms`: criação e inicialização do Nest na instância nova;
-  não inclui provisionamento da Vercel nem carregamento anterior dos módulos.
-- `[APP_READY] cold_start wait_ms`: espera pela aplicação em cada requisição.
-- `[TELEGRAM_WEBHOOK] update_id status duration_ms`: processamento do update,
-  incluindo inicialização do Telegraf/getMe quando necessária, até concluir o handler.
-- `[BET_IMAGE_FLOW] chat_id message_id mode status feedback_ms house_ms get_file_ms download_ms ai_ms preview_ms total_ms`:
-  aviso inicial, consulta de casa, obtenção do link, download dos bytes, leitura
-  da IA, envio/edição do resultado e total do fluxo de foto.
-
-Exemplo **ilustrativo**, não medição de produção:
-
-```text
-[BET_IMAGE_FLOW] chat_id=1 message_id=10 mode=standard status=ok feedback_ms=180 house_ms=90 get_file_ms=100 download_ms=140 ai_ms=1600 preview_ms=150 total_ms=1990
-```
-
-Etapas paralelas não devem ser somadas. Os campos aparecem na ordem em que
-cada etapa termina, não na ordem acima. Campos de etapas não executadas são
-omitidos. `deep` reaproveita o aviso do botão; seu `total_ms` começa depois
-desse aviso. `error`, `invalid_house` e `incomplete` indicam saídas sem preview
-válido. Não há medição do upload no celular nem da renderização no aplicativo.
-
-## Status do projeto
-
-Personal project, actively developed. Not production-hardened for third-party use — showcased here as a portfolio piece.
+Projeto pessoal, em desenvolvimento ativo. Não endurecido para uso de terceiros — publicado como peça de portfólio.
