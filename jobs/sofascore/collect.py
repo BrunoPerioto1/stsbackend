@@ -50,6 +50,7 @@ LIGAS = {
     18: "Championship",
     24: "League One",
     8: "LaLiga",
+    54: "LaLiga 2",
     23: "Serie A",
     35: "Bundesliga",
     44: "2. Bundesliga",
@@ -59,7 +60,10 @@ LIGAS = {
     52: "Trendyol Super Lig",
     36: "Scottish Premiership",
     185: "Stoiximan Super League",
+    19: "FA Cup",
     21: "EFL Cup",
+    329: "Copa del Rey",
+    328: "Coppa Italia",
     217: "DFB Pokal",
     7: "UEFA Champions League",
     679: "UEFA Europa League",
@@ -73,12 +77,45 @@ LIGAS = {
     480: "CONMEBOL Sudamericana",
     242: "MLS",
     955: "Saudi Pro League",
+    # Liga MX parte a temporada em dois torneios com id proprio; os dois
+    # precisam estar aqui ou metade do ano fica sem jogo.
+    11621: "Liga MX, Apertura",
+    11620: "Liga MX, Clausura",
+    # Selecoes: fora de ano de competicao a liga volta vazia, e isso ja e'
+    # tratado como normal (so falha se NADA foi gravado).
+    16: "FIFA World Cup",
+    1: "EURO",
+    133: "Copa America",
     # Fora do futebol. Mesma estrutura de evento (dois lados, shortName e
     # nameCode), entao entram sem mudanca no coletor.
     132: "NBA",
+    486: "WNBA",
+    138: "Euroleague",
+    1562: "Brazil NBB",
     9464: "NFL",
+    32199: "NCAA Division FBS",
+    11205: "MLB",
+    234: "NHL",
+    1452: "Superliga (volei masculino)",
+    1468: "Superliga, Women (volei feminino)",
+    19906: "UFC",
+    # Tenis: cada Grand Slam e' um torneio por chave (masculina/feminina).
+    2363: "Australian Open, Men",
+    2571: "Australian Open, Women",
+    2480: "Roland Garros, Men",
+    2577: "Roland Garros, Women",
+    2361: "Wimbledon, Men",
+    2600: "Wimbledon, Women",
     2449: "US Open, Men",
     2601: "US Open, Women",
+    # E-sports. Nao existe um "CS2 Major" unico no SofaScore: cada organizador
+    # tem o proprio torneio, entao entram os tres que sediam Major.
+    16050: "MSI",
+    16053: "Worlds",
+    16273: "The International",
+    16312: "PGL Major",
+    20119: "BLAST.tv Major",
+    30435: "StarLadder Major",
 }
 
 requests_feitos = 0

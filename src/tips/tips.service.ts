@@ -127,7 +127,12 @@ export class TipsService {
   // recomendada e o lucro só existem na cópia entregue a ESTE usuário.
   async listForUser(
     userId: number,
-    { status, page, perPage }: { status?: TipStatus; page: number; perPage: number },
+    {
+      status,
+      q,
+      page,
+      perPage,
+    }: { status?: TipStatus; q?: string; page: number; perPage: number },
   ): Promise<TipsListResponseDto> {
     const user = await this.usersService.findById(userId);
     const minPercentFilter =
@@ -189,7 +194,17 @@ export class TipsService {
 
     // Mais recente primeiro: no bot a ordem crescente serve à numeração dos
     // botões; numa tela de lista o que acabou de chegar tem que estar no topo.
-    const filtered = (status ? items.filter((i) => i.status === status) : items).reverse();
+    // Busca casa com jogo e mercado — os dois campos que o card mostra em
+    // negrito, e o unico jeito de achar "aquela tip do Flamengo" numa fila
+    // longa. Como ja e' tudo em memoria aqui, nao vale query nova.
+    const termo = q?.trim().toLowerCase();
+    const casa = (i: TipItemDto) =>
+      !termo ||
+      `${i.game ?? ''} ${i.market ?? ''}`.toLowerCase().includes(termo);
+
+    const filtered = items
+      .filter((i) => (!status || i.status === status) && casa(i))
+      .reverse();
 
     // Paginação em memória, não no SQL: a query já traz tips + apostas + caiu
     // num join só pra poder classificar cada linha, e é dessa classificação que

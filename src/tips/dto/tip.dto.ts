@@ -1,5 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsInt, IsNumber, IsOptional, IsPositive, Max, Min } from 'class-validator';
+import {
+  IsIn,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsPositive,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export const TIP_STATUSES = ['pending', 'planilhada', 'caiu'] as const;
@@ -13,6 +23,14 @@ export class TipFilterDto {
   @IsOptional()
   @IsIn(TIP_STATUSES)
   status?: TipStatus;
+
+  @ApiPropertyOptional({
+    description: 'Busca livre por jogo ou mercado (case-insensitive)',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  q?: string;
 
   @ApiPropertyOptional({ type: Number, default: 1 })
   @IsOptional()
