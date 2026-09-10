@@ -1,9 +1,10 @@
 import {
   normalizeBetData,
+  normalizeBetNumber,
   BET_EXTRACTION_RULES,
 } from '../bet/bet-normalization';
 import { Injectable } from '@nestjs/common';
-import { getOpenAIClient } from './openai-client';
+import { getOpenAIClient } from '../telegram/openai-client';
 import * as dotenv from 'dotenv';
 
 dotenv.config();
@@ -27,8 +28,16 @@ ${BET_EXTRACTION_RULES}
 - Junte todas as selecoes relevantes em apostas combinadas/criadas no campo mercado, usando exclusivamente " / " (barra com espacos) entre selecoes distintas. Nao use "e", ";" ou "+" como separador de selecoes.
 - Exemplo de mercado combinado: "Pedro - chute ao gol / mais de 2.5 gols". Preserve conectivos que fazem parte de uma unica selecao ou nome; apenas a separacao entre selecoes deve usar " / ".
 - Exclua do mercado interface, status e promocoes, como "Criar Aposta", "Super Odds", "Boost", "BetoBoost", "Simples", "Multiplas", "Perdida" e "Ganha".
-- Odd e a TOTAL/final da aposta. Ignore odds antigas/riscadas, individuais e de outros eventos.
+- Odd e a TOTAL/final da aposta — quando houver boost/turbinada, e a odd aumentada, a que vale.
+- oddOriginal so existe quando o bilhete mostra a odd ANTES do boost junto da final (riscada, tachada, menor, com rotulo de boost/super odds/turbinada). E a odd total pre-boost do mesmo bilhete, sempre menor que odd. Sem boost visivel, retorne null.
+- Ignore odds individuais de selecoes e odds de outros eventos nos dois campos.
 - Stake e somente o valor efetivamente apostado, nunca saldo, retorno, cashout ou limite.`;
+
+// O bot recebe a casa na legenda da foto; o app web nao tem legenda, entao
+// pede a casa no proprio print. Regra e schema ficam separados pra que o
+// caminho do Telegram continue com exatamente o mesmo prompt de antes.
+export const BET_HOUSE_RULE = `
+- casa e o nome da casa de apostas dona do bilhete (logo, cabecalho ou marca d'agua da tela). Retorne null se nao estiver visivel.`;
 
 export const BET_IMAGE_SCHEMA = {
   type: 'object',
@@ -37,46 +46,56 @@ export const BET_IMAGE_SCHEMA = {
     esporte: { type: ['string', 'null'] },
     mercado: { type: ['string', 'null'] },
     odd: { type: ['number', 'null'] },
+    oddOriginal: { type: ['number', 'null'] },
     stake: { type: ['number', 'null'] },
   },
-  required: ['evento', 'esporte', 'mercado', 'odd', 'stake'],
+  required: ['evento', 'esporte', 'mercado', 'odd', 'oddOriginal', 'stake'],
   additionalProperties: false,
 } as const;
 
-export interface ExtractedBetImage {
+export interface ExtractedBetSlip {
   evento: string | null;
   esporte: string | null;
   mercado: string | null;
   odd: number | null;
+  // Odd antes do boost/turbinada; null quando o bilhete nao mostra boost.
+  oddOriginal: number | null;
   stake: number | null;
 }
 
 // Responsabilidade única: IMAGEM -> DADOS. Não conhece Telegram, banco nem
 // botão. Quem chama é que combina isso com casa/horário.
 @Injectable()
-export class BetImageService {
+export class BetSlipParserService {
   async extractBetFromImage({
     imageBuffer,
     mimeType,
     deep = false,
+    withHouse = false,
   }: {
     imageBuffer: Buffer;
     mimeType: string;
     deep?: boolean;
-  }): Promise<ExtractedBetImage> {
+    withHouse?: boolean;
+  }): Promise<ExtractedBetSlip & { casa?: string | null }> {
     const dataUrl = `data:${mimeType};base64,${imageBuffer.toString('base64')}`;
     const startedAt = Date.now();
 
     const response = await getOpenAIClient().responses.create({
       model: MODEL,
       reasoning: { effort: deep ? 'low' : 'none' },
-      prompt_cache_key: 'bet-image-extractor-v1',
+      prompt_cache_key: withHouse
+        ? 'bet-image-extractor-house-v2'
+        : 'bet-image-extractor-v2',
       prompt_cache_options: { mode: 'implicit', ttl: '30m' },
       input: [
         {
           role: 'user',
           content: [
-            { type: 'input_text', text: BET_IMAGE_PROMPT },
+            {
+              type: 'input_text',
+              text: withHouse ? BET_IMAGE_PROMPT + BET_HOUSE_RULE : BET_IMAGE_PROMPT,
+            },
             {
               type: 'input_image',
               image_url: dataUrl,
@@ -90,7 +109,16 @@ export class BetImageService {
           type: 'json_schema',
           name: 'bet_image_extraction',
           strict: true,
-          schema: BET_IMAGE_SCHEMA as unknown as Record<string, unknown>,
+          schema: (withHouse
+            ? {
+                ...BET_IMAGE_SCHEMA,
+                properties: {
+                  ...BET_IMAGE_SCHEMA.properties,
+                  casa: { type: ['string', 'null'] },
+                },
+                required: [...BET_IMAGE_SCHEMA.required, 'casa'],
+              }
+            : BET_IMAGE_SCHEMA) as unknown as Record<string, unknown>,
         },
       },
     });
@@ -105,7 +133,14 @@ export class BetImageService {
         `duration=${((Date.now() - startedAt) / 1000).toFixed(2)}s`,
     );
 
-    return normalizeExtraction(parseExtractionObject(response.output_text));
+    const data = parseExtractionObject(response.output_text);
+    const extracted = normalizeExtraction(data);
+    return withHouse
+      ? {
+          ...extracted,
+          casa: typeof data.casa === 'string' ? data.casa.trim() || null : null,
+        }
+      : extracted;
   }
 }
 
@@ -130,7 +165,7 @@ export function parseExtractionObject(text: string): Record<string, unknown> {
 // de qualquer um confiar nos tipos.
 export function normalizeExtraction(
   obj: Record<string, unknown>,
-): ExtractedBetImage {
+): ExtractedBetSlip {
   const data = normalizeBetData({
     game: obj.evento,
     market: obj.mercado,
@@ -138,11 +173,22 @@ export function normalizeExtraction(
     odd: obj.odd,
     stake: obj.stake,
   });
+  // Boost so e boost se a IA devolveu duas odds coerentes: a original tem que
+  // ser uma odd de verdade e menor que a final. Fora disso vira null, pra
+  // ninguem exibir "3.65 -> 3.65" nem uma original maior que a que vale.
+  const oddOriginal = normalizeBetNumber(obj.oddOriginal);
   return {
     evento: data.game,
     mercado: data.market,
     esporte: data.sport,
     odd: data.odd,
+    oddOriginal:
+      oddOriginal !== null &&
+      oddOriginal > 1 &&
+      data.odd !== null &&
+      oddOriginal < data.odd
+        ? oddOriginal
+        : null,
     stake: data.stake,
   };
 }

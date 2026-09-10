@@ -19,6 +19,7 @@ const bet = {
   esporte: 'Futebol',
   mercado: 'Hulk marcar ou dar assistência',
   odd: 3,
+  oddOriginal: null,
   stake: 14.83,
 };
 const examples = [
@@ -34,6 +35,7 @@ const examples = [
       mercado:
         'Real Madrid mais de 0 gols no primeiro tempo; Real Madrid mais de 1 gol; Betis mais de 0 gols',
       odd: 2.2,
+      oddOriginal: null,
       stake: 35,
     },
   ],
@@ -45,6 +47,7 @@ const examples = [
       evento: 'Real Madrid x Barcelona',
       mercado: 'Real Madrid para vencer',
       odd: null,
+      oddOriginal: null,
       stake: 50,
     },
   ],
@@ -182,6 +185,10 @@ function setup() {
     {} as Deps[4],
     {} as Deps[5],
     audio as unknown as Deps[6],
+    {
+      loadCandidates: jest.fn().mockResolvedValue([]),
+      findMatches: jest.fn().mockResolvedValue([]),
+    } as any,
   );
   const context = {
     chat: { id: 1 },

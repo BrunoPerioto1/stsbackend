@@ -5,10 +5,10 @@ import { basename, extname } from 'node:path';
 import { getOpenAIClient } from './openai-client';
 import {
   BET_IMAGE_SCHEMA,
-  ExtractedBetImage,
+  ExtractedBetSlip,
   normalizeExtraction,
   parseExtractionObject,
-} from './bet-image.service';
+} from '../bet-slip/bet-slip-parser.service';
 
 export const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
 const AUDIO_TYPES: Record<string, string> = {
@@ -121,7 +121,7 @@ export class BetAudioService {
 
   async extractBetFromTranscript(
     transcript: string,
-  ): Promise<ExtractedBetImage & { casa: string | null }> {
+  ): Promise<ExtractedBetSlip & { casa: string | null }> {
     if (!transcript.trim()) throw new Error('TRANSCRICAO_VAZIA');
     const startedAt = performance.now();
     let status = 'error';

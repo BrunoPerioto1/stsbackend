@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { BetModule } from './module/bet.module';
+import { BetSlipModule } from './module/bet-slip.module';
 import { TelegramModule } from './module/telegram.module';
 import { HouseModule } from './module/house.module';
 import { DashboardModule } from './module/dashboard.module';
@@ -11,6 +12,7 @@ import { TipsModule } from './module/tips.module';
 @Module({
   imports: [
     BetModule,
+    BetSlipModule,
     TelegramModule,
     HouseModule,
     DashboardModule,

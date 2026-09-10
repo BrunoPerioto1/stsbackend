@@ -56,7 +56,10 @@ export class BetController {
     @Body() apostaData: CreateBetDto,
     @User('userId') userId: number,
   ) {
-    return this.betService.createBet({ ...apostaData, userId });
+    // tipId não faz parte da aposta em si — é o vínculo com a pendência, que o
+    // createBet já sabe gravar (mesmo caminho do "PLANILHADO" do bot).
+    const { tipId, ...bet } = apostaData;
+    return this.betService.createBet({ ...bet, userId }, tipId);
   }
 
   @Get()

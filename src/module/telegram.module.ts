@@ -13,14 +13,21 @@ import {
 } from '../telegram/telegram-bot.provider';
 import { BotCommandsService } from '../telegram/bot-commands.service';
 import { BetTextService } from '../telegram/bet-text.service';
-import { BetImageService } from '../telegram/bet-image.service';
+import { BetSlipModule } from './bet-slip.module';
 import { BetAudioService } from '../telegram/bet-audio.service';
 import { TipFanoutService } from '../telegram/tip-fanout.service';
 import { PendentesService } from '../telegram/pendentes.service';
 import { TelegramCallbackService } from '../telegram/telegram-callback.service';
 
 @Module({
-  imports: [BetModule, HouseModule, DatabaseModule, UsersModule, TipsModule],
+  imports: [
+    BetModule,
+    HouseModule,
+    DatabaseModule,
+    UsersModule,
+    TipsModule,
+    BetSlipModule,
+  ],
   controllers: [TelegramController],
   providers: [
     { provide: TELEGRAM_BOT, useFactory: createTelegramBot },
@@ -28,7 +35,6 @@ import { TelegramCallbackService } from '../telegram/telegram-callback.service';
     GrokService,
     BotCommandsService,
     BetTextService,
-    BetImageService,
     BetAudioService,
     TipFanoutService,
     PendentesService,

@@ -1,6 +1,6 @@
 import stringSimilarity from 'string-similarity';
-import { comparableGame, comparableText } from '../../bet/bet-normalization';
-import { normalizeName } from '../../common/utils/bet.utils';
+import { comparableGame, comparableText } from '../bet/bet-normalization';
+import { normalizeName } from '../common/utils/bet.utils';
 
 // Comparacao local (zero IA) entre a aposta lida de um print e as pendencias
 // do /pendentes do usuario. Objetivo: nao planilhar duas vezes a mesma aposta

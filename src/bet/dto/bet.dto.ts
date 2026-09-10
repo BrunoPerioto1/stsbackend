@@ -77,6 +77,15 @@ class CreateBetRequestDto {
   @IsOptional()
   @IsNumber()
   userId?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Tip pendente que esta aposta liquida. Vincular tira a tip da fila de pendências.',
+    example: 42,
+  })
+  @IsOptional()
+  @IsNumber()
+  tipId?: number;
 }
 
 export class UpdateApostaDto {
