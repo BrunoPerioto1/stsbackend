@@ -4,8 +4,6 @@ import { UsersService } from '../users/users.service';
 import { BetService } from '../bet/bet.service';
 import { GrokService } from '../telegram/grok.service';
 import { normalizeBetData } from '../bet/bet-normalization';
-import { parseBetLocal } from '../telegram/utils/tip-extractors.util';
-import type { PlanilharTipDto } from './dto/tip.dto';
 import {
   extractGameFromText,
   extractHouseFromText,
@@ -16,8 +14,14 @@ import {
   extractPotentialProfitFromText,
   extractRecommendedStakeFromText,
   extractSportFromText,
+  parseBetLocal,
 } from '../telegram/utils/tip-extractors.util';
-import type { TipItemDto, TipStatus, TipsListResponseDto } from './dto/tip.dto';
+import type {
+  PlanilharTipDto,
+  TipItemDto,
+  TipStatus,
+  TipsListResponseDto,
+} from './dto/tip.dto';
 import type { NewTip, TipId, TipEntity } from '../db_types/Tips';
 import type { NewTipDelivery } from '../db_types/TipDeliveries';
 import type { UserId } from '../db_types/Users';
@@ -108,18 +112,12 @@ export class TipsService {
     return { bet, alreadyExisted: false };
   }
 
-  // Mesma conta do processBetText: a tip carrega só a % da banca, o valor
-  // absoluto sai dela e o 🚦 corta por cima quando existe.
   private async resolveStake(
     tip: { text: string; percent: number | null },
     userId: number,
   ): Promise<number | null> {
-    if (tip.percent === null) return null;
     const banca = await this.usersService.getUserStake(userId);
-    let stake = (Number(tip.percent) / 100) * banca;
-    const limit = extractLimitFromText(tip.text);
-    if (limit !== null) stake = Math.min(stake, limit);
-    return Number.isFinite(stake) && stake > 0 ? stake : null;
+    return computeStake(tip.percent, tip.text, banca);
   }
 
   // Mesma lista que o /pendentes do bot monta, só que estruturada em vez de
@@ -135,31 +133,51 @@ export class TipsService {
     const minPercentFilter =
       user?.minPercentFilter != null ? Number(user.minPercentFilter) : null;
 
-    const rows = await this.tipsRepository.findSummaryForUser(
-      userId as UserId,
-      minPercentFilter,
-    );
+    const [rows, banca] = await Promise.all([
+      this.tipsRepository.findSummaryForUser(userId as UserId, minPercentFilter),
+      this.usersService.getUserStake(userId),
+    ]);
 
-    const items: TipItemDto[] = rows.map((row) => ({
-      id: Number(row.id),
-      createdAt: row.createdAt,
-      status: row.betId != null ? 'planilhada' : row.dismissalId != null ? 'caiu' : 'pending',
-      betId: row.betId != null ? Number(row.betId) : null,
-      house: extractHouseFromText(row.text),
-      game: extractGameFromText(row.text),
-      sport: extractSportFromText(row.text),
-      market: extractMarketFromText(row.text),
-      odd: extractOddFromText(row.text),
-      percent: row.percent != null ? Number(row.percent) : null,
-      limit: extractLimitFromText(row.text),
-      recommendedStake: extractRecommendedStakeFromText(row.deliveryText ?? ''),
-      potentialProfit: extractPotentialProfitFromText(row.deliveryText ?? ''),
-      link: extractLinkFromText(row.text),
-      isAviso: row.isAviso,
-      // A cópia entregue é a que o usuário reconhece (é a que ele leu na DM,
-      // com a recomendação no fim). Sem entrega, mostra a do canal.
-      text: row.deliveryText ?? row.text,
-    }));
+    const items: TipItemDto[] = rows.map((row) => {
+      // A entrega tem o número que o usuário já viu na DM, então ela manda.
+      // Sem entrega (tip anterior ao vínculo, ou filtrada na hora do fan-out)
+      // refaz a mesma conta — é o que o Planilhar usaria de qualquer forma, e
+      // o campo da tela precisa abrir preenchido pra valer a pena.
+      const stake =
+        extractRecommendedStakeFromText(row.deliveryText ?? '') ??
+        computeStake(row.percent, row.text, banca);
+      const odd = extractOddFromText(row.text);
+
+      return {
+        id: Number(row.id),
+        createdAt: row.createdAt,
+        status:
+          row.betId != null
+            ? 'planilhada'
+            : row.dismissalId != null
+              ? 'caiu'
+              : 'pending',
+        betId: row.betId != null ? Number(row.betId) : null,
+        house: extractHouseFromText(row.text),
+        game: extractGameFromText(row.text),
+        sport: extractSportFromText(row.text),
+        market: extractMarketFromText(row.text),
+        odd,
+        percent: row.percent != null ? Number(row.percent) : null,
+        limit: extractLimitFromText(row.text),
+        recommendedStake: stake,
+        potentialProfit:
+          extractPotentialProfitFromText(row.deliveryText ?? '') ??
+          (stake !== null && odd !== null
+            ? Number((stake * odd - stake).toFixed(2))
+            : null),
+        link: extractLinkFromText(row.text),
+        isAviso: row.isAviso,
+        // A cópia entregue é a que o usuário reconhece (é a que ele leu na DM,
+        // com a recomendação no fim). Sem entrega, mostra a do canal.
+        text: row.deliveryText ?? row.text,
+      };
+    });
 
     const pendentes = items.filter((i) => i.status === 'pending');
     const summary = {
@@ -239,4 +257,18 @@ export class TipsService {
   async findDelivery(tipId: number, userId: number) {
     return this.tipsRepository.findDelivery(tipId as TipId, userId as UserId);
   }
+}
+
+// Mesma conta do processBetText do bot: a tip carrega só a % da banca, o
+// valor absoluto sai dela, e o 🚦 do texto corta por cima quando existe.
+function computeStake(
+  percent: number | null,
+  text: string,
+  banca: number,
+): number | null {
+  if (percent === null) return null;
+  let stake = (Number(percent) / 100) * banca;
+  const limit = extractLimitFromText(text);
+  if (limit !== null) stake = Math.min(stake, limit);
+  return Number.isFinite(stake) && stake > 0 ? Number(stake.toFixed(2)) : null;
 }
