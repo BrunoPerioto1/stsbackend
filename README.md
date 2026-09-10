@@ -161,7 +161,7 @@ sequenceDiagram
     S->>M: pontua candidatas, sem IA
     M-->>S: matches ranqueados
     S-->>C: campos + confiança por campo + candidatas
-    Note over C: nada foi salvo; o usuário revisa e confirma
+    Note over C: nada foi salvo — o usuário revisa e confirma
 ```
 
 A rota de leitura não grava. Quem grava é o `POST /bets`, que aceita um `tipId` opcional pra vincular a aposta à tip que ela liquida. Separar as duas coisas foi de propósito: leitura errada não pode virar registro.
