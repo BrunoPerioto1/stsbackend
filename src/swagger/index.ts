@@ -21,8 +21,11 @@ export function configureSwagger(app: INestApplication) {
   );
 
   const config = new DocumentBuilder()
-    .setTitle('Template Backend API - Documentação')
-    .setDescription('API para gerenciamento de apostas e casas de apostas')
+    .setTitle('SportsBet Manager API')
+    .setDescription(
+      'Controle de apostas esportivas: banca, saldo por casa e análise de desempenho — ' +
+        'com ingestão de bilhete por print, áudio ou texto de tip.',
+    )
     .setVersion('1.0.0')
     .addBearerAuth(undefined, 'Bearer Token')
     .addSecurityRequirements('Bearer Token')
@@ -51,7 +54,7 @@ export function configureSwagger(app: INestApplication) {
       content: document,
       theme: 'default',
       layout: 'classic',
-      title: 'Template Backend API - Documentação',
+      title: 'SportsBet Manager API',
       cdn: 'https://cdn.jsdelivr.net/npm/@scalar/api-reference',
     }),
   );

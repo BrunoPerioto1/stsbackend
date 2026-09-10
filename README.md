@@ -196,6 +196,8 @@ Quase tudo exige JWT `Bearer`. A documentação interativa (Scalar) fica em `/do
 Basic Auth, e **só sobe fora de produção** — o pacote do Scalar quebra o boot serverless com
 `ERR_REQUIRE_ESM`, então ele é carregado por import dinâmico apenas quando `NODE_ENV !== 'production'`.
 
+![Documentação da API no Scalar](docs/screenshots/10-api-scalar.png)
+
 | Recurso | Endpoints |
 |---|---|
 | Auth | `POST /auth/login` · `POST /auth/change-password` · `POST /auth/link-telegram` · `POST /auth/link-telegram/confirm` |
