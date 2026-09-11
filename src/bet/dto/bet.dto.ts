@@ -84,6 +84,9 @@ class CreateBetRequestDto {
     example: 42,
   })
   @IsOptional()
+  // O id da tip chega do app como veio da leitura do bilhete; aceitar "42"
+  // alem de 42 evita que um vinculo valido morra em 400 por causa do tipo.
+  @Type(() => Number)
   @IsNumber()
   tipId?: number;
 }

@@ -61,7 +61,10 @@ export class PendingMatchService {
         if (limit !== null && Number.isFinite(stake))
           stake = Math.min(stake, limit);
         return {
-          tipId: row.id,
+          // O driver devolve id como string quando a coluna e bigint — sem
+          // este Number o tipId viaja como texto ate o POST /bets e o
+          // @IsNumber do DTO recusa o vinculo com 400.
+          tipId: Number(row.id),
           game: extractGameFromText(row.text) ?? '',
           market: extractMarketFromText(row.text) ?? '',
           house: extractHouseFromText(row.text) ?? '',
