@@ -5,6 +5,7 @@ import { BetService } from '../bet/bet.service';
 import { GrokService } from '../telegram/grok.service';
 import { normalizeBetData } from '../bet/bet-normalization';
 import {
+  extractCalcLinkFromEntities,
   extractGameFromText,
   extractHouseFromText,
   extractLimitFromText,
@@ -177,6 +178,7 @@ export class TipsService {
             ? Number((stake * odd - stake).toFixed(2))
             : null),
         link: extractLinkFromText(row.text),
+        calcLink: extractCalcLinkFromEntities(row.text, row.entities),
         isAviso: row.isAviso,
         // A cópia entregue é a que o usuário reconhece (é a que ele leu na DM,
         // com a recomendação no fim). Sem entrega, mostra a do canal.

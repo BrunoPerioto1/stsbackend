@@ -71,6 +71,38 @@ export function extractLinkFromText(text: string): string | null {
   return m ? m[0] : null;
 }
 
+// O "Odd mudou? Clique AQUI e calcule quanto vale" é um text_link: a URL do
+// calculador (calc.peixeesperto.com.br/?justa=X) só existe em `entities`,
+// nunca no texto puro — por isso extractLinkFromText não a enxerga (e pegaria
+// o link da casa, que vem antes). Pega SÓ essa: primeiro pela URL do
+// calculador, e se o domínio mudar, pelo texto que o link cobre.
+const CALC_LINK_HOST = /^https?:\/\/(?:[\w-]+\.)*peixeesperto\.com\.br\b/i;
+const CALC_LINK_LABEL = /odd mudou|calcule quanto vale|quanto vale/i;
+
+export function extractCalcLinkFromEntities(
+  text: string,
+  entities:
+    | { type: string; offset: number; length: number; url?: string }[]
+    | null
+    | undefined,
+): string | null {
+  const links = (Array.isArray(entities) ? entities : []).filter(
+    (e) => e.type === 'text_link' && typeof e.url === 'string',
+  );
+
+  const byHost = links.find((e) => CALC_LINK_HOST.test(e.url as string));
+  if (byHost) return byHost.url as string;
+
+  const byLabel = links.find((e) =>
+    CALC_LINK_LABEL.test((text ?? '').slice(e.offset, e.offset + e.length)),
+  );
+  if (byLabel) return byLabel.url as string;
+
+  // Fallback pro caso raro da URL vir colada no texto em vez de embutida.
+  const raw = (text ?? '').match(/https?:\/\/\S*peixeesperto\.com\.br\S*/i);
+  return raw ? raw[0] : null;
+}
+
 export function extractPercent(text: string): number | null {
   if (!text) return null;
 
@@ -128,7 +160,10 @@ export function extractStakeFromText(text: string): number | null {
 // pro usuário, já com a banca dele aplicada. O 💰 sem rótulo que vem do canal
 // NÃO é isso — o valor certo é sempre esta última recomendação.
 export function extractRecommendedStakeFromText(text: string): number | null {
-  return matchMoneyLine(text, /^🎯\s*Recomendação de aposta:\s*R?\$?\s*([\d.,]+)/im);
+  return matchMoneyLine(
+    text,
+    /^🎯\s*Recomendação de aposta:\s*R?\$?\s*([\d.,]+)/im,
+  );
 }
 
 export function extractPotentialProfitFromText(text: string): number | null {
