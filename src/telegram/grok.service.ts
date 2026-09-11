@@ -3,8 +3,7 @@ import { Injectable } from '@nestjs/common';
 import Groq from 'groq-sdk';
 import * as dotenv from 'dotenv';
 import { HouseService } from '../house/house.service';
-import stringSimilarity from 'string-similarity';
-import { normalizeName } from '../common/utils/bet.utils';
+import { matchHouseIdByName } from '../common/utils/house-match.util';
 dotenv.config();
 
 @Injectable()
@@ -59,36 +58,8 @@ export class GrokService {
     }
     if (!rawHouseName) return null;
 
-    const houseName = normalizeName(rawHouseName);
-    if (!houseName) return null;
-
     const houses = await this.houseService.getAllHouses();
-    if (!houses?.length) return null;
-
-    // Aliases são cadastrados manualmente pra variações conhecidas ("Superbet
-    // Brasil", "Pagol Bet") e comparados por igualdade exata (pós-
-    // normalização) — deliberadamente sem heurística de substring aqui, que
-    // fica ambígua quando existe casa com nome curto/genérico (ex.: "Bet7k"
-    // poderia bater tanto com uma casa "7k" quanto com uma hipotética "Bet").
-    for (const h of houses) {
-      const aliasMatch = (h.aliases ?? []).some((a) => normalizeName(a) === houseName);
-      if (aliasMatch) return h.id;
-    }
-
-    const normalizedHouses = houses
-      .map((h) => ({ id: h.id, name: h.name, normalized: normalizeName(h.name) }))
-      .filter((h) => !!h.normalized);
-
-    if (!normalizedHouses.length) return null;
-
-    const names = normalizedHouses.map((h) => h.normalized);
-    const { bestMatch, bestMatchIndex } = stringSimilarity.findBestMatch(houseName, names);
-
-    if (bestMatch.rating >= 0.8) {
-      return normalizedHouses[bestMatchIndex].id;
-    }
-
-    return null;
+    return matchHouseIdByName(rawHouseName, houses ?? []);
   }
 
   async parseBetMessage(message: string, houseId: number | null): Promise<any> {

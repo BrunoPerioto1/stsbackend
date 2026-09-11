@@ -10,7 +10,8 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
+import { toNumberArray } from '../../common/utils/dto-transform.util';
 
 export const TIP_STATUSES = ['pending', 'planilhada', 'caiu'] as const;
 export type TipStatus = (typeof TIP_STATUSES)[number];
@@ -31,6 +32,17 @@ export class TipFilterDto {
   @IsString()
   @MaxLength(100)
   q?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'IDs de casa (múltipla seleção), separados por vírgula. A casa da tip é casada por nome com as casas cadastradas.',
+    type: String,
+    example: '3,7',
+  })
+  @IsOptional()
+  @Transform(toNumberArray)
+  @IsInt({ each: true })
+  houseIds?: number[];
 
   @ApiPropertyOptional({ type: Number, default: 1 })
   @IsOptional()
@@ -95,6 +107,12 @@ export class TipItemDto {
 
   @ApiProperty({ nullable: true })
   house!: string | null;
+
+  @ApiProperty({
+    nullable: true,
+    description: 'Casa cadastrada que o nome da tip casou, quando reconhecida',
+  })
+  houseId!: number | null;
 
   @ApiProperty({ nullable: true })
   game!: string | null;

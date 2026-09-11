@@ -1,16 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsInt, IsDate, IsString, Min, Max } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
-
-function toNumberArray({ value }: { value: unknown }) {
-  if (typeof value !== 'string') return value;
-  return value
-    .split(',')
-    .map((v) => v.trim())
-    .filter((v) => v.length > 0)
-    .map(Number)
-    .filter((n) => !Number.isNaN(n));
-}
+import { toNumberArray } from '../../common/utils/dto-transform.util';
 
 export class BetFilterDto {
   @ApiPropertyOptional({ description: 'ID da aposta', type: Number, example: 123 })

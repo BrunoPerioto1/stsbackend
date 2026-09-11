@@ -3,6 +3,8 @@ import { TipsRepository } from '../infra/repository/tips.repository';
 import { UsersService } from '../users/users.service';
 import { BetService } from '../bet/bet.service';
 import { GrokService } from '../telegram/grok.service';
+import { HouseService } from '../house/house.service';
+import { matchHouseIdByName } from '../common/utils/house-match.util';
 import { normalizeBetData } from '../bet/bet-normalization';
 import {
   extractCalcLinkFromEntities,
@@ -53,6 +55,7 @@ export class TipsService {
     private readonly usersService: UsersService,
     private readonly betService: BetService,
     private readonly grokService: GrokService,
+    private readonly houseService: HouseService,
   ) {}
 
   // Equivalente do botão "Planilhar" do /pendentes: grava a aposta na hora,
@@ -131,17 +134,28 @@ export class TipsService {
     {
       status,
       q,
+      houseIds,
       page,
       perPage,
-    }: { status?: TipStatus; q?: string; page: number; perPage: number },
+    }: {
+      status?: TipStatus;
+      q?: string;
+      houseIds?: number[];
+      page: number;
+      perPage: number;
+    },
   ): Promise<TipsListResponseDto> {
     const user = await this.usersService.findById(userId);
     const minPercentFilter =
       user?.minPercentFilter != null ? Number(user.minPercentFilter) : null;
 
-    const [rows, banca] = await Promise.all([
+    // As casas entram aqui porque a casa da tip só existe como texto da
+    // mensagem: o houseId sai do mesmo casamento de nome que o Planilhar usa,
+    // e é ele que o filtro de casas da tela compara.
+    const [rows, banca, houses] = await Promise.all([
       this.tipsRepository.findSummaryForUser(userId as UserId, minPercentFilter),
       this.usersService.getUserStake(userId),
+      this.houseService.getAllHouses(),
     ]);
 
     const items: TipItemDto[] = rows.map((row) => {
@@ -153,6 +167,7 @@ export class TipsService {
         extractRecommendedStakeFromText(row.deliveryText ?? '') ??
         computeStake(row.percent, row.text, banca);
       const odd = extractOddFromText(row.text);
+      const houseName = extractHouseFromText(row.text);
 
       return {
         id: Number(row.id),
@@ -164,7 +179,8 @@ export class TipsService {
               ? 'caiu'
               : 'pending',
         betId: row.betId != null ? Number(row.betId) : null,
-        house: extractHouseFromText(row.text),
+        house: houseName,
+        houseId: matchHouseIdByName(houseName, houses ?? []),
         game: extractGameFromText(row.text),
         sport: extractSportFromText(row.text),
         market: extractMarketFromText(row.text),
@@ -200,12 +216,17 @@ export class TipsService {
     // negrito, e o unico jeito de achar "aquela tip do Flamengo" numa fila
     // longa. Como ja e' tudo em memoria aqui, nao vale query nova.
     const termo = q?.trim().toLowerCase();
-    const casa = (i: TipItemDto) =>
+    const bateBusca = (i: TipItemDto) =>
       !termo ||
       `${i.game ?? ''} ${i.market ?? ''}`.toLowerCase().includes(termo);
 
+    // Tip sem casa reconhecida fica de fora quando há filtro: o usuário pediu
+    // casas específicas, e "não sei de qual é" não é uma delas.
+    const daCasa = (i: TipItemDto) =>
+      !houseIds?.length || (i.houseId !== null && houseIds.includes(i.houseId));
+
     const filtered = items
-      .filter((i) => (!status || i.status === status) && casa(i))
+      .filter((i) => (!status || i.status === status) && bateBusca(i) && daCasa(i))
       .reverse();
 
     // Paginação em memória, não no SQL: a query já traz tips + apostas + caiu
