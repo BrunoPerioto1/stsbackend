@@ -103,10 +103,32 @@ const ALIASES: Record<string, string> = {
   'atletico madri': 'atletico madrid',
   'manchester utd': 'manchester united',
   'psv eindhoven': 'psv',
+  // Dinamarca: a casa escreve o nome em ingles, o provider em danes.
+  copenhagen: 'kobenhavn',
+  copenhague: 'kobenhavn',
+};
+
+// NFD so separa acento de letra base. Estas sao letras proprias do alfabeto —
+// nao decompoem, e a limpeza de `[^a-z0-9 ]` as apagaria, partindo o nome em
+// dois tokens ("Kobenhavn" virava "k benhavn" e nao casava com nada).
+const LETRAS_ESTRANGEIRAS: Record<string, string> = {
+  'ø': 'o',
+  'æ': 'ae',
+  'œ': 'oe',
+  'ß': 'ss',
+  'ð': 'd',
+  'đ': 'd',
+  'þ': 'th',
+  'ł': 'l',
+  'ı': 'i',
 };
 
 export function normalizeTeamName(value: string): string {
-  const semAcento = value.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const semAcento = value
+    .toLowerCase()
+    .replace(/[øæœßðđþłı]/g, (c) => LETRAS_ESTRANGEIRAS[c])
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '');
   const tokens = semAcento
     .replace(/[-.]/g, ' ')
     .replace(/[^a-z0-9 ]/g, ' ')

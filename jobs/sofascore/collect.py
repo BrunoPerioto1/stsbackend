@@ -60,6 +60,7 @@ LIGAS = {
     52: "Trendyol Super Lig",
     36: "Scottish Premiership",
     185: "Stoiximan Super League",
+    39: "Danish Superliga",
     19: "FA Cup",
     21: "EFL Cup",
     329: "Copa del Rey",

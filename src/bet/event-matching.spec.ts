@@ -97,6 +97,15 @@ const CANDIDATOS: CandidateEvent[] = [
       awayCode: 'NE',
     },
   ),
+  // Danish Superliga: "ø" nao e' acento, entao NFD nao decompoe e a limpeza
+  // partia "København" em dois tokens. A casa ainda por cima escreve o nome
+  // em ingles.
+  evento('15', 'FC København', 'AC Horsens', '2026-09-12T17:00:00Z', {
+    homeShort: 'København',
+    homeCode: 'FCK',
+    awayShort: 'Horsens',
+    awayCode: 'HOR',
+  }),
   evento('7', 'Real Madrid', 'Osasuna', '2026-09-19T19:00:00Z'),
   evento('8', 'Barcelona', 'Getafe', '2026-09-12T19:00:00Z'),
 ];
@@ -110,6 +119,9 @@ describe('normalizeTeamName', () => {
     ['Atlético-MG', 'atletico mg'],
     ['Clube De Regatas Brasil', 'brasil'],
     ['Inter de Milão', 'inter'],
+    ['FC København', 'kobenhavn'],
+    ['FC Copenhagen', 'kobenhavn'],
+    ['Brøndby IF', 'brondby if'],
   ])('normaliza %s', (entrada, esperado) => {
     expect(normalizeTeamName(entrada)).toBe(esperado);
   });
@@ -118,6 +130,7 @@ describe('normalizeTeamName', () => {
 describe('matchEvent', () => {
   it.each([
     ['Manchester City x Arsenal', '1'],
+    ['FC Copenhagen x AC Horsens', '15'],
     ['Man City vs Arsenal', '1'],
     ['MCI x ARS', '1'],
     ['Gremio x Bragantino', '2'],
