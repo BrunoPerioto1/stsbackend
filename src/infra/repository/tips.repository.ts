@@ -83,6 +83,9 @@ export class TipsRepository {
         't.hasMedia',
         't.percent',
         't.isAviso',
+        // A URL do "Odd mudou? ... calcule quanto vale" é um text_link: só
+        // existe aqui, não no texto da mensagem.
+        't.entities',
         't.createdAt',
         'b.id as betId',
         'd.id as dismissalId',

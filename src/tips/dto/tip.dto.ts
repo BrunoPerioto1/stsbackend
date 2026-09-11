@@ -51,7 +51,9 @@ export class TipFilterDto {
 // Todos opcionais: sem nada no corpo, planilha exatamente como o bot faria.
 // O "Editar" da tela manda só o que o usuário mexeu.
 export class PlanilharTipDto {
-  @ApiPropertyOptional({ description: 'Valor apostado, se diferente do sugerido' })
+  @ApiPropertyOptional({
+    description: 'Valor apostado, se diferente do sugerido',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
@@ -65,7 +67,9 @@ export class PlanilharTipDto {
   @Min(1.01)
   odd?: number;
 
-  @ApiPropertyOptional({ description: 'Casa, quando a da tip não foi reconhecida' })
+  @ApiPropertyOptional({
+    description: 'Casa, quando a da tip não foi reconhecida',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -104,7 +108,10 @@ export class TipItemDto {
   @ApiProperty({ nullable: true })
   odd!: number | null;
 
-  @ApiProperty({ nullable: true, description: 'Valor (EV) informado pelo canal' })
+  @ApiProperty({
+    nullable: true,
+    description: 'Valor (EV) informado pelo canal',
+  })
   percent!: number | null;
 
   @ApiProperty({ nullable: true, description: 'Limite da aposta sugerido' })
@@ -112,15 +119,26 @@ export class TipItemDto {
 
   @ApiProperty({
     nullable: true,
-    description: 'Stake recomendada para este usuário (banca × % da tip, limitada pelo 🚦)',
+    description:
+      'Stake recomendada para este usuário (banca × % da tip, limitada pelo 🚦)',
   })
   recommendedStake!: number | null;
 
-  @ApiProperty({ nullable: true, description: 'Lucro se a aposta ganhar na stake recomendada' })
+  @ApiProperty({
+    nullable: true,
+    description: 'Lucro se a aposta ganhar na stake recomendada',
+  })
   potentialProfit!: number | null;
 
   @ApiProperty({ nullable: true, description: 'Link da aposta na casa' })
   link!: string | null;
+
+  @ApiProperty({
+    nullable: true,
+    description:
+      'Link do calculador de odd justa ("Odd mudou? ... calcule quanto vale")',
+  })
+  calcLink!: string | null;
 
   @ApiProperty({ description: 'Mensagem de SOBRECARGA/AVISO' })
   isAviso!: boolean;
@@ -139,7 +157,9 @@ export class TipsSummaryDto {
   @ApiProperty()
   caidas!: number;
 
-  @ApiProperty({ description: 'Soma das stakes recomendadas das tips pendentes' })
+  @ApiProperty({
+    description: 'Soma das stakes recomendadas das tips pendentes',
+  })
   pendingStake!: number;
 }
 
@@ -150,7 +170,9 @@ export class TipsListResponseDto {
   @ApiProperty({ type: TipsSummaryDto })
   summary!: TipsSummaryDto;
 
-  @ApiProperty({ description: 'Total de tips na aba pedida, antes da paginação' })
+  @ApiProperty({
+    description: 'Total de tips na aba pedida, antes da paginação',
+  })
   total!: number;
 
   @ApiProperty()
