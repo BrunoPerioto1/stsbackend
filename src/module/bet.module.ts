@@ -9,6 +9,8 @@ import { DatabaseModule } from '../infra/db/db.module';
   imports: [DatabaseModule],
   providers: [BetService, BetRepository, SportEventRepository],
   controllers: [BetController],
-  exports: [BetService],
+  // SportEventRepository sai daqui porque o /tips também precisa do cache de
+  // jogos pra mostrar o horário do confronto — mesma fonte da aposta.
+  exports: [BetService, SportEventRepository],
 })
 export class BetModule {}

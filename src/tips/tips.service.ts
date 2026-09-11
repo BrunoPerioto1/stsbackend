@@ -6,6 +6,9 @@ import { GrokService } from '../telegram/grok.service';
 import { HouseService } from '../house/house.service';
 import { matchHouseIdByName } from '../common/utils/house-match.util';
 import { normalizeBetData } from '../bet/bet-normalization';
+import { matchEvent } from '../bet/event-matching';
+import { SportEventRepository } from '../infra/repository/sport-event.repository';
+import type { CandidateEvent } from '../bet/event-matching';
 import {
   extractCalcLinkFromEntities,
   extractGameFromText,
@@ -56,6 +59,7 @@ export class TipsService {
     private readonly betService: BetService,
     private readonly grokService: GrokService,
     private readonly houseService: HouseService,
+    private readonly sportEventRepository: SportEventRepository,
   ) {}
 
   // Equivalente do botão "Planilhar" do /pendentes: grava a aposta na hora,
@@ -152,10 +156,13 @@ export class TipsService {
     // As casas entram aqui porque a casa da tip só existe como texto da
     // mensagem: o houseId sai do mesmo casamento de nome que o Planilhar usa,
     // e é ele que o filtro de casas da tela compara.
-    const [rows, banca, houses] = await Promise.all([
+    const [rows, banca, houses, candidatos] = await Promise.all([
       this.tipsRepository.findSummaryForUser(userId as UserId, minPercentFilter),
       this.usersService.getUserStake(userId),
       this.houseService.getAllHouses(),
+      // Uma consulta só pra lista inteira: o matcher compara nome em memória,
+      // então a mesma janela de eventos serve todas as tips.
+      this.findEventCandidates(),
     ]);
 
     const items: TipItemDto[] = rows.map((row) => {
@@ -168,6 +175,9 @@ export class TipsService {
         computeStake(row.percent, row.text, banca);
       const odd = extractOddFromText(row.text);
       const houseName = extractHouseFromText(row.text);
+      const gameName = extractGameFromText(row.text);
+      const marketName = extractMarketFromText(row.text);
+      const sportName = extractSportFromText(row.text);
 
       return {
         id: Number(row.id),
@@ -181,9 +191,9 @@ export class TipsService {
         betId: row.betId != null ? Number(row.betId) : null,
         house: houseName,
         houseId: matchHouseIdByName(houseName, houses ?? []),
-        game: extractGameFromText(row.text),
-        sport: extractSportFromText(row.text),
-        market: extractMarketFromText(row.text),
+        game: gameName,
+        sport: sportName,
+        market: marketName,
         odd,
         percent: row.percent != null ? Number(row.percent) : null,
         limit: extractLimitFromText(row.text),
@@ -195,6 +205,12 @@ export class TipsService {
             : null),
         link: extractLinkFromText(row.text),
         calcLink: extractCalcLinkFromEntities(row.text, row.entities),
+        eventStartAt: resolveEventStartAt(
+          gameName,
+          marketName,
+          sportName,
+          candidatos,
+        ),
         isAviso: row.isAviso,
         // A cópia entregue é a que o usuário reconhece (é a que ele leu na DM,
         // com a recomendação no fim). Sem entrega, mostra a do canal.
@@ -241,6 +257,17 @@ export class TipsService {
       page,
       perPage,
     };
+  }
+
+  // Consultivo igual ao da aposta: falha aqui não pode derrubar a lista de
+  // tips, então erro vira cache vazio e as tips saem sem horário.
+  private async findEventCandidates(): Promise<CandidateEvent[]> {
+    try {
+      return await this.sportEventRepository.findCandidates(new Date());
+    } catch (error) {
+      console.warn('[TIP_EVENT] result=error', (error as Error).message);
+      return [];
+    }
   }
 
   async recordTip(data: RecordTipData) {
@@ -309,4 +336,21 @@ function computeStake(
   const limit = extractLimitFromText(text);
   if (limit !== null) stake = Math.min(stake, limit);
   return Number.isFinite(stake) && stake > 0 ? Number(stake.toFixed(2)) : null;
+}
+
+// Mesmo casamento que a aposta faz na hora de planilhar, só que aqui é só pra
+// exibir: a tip ainda não virou aposta, e o horário é o que decide se dá tempo
+// de entrar. Sem match confiável devolve null — data errada é pior que nenhuma.
+function resolveEventStartAt(
+  game: string | null,
+  market: string | null,
+  sport: string | null,
+  candidatos: CandidateEvent[],
+): Date | null {
+  if (!game || !candidatos.length) return null;
+  try {
+    return matchEvent(game, market ?? '', candidatos, sport ?? undefined)?.startAt ?? null;
+  } catch {
+    return null;
+  }
 }
