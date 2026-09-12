@@ -265,3 +265,59 @@ describe('matchEvent', () => {
     expect(match!.confidence).toBeLessThanOrEqual(1);
   });
 });
+
+// O canal troca por " x " tambem o hifen de dentro do nome do time, entao o
+// confronto chega com um pedaco a mais e nao da pra saber pelo texto de que
+// lado estava o hifen. Casos vistos em producao.
+describe('confronto com pedaco a mais (hifen virou " x ")', () => {
+  const CANDIDATOS_HIFEN: CandidateEvent[] = [
+    evento('10', 'Brest', 'Paris Saint-Germain', '2026-09-13T19:00:00Z', {
+      awayShort: 'PSG',
+    }),
+    evento('11', 'Coritiba', 'Athletico Paranaense', '2026-09-14T19:00:00Z', {
+      awayShort: 'Athletico-PR',
+    }),
+    evento('12', 'Athletico Paranaense', 'Coritiba', '2026-09-20T19:00:00Z', {
+      homeShort: 'Athletico-PR',
+    }),
+    evento('13', 'RB Leipzig', 'Hamburger SV', '2026-09-13T16:30:00Z'),
+    evento('14', 'Bayern Munchen', 'SV Elversberg', '2026-09-13T18:30:00Z', {
+      awayShort: 'Elversberg',
+    }),
+  ];
+
+  it('hifen no time de fora', () => {
+    expect(
+      matchEvent('Brest x Paris St x Germain', '', CANDIDATOS_HIFEN)?.externalId,
+    ).toBe('10');
+    expect(
+      matchEvent('Coritiba x Athletico x PR', '', CANDIDATOS_HIFEN)?.externalId,
+    ).toBe('11');
+  });
+
+  // A divisao certa nao e' sempre depois do primeiro pedaco: aqui o time com
+  // hifen e' o da casa, e quem escolhe e' a pontuacao.
+  it('hifen no time da casa', () => {
+    expect(
+      matchEvent('Athletico x PR x Coritiba', '', CANDIDATOS_HIFEN)?.externalId,
+    ).toBe('12');
+  });
+
+  // Aceitar mais de dois pedacos nao pode engolir a multipla: "A x B / C x D"
+  // tambem tem tres pedacos, e e' outra coisa.
+  it('nao le multipla como um confronto so', () => {
+    const game = 'RB Leipzig x Hamburger SV / Bayern de Munique x Elvesberg';
+    expect(extractConfrontos(game, '')).toEqual([
+      'RB Leipzig x Hamburger SV',
+      'Bayern de Munique x Elvesberg',
+    ]);
+    // Data da multipla e' a do jogo mais cedo.
+    expect(matchEvent(game, '', CANDIDATOS_HIFEN)?.startAt).toEqual(
+      new Date('2026-09-13T16:30:00Z'),
+    );
+  });
+
+  it('texto com pedacos demais nao vira confronto', () => {
+    expect(matchEvent('A x B x C x D x E', '', CANDIDATOS_HIFEN)).toBeNull();
+  });
+});
