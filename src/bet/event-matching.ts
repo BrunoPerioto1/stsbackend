@@ -164,13 +164,42 @@ export function similarity(a: string, b: string): number {
 // "Flamengo x Palmeiras", "Real Madrid vs Barcelona", "A versus B".
 const SEPARATOR = /\s+(?:x|vs\.?|versus)\s+/i;
 
-export function splitConfronto(
-  texto: string,
-): { home: string; away: string } | null {
-  const partes = texto.split(SEPARATOR);
-  if (partes.length !== 2) return null;
-  const [home, away] = partes.map((p) => p.trim());
-  return home && away ? { home, away } : null;
+export interface Lados {
+  home: string;
+  away: string;
+}
+
+// O canal escreve o confronto com " x " no meio, mas troca por " x " tambem o
+// hifen de dentro do nome do time: "Athletico-PR" chega como "Athletico x PR",
+// "Paris St-Germain" como "Paris St x Germain". Ai o texto tem tres pedacos e
+// nao da pra saber pelo texto onde e' a divisao de verdade — o hifen tanto
+// pode estar no time da casa quanto no de fora.
+//
+// Em vez de chutar, devolve TODAS as divisoes possiveis e deixa a pontuacao
+// escolher: quem casa dos dois lados vence. Teto de pedacos porque acima disso
+// o texto nao e' um confronto, e' outra coisa (lista, multipla sem separador).
+const MAX_PEDACOS = 4;
+
+export function splitCandidatos(texto: string): Lados[] {
+  const partes = texto
+    .split(SEPARATOR)
+    .map((parte) => parte.trim())
+    .filter(Boolean);
+  if (partes.length < 2 || partes.length > MAX_PEDACOS) return [];
+  const opcoes: Lados[] = [];
+  for (let corte = 1; corte < partes.length; corte++) {
+    // Junta com espaco porque e' assim que normalizeTeamName deixaria o nome
+    // com hifen de qualquer jeito ("athletico pr").
+    opcoes.push({
+      home: partes.slice(0, corte).join(' '),
+      away: partes.slice(corte).join(' '),
+    });
+  }
+  return opcoes;
+}
+
+export function splitConfronto(texto: string): Lados | null {
+  return splitCandidatos(texto)[0] ?? null;
 }
 
 // Multipla de varios confrontos: o game vira "Múltipla (2 jogos)" e os
@@ -190,12 +219,22 @@ function fragmentos(texto: string): string[] {
 }
 
 export function extractConfrontos(game: string, market: string): string[] {
-  const direto = splitConfronto(game);
-  if (direto) return [game];
-  for (const fonte of [game, market]) {
-    const achados = fragmentos(fonte).filter(
-      (fragmento) => splitConfronto(fragmento) !== null,
-    );
+  const fontes = [game, market ?? ''];
+  const porFragmento = (fonte: string) =>
+    fragmentos(fonte).filter((fragmento) => splitConfronto(fragmento) !== null);
+
+  // Multipla ANTES de tentar ler o texto inteiro como um confronto so. Desde
+  // que o split aceita mais de dois pedacos, "A x B / C x D" tambem "divide",
+  // e sem esta ordem viraria um confronto de "A" contra "B / C x D".
+  for (const fonte of fontes) {
+    if (!fonte.includes(' / ')) continue;
+    const achados = porFragmento(fonte);
+    if (achados.length) return achados;
+  }
+
+  if (splitConfronto(game)) return [game];
+  for (const fonte of fontes) {
+    const achados = porFragmento(fonte);
     if (achados.length) return achados;
   }
   return [];
@@ -368,8 +407,24 @@ function matchConfronto(
   confronto: string,
   preparo: Preparo,
 ): EventMatch | null {
-  const lados = splitConfronto(confronto);
-  if (!lados) return null;
+  const achados = splitCandidatos(confronto)
+    .map((lados) => matchLados(lados, preparo))
+    .filter((m): m is EventMatch => m !== null)
+    .sort((a, b) => b.confidence - a.confidence);
+
+  const melhor = achados[0];
+  if (!melhor) return null;
+
+  // Duas divisoes diferentes apontando pra jogos diferentes com confianca
+  // parecida e' chute: nao da pra saber qual pedaco era o hifen. Mesma regra
+  // do desempate entre eventos — data errada e' pior que nenhuma.
+  const outro = achados.find((m) => m.externalId !== melhor.externalId);
+  if (outro && melhor.confidence - outro.confidence < AMBIGUITY_MARGIN) return null;
+
+  return melhor;
+}
+
+function matchLados(lados: Lados, preparo: Preparo): EventMatch | null {
   const home = normalizeTeamName(lados.home);
   const away = normalizeTeamName(lados.away);
   if (!home || !away) return null;
