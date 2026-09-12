@@ -224,6 +224,71 @@ function teamKeys(
 // desempate normal.
 type TokenIndex = Map<string, Set<string>>;
 
+// Casar uma LISTA de textos contra o mesmo conjunto de candidatos repetia a
+// filtragem por esporte e a construcao do indice a cada chamada — com algumas
+// centenas de eventos isso e' a parte cara, e ela nao depende do texto. O cache
+// guarda esse preparo por esporte. So vale pro mesmo array de candidatos.
+export type MatchCache = Map<string, Preparo>;
+
+export function createMatchCache(): MatchCache {
+  return new Map();
+}
+
+// Pontuar TODO candidato custa Levenshtein contra cada evento da janela — com
+// algumas centenas de eventos e uma lista de tips, isso trava o request. Este
+// indice invertido reduz os candidatos aos que tem alguma chance antes de
+// pontuar. Duas chaves por evento:
+//   token  — "flamengo" acha "Flamengo RJ";
+//   prefixo de 3 — "fla" acha "Flamenco", grafia errada que nao compartilha
+//   token nenhum mas ainda passaria do limiar por similaridade.
+// Quem nao entra por nenhuma das duas so poderia casar por Levenshtein entre
+// nomes sem inicio em comum: abaixo do limiar de 0.8 na pratica.
+const PREFIXO = 3;
+
+interface Preparo {
+  elegiveis: CandidateEvent[];
+  index: TokenIndex;
+  porChave: Map<string, Set<CandidateEvent>>;
+}
+
+function chavesDeBusca(chaves: string[]): string[] {
+  const busca: string[] = [];
+  for (const chave of chaves) {
+    for (const token of chave.split(' ')) {
+      if (!token) continue;
+      busca.push(token);
+      if (token.length >= PREFIXO) busca.push(token.slice(0, PREFIXO));
+    }
+  }
+  return busca;
+}
+
+function buildPreparo(elegiveis: CandidateEvent[]): Preparo {
+  const porChave = new Map<string, Set<CandidateEvent>>();
+  for (const evento of elegiveis) {
+    const chaves = [
+      ...teamKeys(evento.homeName, evento.homeShort, evento.homeCode),
+      ...teamKeys(evento.awayName, evento.awayShort, evento.awayCode),
+    ];
+    for (const chave of chavesDeBusca(chaves)) {
+      if (!porChave.has(chave)) porChave.set(chave, new Set());
+      porChave.get(chave)!.add(evento);
+    }
+  }
+  return { elegiveis, index: buildTokenIndex(elegiveis), porChave };
+}
+
+// Uniao, nao intersecao: o evento entra se QUALQUER lado der sinal, e a
+// pontuacao depois e' que exige os dois lados baterem.
+function shortlist(home: string, away: string, preparo: Preparo): CandidateEvent[] {
+  const achados = new Set<CandidateEvent>();
+  for (const chave of chavesDeBusca([home, away])) {
+    const eventos = preparo.porChave.get(chave);
+    if (eventos) for (const evento of eventos) achados.add(evento);
+  }
+  return [...achados];
+}
+
 function teamId(evento: CandidateEvent, lado: 'home' | 'away'): string {
   return normalizeTeamName(lado === 'home' ? evento.homeName : evento.awayName);
 }
@@ -301,8 +366,7 @@ function scoreEvent(
 
 function matchConfronto(
   confronto: string,
-  candidatos: CandidateEvent[],
-  index: TokenIndex,
+  preparo: Preparo,
 ): EventMatch | null {
   const lados = splitConfronto(confronto);
   if (!lados) return null;
@@ -310,8 +374,8 @@ function matchConfronto(
   const away = normalizeTeamName(lados.away);
   if (!home || !away) return null;
 
-  const pontuados = candidatos
-    .map((evento) => ({ evento, score: scoreEvent(home, away, evento, index) }))
+  const pontuados = shortlist(home, away, preparo)
+    .map((evento) => ({ evento, score: scoreEvent(home, away, evento, preparo.index) }))
     .sort((a, b) => b.score - a.score);
 
   const melhor = pontuados[0];
@@ -343,22 +407,30 @@ export function matchEvent(
   market: string,
   candidatos: CandidateEvent[],
   sport?: string,
+  cache?: MatchCache,
 ): EventMatch | null {
   if (!game || !candidatos.length) return null;
 
   const esporte = SPORTS[normalizeSport(sport)];
-  const elegiveis = esporte
-    ? candidatos.filter((c) => normalizeSport(c.sport) === esporte)
-    : candidatos;
-  if (!elegiveis.length) return null;
+  // Chave por esporte porque e' o que muda o conjunto elegivel; '*' e' o caso
+  // sem esporte reconhecido, em que todo candidato entra.
+  const chave = esporte ?? '*';
+  let preparo = cache?.get(chave);
+  if (!preparo) {
+    const elegiveis = esporte
+      ? candidatos.filter((c) => normalizeSport(c.sport) === esporte)
+      : candidatos;
+    preparo = buildPreparo(elegiveis);
+    cache?.set(chave, preparo);
+  }
+  if (!preparo.elegiveis.length) return null;
 
   const confrontos = extractConfrontos(game, market ?? '');
   if (!confrontos.length) return null;
 
-  const index = buildTokenIndex(elegiveis);
   const casados: EventMatch[] = [];
   for (const confronto of confrontos) {
-    const match = matchConfronto(confronto, elegiveis, index);
+    const match = matchConfronto(confronto, preparo);
     if (!match) return null;
     casados.push(match);
   }
