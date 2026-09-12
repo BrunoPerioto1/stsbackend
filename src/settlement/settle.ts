@@ -57,6 +57,22 @@ function settleCondition(
         text: `${total} gols no jogo, ${label}`,
       };
     }
+    case 'TEAM_GOALS': {
+      const gols = condition.side === 'HOME' ? score.home : score.away;
+      const nome = condition.side === 'HOME' ? teams.home : teams.away;
+      const label = `${condition.operator === 'OVER' ? 'mais' : 'menos'} de ${condition.line}`;
+      if (gols === condition.line)
+        return {
+          outcome: 'VOID',
+          text: `${nome} fez ${gols}, exatamente a linha ${condition.line}`,
+        };
+      const over = gols > condition.line;
+      const won = condition.operator === 'OVER' ? over : !over;
+      return {
+        outcome: won ? 'WON' : 'LOST',
+        text: `${nome} fez ${gols} (${describeScore(score)}), ${label}`,
+      };
+    }
     case 'BOTH_TEAMS_SCORE': {
       const both = score.home > 0 && score.away > 0;
       return {

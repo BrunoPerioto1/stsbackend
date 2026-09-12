@@ -14,6 +14,9 @@ import { normalizeTeamName } from '../bet/event-matching';
 
 export type Condition =
   | { kind: 'TOTAL_GOALS'; operator: 'OVER' | 'UNDER'; line: number }
+  // Gols de UM time ("Atletico de Madrid mais de 1.5"). O placar traz os dois
+  // lados separados, entao isso resolve — desde que se saiba de qual lado.
+  | { kind: 'TEAM_GOALS'; side: 'HOME' | 'AWAY'; operator: 'OVER' | 'UNDER'; line: number } // prettier-ignore
   | { kind: 'BOTH_TEAMS_SCORE'; expected: boolean }
   | { kind: 'MATCH_RESULT'; pick: 'HOME' | 'AWAY' | 'DRAW' }
   | { kind: 'EXACT_SCORE'; home: number; away: number };
@@ -24,7 +27,10 @@ export type ParseFailure =
   | 'TEMPO_PARCIAL'
   | 'GOLS_DE_UM_TIME'
   | 'VARIOS_JOGOS'
-  | 'CONDICAO_ALTERNATIVA';
+  | 'CONDICAO_ALTERNATIVA'
+  // Duas condicoes no mesmo fragmento sem o separador que a gente sabe quebrar
+  // ("Ambas marcam e mais de 2.5"). Ver contaSinais.
+  | 'COMBINADA_NAO_SEPARADA';
 
 export type ParseResult =
   | { ok: true; conditions: Condition[] }
@@ -89,9 +95,18 @@ const SCORE_PAIR = /\b(\d{1,2})\s*[-x:]\s*(\d{1,2})\b/;
 const SCORE_PAIR_ALL = new RegExp(SCORE_PAIR, 'g');
 
 const DRAW = /\b(empate|draw)\b/i;
-// Rotulos que confirmam ser mercado de vencedor da partida.
+// Rotulos que confirmam ser mercado de vencedor da partida. "vitoria" entrou
+// depois: as casas escrevem tanto "Stuttgart - vencedor" quanto "Stuttgart -
+// vitoria", e sem ela a segunda forma era recusada como mercado desconhecido.
 const RESULT_LABEL =
-  /\b(resultado final|resultado da partida|resultado do jogo|vencedor|vence(r|ndo)?|ganha(r)?|1\s?x\s?2|\bml\b|money ?line|match ?winner|resultado)\b/i;
+  /\b(resultado final|resultado da partida|resultado do jogo|vencedor|vence(r|ndo)?|ganha(r)?|vit[oó]ria|1\s?x\s?2|\bml\b|money ?line|match ?winner|resultado)\b/i;
+
+// Margem de vitoria nao e' vitoria: "vencer por 2 gols de diferenca" perde no
+// 1x0 e a regra de resultado simples diria que ganhou. O OTHER_CATEGORY ja'
+// pegava "gol de vantagem" no singular; isto fecha as outras formas, que
+// passaram a alcancar o parser de resultado quando "vitoria" virou rotulo.
+const MARGEM =
+  /\b\d+\s*(\+|ou mais\s*)?gols?\s+(de\s+)?(diferen[çc]a|vantagem)\b/i;
 
 function toNumber(raw: string): number {
   return Number(raw.replace(',', '.'));
@@ -125,18 +140,38 @@ function parseTotalGoals(fragment: string, teams: Teams): ParseResult | null {
   // Sem a palavra "gol" em algum lugar pode ser linha de qualquer coisa.
   if (!/\bgo?ls?\b|\bgoals?\b|\bgol\b/i.test(fragment)) return null;
 
-  // "Flamengo mais de 1.5" e' gol DO TIME, nao do jogo. Sem saber de quem, a
-  // regra do total nao se aplica.
-  const body = corpoNormalizado(fragment);
-  if (
-    citationStrength(body, teams.home) > 0 ||
-    citationStrength(body, teams.away) > 0
-  )
+  // "Atletico de Madrid mais de 1.5" e' gol DO TIME, nao do jogo — e o placar
+  // resolve, porque traz os dois lados separados. So' que a mesma citacao pode
+  // ser a casa carimbando o confronto no fim do texto ("Mais de 2.5 gols -
+  // Flamengo x Vasco"), e ai a linha e' do jogo. O que separa os dois casos e'
+  // ONDE o time aparece: a selecao (o trecho antes do primeiro " - ") e' o que
+  // o usuario escolheu; o resto e' rotulo da casa. Time fora da selecao volta a
+  // ser recusa, que e' onde essa funcao ja' estava.
+  const selecao = fragment.split(/\s+[-–—]\s+/)[0];
+  const naSelecao = corpoNormalizado(selecao);
+  const home = citationStrength(naSelecao, teams.home);
+  const away = citationStrength(naSelecao, teams.away);
+  const citaFora =
+    citationStrength(corpoNormalizado(fragment), teams.home) > 0 ||
+    citationStrength(corpoNormalizado(fragment), teams.away) > 0;
+
+  let side: 'HOME' | 'AWAY' | null = null;
+  if (home || away) {
+    // Empate de forca e' os dois times citados: e' o confronto, nao um lado.
+    if (home === away)
+      return {
+        ok: false,
+        reason: 'GOLS_DE_UM_TIME',
+        detail: `linha de gols com os dois times citados: "${fragment}"`,
+      };
+    side = home > away ? 'HOME' : 'AWAY';
+  } else if (citaFora) {
     return {
       ok: false,
       reason: 'GOLS_DE_UM_TIME',
-      detail: `linha de gols atrelada a um time: "${fragment}"`,
+      detail: `time citado fora da selecao: "${fragment}"`,
     };
+  }
 
   const operator = long
     ? OVER_WORDS.test(long[1])
@@ -161,7 +196,14 @@ function parseTotalGoals(fragment: string, teams: Teams): ParseResult | null {
       detail: `linha asiatica ${line}`,
     };
 
-  return { ok: true, conditions: [{ kind: 'TOTAL_GOALS', operator, line }] };
+  return {
+    ok: true,
+    conditions: [
+      side
+        ? { kind: 'TEAM_GOALS', side, operator, line }
+        : { kind: 'TOTAL_GOALS', operator, line },
+    ],
+  };
 }
 
 function parseBothScore(fragment: string): ParseResult | null {
@@ -242,12 +284,43 @@ function parseMatchResult(fragment: string, teams: Teams): ParseResult | null {
   };
 }
 
+/**
+ * Quantos mercados diferentes o fragmento carrega.
+ *
+ * Os parsers rodam em cascata e o primeiro que reconhece devolve — o que
+ * significa que num texto com duas condicoes a segunda sumia sem deixar
+ * rastro. "Ambas marcam e mais de 2.5" no 1x1 virava GANHOU: ambas marcaram
+ * mesmo, mas o total foi 2 e a outra perna tinha perdido. Sugestao errada e'
+ * pior que sugestao nenhuma, entao dois sinais no mesmo fragmento viram recusa.
+ *
+ * A checagem da linha aqui e' de proposito mais frouxa que a do parseTotalGoals
+ * (que exige a palavra "gol"): ao lado de "ambas marcam", um "mais de 2.5"
+ * pelado e' perna, nao coincidencia.
+ */
+function contaSinais(fragment: string, teams: Teams): number {
+  const body = corpoNormalizado(fragment);
+  const citaTime =
+    citationStrength(body, teams.home) > 0 ||
+    citationStrength(body, teams.away) > 0;
+
+  const sinais = [
+    BOTH_SCORE.test(fragment),
+    TOTAL_GOALS.test(fragment) || SHORT_LINE.test(fragment),
+    EXACT_SCORE_LABEL.test(fragment),
+    // Resultado da partida so' conta como sinal proprio quando o texto diz que
+    // e' de resultado; time citado sozinho e' ambiguo demais pra somar.
+    (citaTime && RESULT_LABEL.test(fragment)) || DRAW.test(fragment),
+  ];
+  return sinais.filter(Boolean).length;
+}
+
 function parseFragment(fragment: string, teams: Teams): ParseResult {
   for (const [pattern, reason, label] of [
     [OTHER_CATEGORY, 'OUTRA_CATEGORIA', 'mercado de outra categoria'],
     [PARTIAL_TIME, 'TEMPO_PARCIAL', 'recorte de tempo'],
     [MULTI_GOALS, 'MERCADO_NAO_RECONHECIDO', 'multi-gols (faixa, nao placar)'],
     [HANDICAP, 'MERCADO_NAO_RECONHECIDO', 'handicap'],
+    [MARGEM, 'MERCADO_NAO_RECONHECIDO', 'margem de vitoria'],
     [DOUBLE_CHANCE, 'MERCADO_NAO_RECONHECIDO', 'dupla chance'],
     [CLEAN_SHEET, 'MERCADO_NAO_RECONHECIDO', 'combina clean sheet'],
     [MANY_MATCHES, 'VARIOS_JOGOS', 'agregado de varias partidas'],
@@ -255,6 +328,13 @@ function parseFragment(fragment: string, teams: Teams): ParseResult {
     const found = pattern.exec(fragment);
     if (found) return { ok: false, reason, detail: `${label}: "${found[0]}"` };
   }
+
+  if (contaSinais(fragment, teams) > 1)
+    return {
+      ok: false,
+      reason: 'COMBINADA_NAO_SEPARADA',
+      detail: `duas condicoes no mesmo trecho: "${fragment}"`,
+    };
 
   const parsed =
     parseExactScore(fragment) ??

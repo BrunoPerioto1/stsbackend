@@ -36,13 +36,112 @@ describe('total de gols', () => {
     expect(r.resultId).toBe(ResultIdEnum.CANCELED);
     expect(r.explanation).toContain('exatamente a linha');
   });
+});
 
-  it('linha atrelada a um time nao e do jogo', () => {
-    const r = liquida('Flamengo mais de 1.5 - Total de gols', 3, 0);
+describe('gols de um time', () => {
+  // O placar traz os dois lados separados, entao "Flamengo mais de 1.5" e'
+  // resolvivel: basta saber de que lado o time esta'.
+  it('conta so os gols do mandante citado', () => {
+    expect(liquida('Flamengo mais de 1.5 - Total de gols', 3, 0).resultId).toBe(
+      ResultIdEnum.WON,
+    );
+    expect(liquida('Flamengo mais de 1.5 - Total de gols', 1, 4).resultId).toBe(
+      ResultIdEnum.LOST,
+    );
+  });
+
+  it('conta so os gols do visitante citado', () => {
+    // 0x2: o jogo teve 2 gols, mas quem interessa e' o Palmeiras.
+    expect(
+      liquida('Palmeiras mais de 1.5 - Total de gols', 0, 2).resultId,
+    ).toBe(ResultIdEnum.WON);
+  });
+
+  it('explica de quem sao os gols', () => {
+    expect(liquida('Flamengo mais de 1.5 gols', 3, 0).explanation).toContain(
+      'Flamengo fez 3',
+    );
+  });
+
+  it('linha inteira na marca do time devolve a aposta', () => {
+    expect(liquida('Flamengo mais de 2 gols', 2, 0).resultId).toBe(
+      ResultIdEnum.CANCELED,
+    );
+  });
+
+  it('time fora da selecao e o confronto carimbado, nao a linha', () => {
+    // "Mais de 2.5 gols - Flamengo x Palmeiras": a casa colou o jogo no rotulo.
+    // Ler isso como gols do Flamengo inverteria o resultado, entao recusa.
+    const r = liquida('Mais de 2.5 gols - Flamengo x Palmeiras', 2, 1);
     expect(r.resultId).toBeNull();
     expect(r.reason).toBe('GOLS_DE_UM_TIME');
   });
 
+  it('os dois times na selecao nao dizem de quem e a linha', () => {
+    const r = liquida('Flamengo x Palmeiras mais de 2.5 gols', 2, 1);
+    expect(r.resultId).toBeNull();
+    expect(r.reason).toBe('GOLS_DE_UM_TIME');
+  });
+});
+
+describe('duas condicoes no mesmo trecho', () => {
+  // A cascata de parsers devolve no primeiro que reconhece. Sem esta trava, a
+  // segunda perna sumia e a aposta era liquidada pela metade.
+  it('NAO da ganhou quando a perna escondida perdeu', () => {
+    // 1x1: ambas marcaram (ganha), mas o total foi 2 e "mais de 2.5" perdeu.
+    const r = liquida('Ambas marcam e mais de 2.5', 1, 1);
+    expect(r.resultId).toBeNull();
+    expect(r.reason).toBe('COMBINADA_NAO_SEPARADA');
+  });
+
+  it('vale pra placar exato colado numa linha', () => {
+    const r = liquida('Resultado correto 1-1 e mais de 2.5', 1, 1);
+    expect(r.resultId).toBeNull();
+    expect(r.reason).toBe('COMBINADA_NAO_SEPARADA');
+  });
+
+  it('vale pra resultado colado numa linha de gols', () => {
+    const r = liquida(
+      'Flamengo e mais de 3.5 - Resultado final e total de gols',
+      4,
+      0,
+    );
+    expect(r.resultId).toBeNull();
+    expect(r.reason).toBe('COMBINADA_NAO_SEPARADA');
+  });
+
+  it('mercado de uma condicao so continua passando', () => {
+    expect(liquida('Ambas marcam', 1, 1).resultId).toBe(ResultIdEnum.WON);
+    expect(liquida('Mais de 2.5 - Total de gols', 2, 1).resultId).toBe(
+      ResultIdEnum.WON,
+    );
+    expect(liquida('Flamengo - Resultado final', 2, 1).resultId).toBe(
+      ResultIdEnum.WON,
+    );
+  });
+});
+
+describe('vitoria como rotulo de resultado', () => {
+  const TIMES_DE = { home: 'VfB Stuttgart', away: 'Bayern' };
+
+  it('reconhece "vitoria" do jeito que a casa escreve', () => {
+    expect(liquida('VfB Stuttgart - vitória', 2, 1, TIMES_DE).resultId).toBe(
+      ResultIdEnum.WON,
+    );
+    expect(liquida('VfB Stuttgart - vitória', 0, 3, TIMES_DE).resultId).toBe(
+      ResultIdEnum.LOST,
+    );
+  });
+
+  it('margem de vitoria nao e vitoria', () => {
+    // 1x0 e' vitoria, mas nao por 2 de diferenca: ler como resultado simples
+    // daria ganhou numa aposta perdida.
+    const r = liquida('Flamengo vitória por 2 gols de diferença', 1, 0);
+    expect(r.resultId).toBeNull();
+  });
+});
+
+describe('total de gols (continuacao)', () => {
   it('recusa linha asiatica', () => {
     expect(liquida('Mais de 2.25 gols', 3, 0).resultId).toBeNull();
   });
