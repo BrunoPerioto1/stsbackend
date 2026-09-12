@@ -164,3 +164,39 @@ describe('tips: horário do jogo', () => {
     expect(res.data[0].eventStartAt).toBeNull();
   });
 });
+
+// Regressao de producao: o horario do jogo era resolvido dentro do map sobre
+// TODAS as tips do historico, antes da paginacao. Casar nome custa Levenshtein
+// contra a janela inteira de eventos, entao um historico grande travava o
+// request e a tela ficava carregando pra sempre. O limite abaixo e' folgado de
+// proposito — nao mede performance, so denuncia a volta do custo por historico
+// (que era de dezenas de segundos neste mesmo cenario).
+describe('tips: custo da lista nao acompanha o historico', () => {
+  function eventos(n: number) {
+    return Array.from({ length: n }, (_, i) => ({
+      externalId: String(i),
+      provider: 'sofascore',
+      startAt: new Date('2026-09-02T21:30:00Z'),
+      sport: 'Football',
+      homeName: `Clube Casa ${i}`,
+      homeShort: null,
+      homeCode: null,
+      awayName: `Clube Fora ${i}`,
+      awayShort: null,
+      awayCode: null,
+    }));
+  }
+
+  it('400 tips no historico com 500 eventos em cache, devolvendo 20', async () => {
+    const rows = Array.from({ length: 400 }, (_, i) => tipRow(i + 1, 'Bet365'));
+    const service = makeService(rows, eventos(500));
+
+    const inicio = Date.now();
+    const res = await service.listForUser(1, { page: 1, perPage: 20 });
+    const levou = Date.now() - inicio;
+
+    expect(res.data).toHaveLength(20);
+    expect(res.total).toBe(400);
+    expect(levou).toBeLessThan(3000);
+  }, 30000);
+});

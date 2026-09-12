@@ -7,9 +7,9 @@ import { HouseService } from '../house/house.service';
 import { SportService } from '../sport/sport.service';
 import { matchIdByName } from '../common/utils/name-match.util';
 import { normalizeBetData } from '../bet/bet-normalization';
-import { matchEvent } from '../bet/event-matching';
+import { createMatchCache, matchEvent } from '../bet/event-matching';
 import { SportEventRepository } from '../infra/repository/sport-event.repository';
-import type { CandidateEvent } from '../bet/event-matching';
+import type { CandidateEvent, MatchCache } from '../bet/event-matching';
 import {
   extractCalcLinkFromEntities,
   extractGameFromText,
@@ -211,12 +211,9 @@ export class TipsService {
             : null),
         link: extractLinkFromText(row.text),
         calcLink: extractCalcLinkFromEntities(row.text, row.entities),
-        eventStartAt: resolveEventStartAt(
-          gameName,
-          marketName,
-          sportName,
-          candidatos,
-        ),
+        // Preenchido só pra página devolvida, lá embaixo: o casamento é caro
+        // demais pra rodar no histórico inteiro.
+        eventStartAt: null,
         isAviso: row.isAviso,
         // A cópia entregue é a que o usuário reconhece (é a que ele leu na DM,
         // com a recomendação no fim). Sem entrega, mostra a do canal.
@@ -264,9 +261,26 @@ export class TipsService {
     // num join só pra poder classificar cada linha, e é dessa classificação que
     // sai o filtro de aba. Cortar no banco exigiria repetir essa lógica em SQL.
     const start = (page - 1) * perPage;
+    const pagina = filtered.slice(start, start + perPage);
+
+    // O horário do jogo entra só agora, sobre a página já cortada. Casar nome
+    // custa índice de tokens + Levenshtein sobre centenas de eventos; rodar
+    // isso no histórico inteiro (o map acima) travava o request. O cache
+    // constrói o índice uma vez pra página toda.
+    const cache = createMatchCache();
+    const data = pagina.map((item) => ({
+      ...item,
+      eventStartAt: resolveEventStartAt(
+        item.game,
+        item.market,
+        item.sport,
+        candidatos,
+        cache,
+      ),
+    }));
 
     return {
-      data: filtered.slice(start, start + perPage),
+      data,
       summary,
       total: filtered.length,
       page,
@@ -361,10 +375,14 @@ function resolveEventStartAt(
   market: string | null,
   sport: string | null,
   candidatos: CandidateEvent[],
+  cache: MatchCache,
 ): Date | null {
   if (!game || !candidatos.length) return null;
   try {
-    return matchEvent(game, market ?? '', candidatos, sport ?? undefined)?.startAt ?? null;
+    return (
+      matchEvent(game, market ?? '', candidatos, sport ?? undefined, cache)
+        ?.startAt ?? null
+    );
   } catch {
     return null;
   }
