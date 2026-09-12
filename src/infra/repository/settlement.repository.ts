@@ -35,12 +35,15 @@ export class SettlementRepository {
    * cuja sugestao esta' desatualizada — ou seja, so' o que mudou desde a ultima
    * recomputacao.
    *
-   * A sugestao vale enquanto o placar que a gerou nao mudar: `computed_at >=
-   * fetched_at` significa que recalcular daria exatamente a mesma frase. Sem
-   * esse filtro, toda abertura da tela reprocessava o historico inteiro do
-   * usuario e reescrevia as mesmas linhas. Com ele, o `limit` vira lote: o que
-   * sobrou continua sendo candidato na proxima chamada, e o mais antigo vem
-   * primeiro pra fila drenar em ordem em vez de ficar preso atras dos recentes.
+   * A sugestao vale enquanto as duas entradas que a geraram nao mudarem: o
+   * placar (`event_results.fetched_at`, que o provider pode corrigir) e a
+   * propria aposta (`bets.updated_at`, quando o usuario arruma o texto do
+   * mercado). Se `computed_at` e' mais novo que ambos, recalcular daria
+   * exatamente a mesma frase. Sem esse filtro, toda abertura da tela
+   * reprocessava o historico inteiro do usuario e reescrevia as mesmas linhas.
+   * Com ele, o `limit` vira lote: o que sobrou continua sendo candidato na
+   * proxima chamada, e o mais antigo vem primeiro pra fila drenar em ordem em
+   * vez de ficar preso atras dos recentes.
    *
    * Sugestao recusada nao volta pra ca': ela ja' esta' invisivel na tela e o
    * upsert nao ressuscita `dismissed_at`, entao recalcular seria trabalho jogado
@@ -72,7 +75,10 @@ export class SettlementRepository {
           eb('s.betId', 'is', null),
           eb.and([
             eb('s.dismissedAt', 'is', null),
-            eb('s.computedAt', '<', eb.ref('eventResults.fetchedAt')),
+            eb.or([
+              eb('s.computedAt', '<', eb.ref('eventResults.fetchedAt')),
+              eb('s.computedAt', '<', eb.ref('bets.updatedAt')),
+            ]),
           ]),
         ]),
       )
