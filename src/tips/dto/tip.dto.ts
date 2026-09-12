@@ -44,6 +44,17 @@ export class TipFilterDto {
   @IsInt({ each: true })
   houseIds?: number[];
 
+  @ApiPropertyOptional({
+    description:
+      'IDs de esporte (múltipla seleção), separados por vírgula. O esporte da tip é casado por nome com o catálogo.',
+    type: String,
+    example: '1,2',
+  })
+  @IsOptional()
+  @Transform(toNumberArray)
+  @IsInt({ each: true })
+  sportIds?: number[];
+
   @ApiPropertyOptional({ type: Number, default: 1 })
   @IsOptional()
   @Type(() => Number)
@@ -119,6 +130,12 @@ export class TipItemDto {
 
   @ApiProperty({ nullable: true })
   sport!: string | null;
+
+  @ApiProperty({
+    nullable: true,
+    description: 'Esporte cadastrado que o texto da tip casou, quando reconhecido',
+  })
+  sportId!: number | null;
 
   @ApiProperty({ nullable: true })
   market!: string | null;

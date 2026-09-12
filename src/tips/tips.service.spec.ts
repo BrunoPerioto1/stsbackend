@@ -1,5 +1,10 @@
 import { TipsService } from './tips.service';
-import { matchHouseIdByName } from '../common/utils/house-match.util';
+import { matchIdByName } from '../common/utils/name-match.util';
+
+const SPORTS = [
+  { id: 1, name: 'Futebol', aliases: ['Soccer'] },
+  { id: 2, name: 'Basquete', aliases: ['NBA', 'Basketball'] },
+];
 
 const HOUSES = [
   { id: 3, name: 'Bet365', aliases: [] },
@@ -9,11 +14,11 @@ const HOUSES = [
 
 const NL = String.fromCharCode(10);
 
-function tipRow(id: number, houseLine: string) {
+function tipRow(id: number, houseLine: string, sportLine = 'Futebol') {
   return {
     id,
     createdAt: new Date('2026-09-01T12:00:00Z'),
-    text: [`🏠 ${houseLine}`, '🆚 Flamengo x Vasco', '⚽️ Futebol', '📌 Over 2.5', '🏷 1.90'].join(NL),
+    text: [`🏠 ${houseLine}`, '🆚 Flamengo x Vasco', `⚽️ ${sportLine}`, '📌 Over 2.5', '🏷 1.90'].join(NL),
     percent: 1,
     isAviso: false,
     betId: null,
@@ -30,6 +35,7 @@ function makeService(rows: any[], eventos: any[] = []) {
     getUserStake: jest.fn().mockResolvedValue(1000),
   };
   const houseService = { getAllHouses: jest.fn().mockResolvedValue(HOUSES) };
+  const sportService = { getAllSports: jest.fn().mockResolvedValue(SPORTS) };
   // Cache de eventos vazio por padrão: o horário do jogo é consultivo e a
   // maioria destes testes é sobre extração/filtro. Quem cobre o casamento em
   // si é event-matching.spec.
@@ -40,16 +46,17 @@ function makeService(rows: any[], eventos: any[] = []) {
     {} as any,
     {} as any,
     houseService as any,
+    sportService as any,
     sportEventRepository as any,
   );
 }
 
 describe('casamento de nome de casa', () => {
   it('reconhece alias cadastrado e nome com acento/caixa diferente', () => {
-    expect(matchHouseIdByName('Superbet Brasil', HOUSES)).toBe(7);
-    expect(matchHouseIdByName('betano', HOUSES)).toBe(9);
-    expect(matchHouseIdByName('Casa que não existe', HOUSES)).toBeNull();
-    expect(matchHouseIdByName(null, HOUSES)).toBeNull();
+    expect(matchIdByName('Superbet Brasil', HOUSES)).toBe(7);
+    expect(matchIdByName('betano', HOUSES)).toBe(9);
+    expect(matchIdByName('Casa que não existe', HOUSES)).toBeNull();
+    expect(matchIdByName(null, HOUSES)).toBeNull();
   });
 });
 
@@ -76,6 +83,44 @@ describe('tips: filtro de casas', () => {
     expect(semFiltro.data).toHaveLength(3);
     expect(comFiltro.summary.pending).toBe(3);
     expect(comFiltro.total).toBe(1);
+  });
+});
+
+describe('tips: filtro de esportes', () => {
+  const rows = [
+    tipRow(1, 'Bet365', 'Futebol'),
+    tipRow(2, 'Superbet Brasil', 'Basquete'),
+    tipRow(3, 'Betano', 'Soccer'),
+    tipRow(4, 'Bet365', 'Curling'),
+  ];
+
+  it('classifica o esporte da tip, inclusive por alias', async () => {
+    const service = makeService(rows);
+    const res = await service.listForUser(1, { page: 1, perPage: 30 });
+    const byId = new Map(res.data.map((t) => [t.id, t.sportId]));
+    expect(byId.get(1)).toBe(1);
+    expect(byId.get(2)).toBe(2);
+    expect(byId.get(3)).toBe(1);
+    // Esporte fora do catálogo fica sem classificação em vez de virar 'Outros'.
+    expect(byId.get(4)).toBeNull();
+  });
+
+  it('filtra por múltiplos esportes', async () => {
+    const service = makeService(rows);
+    const res = await service.listForUser(1, { page: 1, perPage: 30, sportIds: [1] });
+    expect(res.data.map((t) => t.id).sort()).toEqual([1, 3]);
+    expect(res.total).toBe(2);
+  });
+
+  it('combina com o filtro de casas', async () => {
+    const service = makeService(rows);
+    const res = await service.listForUser(1, {
+      page: 1,
+      perPage: 30,
+      sportIds: [1],
+      houseIds: [3],
+    });
+    expect(res.data.map((t) => t.id)).toEqual([1]);
   });
 });
 

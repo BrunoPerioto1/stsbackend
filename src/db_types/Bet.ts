@@ -2,6 +2,7 @@ import type { ColumnType, Insertable, Selectable, Updateable } from "kysely";
 import type { BettingHouseId } from "./BettingHouse";
 import type { UserId } from "./Users";
 import type { TipId } from "./Tips";
+import type { SportId } from "./Sports";
 
 export type BetId = number & { __type: "BetId" };
 
@@ -25,6 +26,9 @@ export default interface BetsTable {
   houseId: ColumnType<BettingHouseId | null, BettingHouseId | null, BettingHouseId | null>;
   market: ColumnType<string, string, string>;
   sport: ColumnType<string, string, string>;
+  // Classificação; o texto acima continua sendo o que o parser escreveu.
+  // null = não reconhecido, nunca um "Outros" que esconderia parser quebrado.
+  sportId: ColumnType<SportId | null, SportId | null | undefined, SportId | null>;
   profit: ColumnType<number | null, number | null, number | null>;
   cashoutValue: ColumnType<number | null, number | null, number | null>;
   userId: ColumnType<UserId | null, UserId | null | undefined, UserId | null>;

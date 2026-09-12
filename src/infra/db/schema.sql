@@ -236,3 +236,71 @@ ALTER TABLE bets ADD COLUMN IF NOT EXISTS event_match_confidence NUMERIC(4,3);
 
 -- The job rewrites event_start_at on the bets pointing at a rescheduled event.
 CREATE INDEX IF NOT EXISTS idx_bets_event ON bets (event_provider, event_external_id);
+
+-- === Sports =============================================================
+-- Antes disso o esporte era só o texto que o parser devolvia ("Futebol",
+-- "futebol", "Soccer"), o que impedia filtrar/agrupar com confiança. A tabela
+-- é o catálogo canônico; `aliases` guarda as variações (inclusive sem acento
+-- e em inglês) pra o casamento não depender da extensão unaccent.
+
+CREATE TABLE IF NOT EXISTS sports (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(60) NOT NULL UNIQUE,
+    aliases TEXT[] NOT NULL DEFAULT '{}',
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+DROP TRIGGER IF EXISTS update_sports_updated_at ON sports;
+CREATE TRIGGER update_sports_updated_at
+    BEFORE UPDATE ON sports
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+INSERT INTO sports (name, aliases) VALUES
+    ('Futebol',           ARRAY['Soccer', 'Football', 'Futbol']),
+    ('Basquete',          ARRAY['Basketball', 'NBA', 'Basquetebol']),
+    ('Tênis',             ARRAY['Tenis', 'Tennis']),
+    ('Vôlei',             ARRAY['Volei', 'Voleibol', 'Volleyball', 'Volley']),
+    ('Futebol Americano', ARRAY['NFL', 'American Football', 'Futebol americano']),
+    ('MMA',               ARRAY['UFC', 'Artes Marciais', 'Artes Marciais Mistas']),
+    ('Beisebol',          ARRAY['Baseball', 'MLB']),
+    ('Hóquei',            ARRAY['Hoquei', 'Hockey', 'NHL', 'Hóquei no Gelo', 'Hoquei no Gelo']),
+    ('E-Sports',          ARRAY['eSports', 'Esports', 'CS2', 'CS:GO', 'League of Legends', 'LoL', 'Dota 2', 'Valorant']),
+    ('Handebol',          ARRAY['Handball']),
+    ('Tênis de Mesa',     ARRAY['Tenis de Mesa', 'Table Tennis', 'Ping Pong']),
+    ('Automobilismo',     ARRAY['Formula 1', 'Fórmula 1', 'F1', 'Motorsport', 'Motovelocidade', 'MotoGP']),
+    ('Boxe',              ARRAY['Boxing']),
+    ('Sinuca',            ARRAY['Snooker', 'Bilhar', 'Pool']),
+    ('Golfe',             ARRAY['Golf']),
+    ('Rugby',             ARRAY['Rúgbi', 'Rugbi']),
+    ('Críquete',          ARRAY['Criquete', 'Cricket']),
+    ('Dardos',            ARRAY['Darts']),
+    -- O parser usa "Vários" quando a múltipla mistura esportes (ver
+    -- BET_EXTRACTION_RULES); sem a linha aqui essas apostas ficariam sem esporte.
+    ('Vários',            ARRAY['Varios', 'Misto', 'Multi'])
+ON CONFLICT (name) DO NOTHING;
+
+-- `sport` (texto) continua sendo o que o parser escreve e o que as telas
+-- mostram; `sport_id` é a classificação. NULL = não reconhecido — fica assim
+-- de propósito, em vez de cair num "Outros" que esconderia parser quebrado.
+ALTER TABLE bets ADD COLUMN IF NOT EXISTS sport_id INTEGER REFERENCES sports(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_bets_sport_id ON bets (sport_id);
+
+-- Backfill do histórico: casa o texto com name/aliases ignorando caixa,
+-- acento (via aliases sem acento), espaço e pontuação. Idempotente — só toca
+-- em linha ainda sem classificação.
+UPDATE bets b
+SET sport_id = s.id
+FROM sports s
+WHERE b.sport_id IS NULL
+  AND b.sport IS NOT NULL
+  AND upper(regexp_replace(b.sport, '[^a-zA-Z0-9]', '', 'g')) IN (
+        SELECT upper(regexp_replace(alias, '[^a-zA-Z0-9]', '', 'g'))
+        FROM unnest(ARRAY[s.name] || s.aliases) AS alias
+      );
+
+-- O que sobrou sem classificar (rode à mão depois do backfill; cada linha é
+-- um alias faltando na tabela):
+--   SELECT sport, count(*) FROM bets WHERE sport_id IS NULL GROUP BY sport ORDER BY 2 DESC;

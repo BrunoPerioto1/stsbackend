@@ -12,6 +12,7 @@ import { BetId, NewBet, UpdateBet } from "../../db_types/Bet";
 import { ResultId } from "../../db_types/Results";
 import { TipId } from "../../db_types/Tips";
 import { BettingHouseId } from "../../db_types/BettingHouse";
+import { SportId } from "../../db_types/Sports";
 import { NewBetResult } from "../../db_types/BetsResults";
 import type { Database } from "../db/database.types";
 import { endOfDay, startOfDay } from "../../common/utils/bet.utils";
@@ -31,6 +32,7 @@ export interface FilterGetBets {
   resultId?: ResultId;
   resultIds?: ResultId[];
   houseIds?: BettingHouseId[];
+  sportIds?: SportId[];
   q?: string;
   page?: number;
   perPage?: number;
@@ -214,7 +216,7 @@ export class BetRepository {
 }
 
   async findBets(filters: FilterGetBets) {
-    const { betId, userId, startDate, endDate, resultId, resultIds, houseIds, q, page, perPage } = filters;
+    const { betId, userId, startDate, endDate, resultId, resultIds, houseIds, sportIds, q, page, perPage } = filters;
 
     return this.dbRead
       .selectFrom("bets as b")
@@ -229,6 +231,7 @@ export class BetRepository {
         "b.houseId",
         "b.market",
         "b.sport",
+        "b.sportId",
         "bh.name as houseName",
         "b.profit",
         "b.cashoutValue",
@@ -244,6 +247,7 @@ export class BetRepository {
       .$if(hasItems(resultIds), (qb) => qb.where("br.resultId", "in", resultIds!))
       .$if(!hasItems(resultIds) && isNotEmpty(resultId), (qb) => qb.where("br.resultId", "=", resultId!))
       .$if(hasItems(houseIds), (qb) => qb.where("b.houseId", "in", houseIds!))
+      .$if(hasItems(sportIds), (qb) => qb.where("b.sportId", "in", sportIds!))
       .$if(isNotEmpty(q), (qb) =>
         qb.where((eb) =>
           eb.or([
@@ -334,7 +338,7 @@ export class BetRepository {
   }
 
   async countBets(filters: FilterGetBets) {
-    const { betId, userId, startDate, endDate, resultId, resultIds, houseIds, q } = filters;
+    const { betId, userId, startDate, endDate, resultId, resultIds, houseIds, sportIds, q } = filters;
 
     const result = await this.dbRead
       .selectFrom("bets as b")
@@ -349,6 +353,7 @@ export class BetRepository {
       .$if(hasItems(resultIds), (qb) => qb.where("br.resultId", "in", resultIds!))
       .$if(!hasItems(resultIds) && isNotEmpty(resultId), (qb) => qb.where("br.resultId", "=", resultId!))
       .$if(hasItems(houseIds), (qb) => qb.where("b.houseId", "in", houseIds!))
+      .$if(hasItems(sportIds), (qb) => qb.where("b.sportId", "in", sportIds!))
       .$if(isNotEmpty(q), (qb) =>
         qb.where((eb) =>
           eb.or([

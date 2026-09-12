@@ -251,6 +251,12 @@ export class BetItem {
   @ApiProperty({ description: 'Esporte da aposta (ex: "Futebol", "Tênis")' })
   sport!: string;
 
+  @ApiProperty({
+    nullable: true,
+    description: 'Esporte cadastrado que o texto casou; null quando não reconhecido',
+  })
+  sportId!: number | null;
+
   @ApiProperty({ description: 'Lucro ou prejuízo da aposta' })
   profit!: number | null;
 

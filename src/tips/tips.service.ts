@@ -4,7 +4,8 @@ import { UsersService } from '../users/users.service';
 import { BetService } from '../bet/bet.service';
 import { GrokService } from '../telegram/grok.service';
 import { HouseService } from '../house/house.service';
-import { matchHouseIdByName } from '../common/utils/house-match.util';
+import { SportService } from '../sport/sport.service';
+import { matchIdByName } from '../common/utils/name-match.util';
 import { normalizeBetData } from '../bet/bet-normalization';
 import { matchEvent } from '../bet/event-matching';
 import { SportEventRepository } from '../infra/repository/sport-event.repository';
@@ -59,6 +60,7 @@ export class TipsService {
     private readonly betService: BetService,
     private readonly grokService: GrokService,
     private readonly houseService: HouseService,
+    private readonly sportService: SportService,
     private readonly sportEventRepository: SportEventRepository,
   ) {}
 
@@ -139,12 +141,14 @@ export class TipsService {
       status,
       q,
       houseIds,
+      sportIds,
       page,
       perPage,
     }: {
       status?: TipStatus;
       q?: string;
       houseIds?: number[];
+      sportIds?: number[];
       page: number;
       perPage: number;
     },
@@ -153,13 +157,14 @@ export class TipsService {
     const minPercentFilter =
       user?.minPercentFilter != null ? Number(user.minPercentFilter) : null;
 
-    // As casas entram aqui porque a casa da tip só existe como texto da
-    // mensagem: o houseId sai do mesmo casamento de nome que o Planilhar usa,
-    // e é ele que o filtro de casas da tela compara.
-    const [rows, banca, houses, candidatos] = await Promise.all([
+    // Casas e esportes entram aqui porque nenhum dos dois existe como id na
+    // tip: os dois são texto da mensagem do canal. O id sai do mesmo
+    // casamento de nome que o Planilhar usa, e é ele que os filtros comparam.
+    const [rows, banca, houses, sports, candidatos] = await Promise.all([
       this.tipsRepository.findSummaryForUser(userId as UserId, minPercentFilter),
       this.usersService.getUserStake(userId),
       this.houseService.getAllHouses(),
+      this.sportService.getAllSports(),
       // Uma consulta só pra lista inteira: o matcher compara nome em memória,
       // então a mesma janela de eventos serve todas as tips.
       this.findEventCandidates(),
@@ -190,9 +195,10 @@ export class TipsService {
               : 'pending',
         betId: row.betId != null ? Number(row.betId) : null,
         house: houseName,
-        houseId: matchHouseIdByName(houseName, houses ?? []),
+        houseId: matchIdByName(houseName, houses ?? []),
         game: gameName,
         sport: sportName,
+        sportId: matchIdByName(sportName, sports ?? []),
         market: marketName,
         odd,
         percent: row.percent != null ? Number(row.percent) : null,
@@ -241,8 +247,17 @@ export class TipsService {
     const daCasa = (i: TipItemDto) =>
       !houseIds?.length || (i.houseId !== null && houseIds.includes(i.houseId));
 
+    const doEsporte = (i: TipItemDto) =>
+      !sportIds?.length || (i.sportId !== null && sportIds.includes(i.sportId));
+
     const filtered = items
-      .filter((i) => (!status || i.status === status) && bateBusca(i) && daCasa(i))
+      .filter(
+        (i) =>
+          (!status || i.status === status) &&
+          bateBusca(i) &&
+          daCasa(i) &&
+          doEsporte(i),
+      )
       .reverse();
 
     // Paginação em memória, não no SQL: a query já traz tips + apostas + caiu

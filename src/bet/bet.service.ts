@@ -19,6 +19,7 @@ import {
   BetRepository,
   type FilterGetBets,
 } from '../infra/repository/bet.repository';
+import { SportService } from '../sport/sport.service';
 import { SportEventRepository } from '../infra/repository/sport-event.repository';
 import { matchEvent } from './event-matching';
 import { calculateProfit } from '../common/utils/bet.utils';
@@ -33,6 +34,7 @@ export class BetService {
   constructor(
     private readonly betRepository: BetRepository,
     private readonly sportEventRepository: SportEventRepository,
+    private readonly sportService: SportService,
   ) {}
 
   // Descobre a data/hora real do jogo a partir do cache de eventos. Consultivo
@@ -108,6 +110,9 @@ export class BetService {
       odd: betData.odd,
       market: betData.market,
       sport: betData.sport,
+      // O texto continua sendo o que o parser devolveu; o id é a
+      // classificação, e fica null quando nada bate no catálogo.
+      sportId: await this.sportService.resolveSportId(betData.sport),
       userId: betData.userId as UserId,
       houseId:
         betData.houseId != null ? (betData.houseId as BettingHouseId) : null,
@@ -165,6 +170,12 @@ export class BetService {
       updateData.stake !== undefined || updateData.odd !== undefined;
 
     const patch: UpdateBet = { ...(updateData as UpdateBet) };
+
+    // Editar o esporte tem que reclassificar junto, senão o texto novo fica
+    // apontando pro sportId antigo e o filtro passa a mentir.
+    if (updateData.sport !== undefined) {
+      patch.sportId = await this.sportService.resolveSportId(updateData.sport);
+    }
 
     if (touchesProfitInput) {
       const current = await this.betRepository.findById(betId as BetId);

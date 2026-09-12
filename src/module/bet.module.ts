@@ -4,9 +4,10 @@ import { BetController } from '../bet/bet.controller';
 import { BetRepository } from '../infra/repository/bet.repository';
 import { SportEventRepository } from '../infra/repository/sport-event.repository';
 import { DatabaseModule } from '../infra/db/db.module';
+import { SportModule } from './sport.module';
 
 @Module({
-  imports: [DatabaseModule],
+  imports: [DatabaseModule, SportModule],
   providers: [BetService, BetRepository, SportEventRepository],
   controllers: [BetController],
   // SportEventRepository sai daqui porque o /tips também precisa do cache de

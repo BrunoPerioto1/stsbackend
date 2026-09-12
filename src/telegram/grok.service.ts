@@ -3,7 +3,7 @@ import { Injectable } from '@nestjs/common';
 import Groq from 'groq-sdk';
 import * as dotenv from 'dotenv';
 import { HouseService } from '../house/house.service';
-import { matchHouseIdByName } from '../common/utils/house-match.util';
+import { matchIdByName } from '../common/utils/name-match.util';
 dotenv.config();
 
 @Injectable()
@@ -59,7 +59,7 @@ export class GrokService {
     if (!rawHouseName) return null;
 
     const houses = await this.houseService.getAllHouses();
-    return matchHouseIdByName(rawHouseName, houses ?? []);
+    return matchIdByName(rawHouseName, houses ?? []);
   }
 
   async parseBetMessage(message: string, houseId: number | null): Promise<any> {

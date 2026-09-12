@@ -6,13 +6,14 @@ import { TipsService } from '../tips/tips.service';
 import { GrokService } from '../telegram/grok.service';
 import { BetModule } from './bet.module';
 import { HouseModule } from './house.module';
+import { SportModule } from './sport.module';
 import { UsersModule } from './users.module';
 
 @Module({
   // GrokService entra como provider local, não via TelegramModule: aquele
   // importa este, e importar de volta fecharia um ciclo. Só se usa daqui o
   // resolveHouseId, que é casamento de string com as casas cadastradas.
-  imports: [DatabaseModule, UsersModule, BetModule, HouseModule],
+  imports: [DatabaseModule, UsersModule, BetModule, HouseModule, SportModule],
   controllers: [TipsController],
   providers: [TipsRepository, TipsService, GrokService],
   exports: [TipsService],
