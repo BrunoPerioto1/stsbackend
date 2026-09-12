@@ -263,7 +263,9 @@ CREATE TABLE IF NOT EXISTS event_results (
 -- ninguem perceber, entao a decisao continua sendo humana.
 CREATE TABLE IF NOT EXISTS bet_settlement_suggestions (
     bet_id INTEGER PRIMARY KEY REFERENCES bets(id) ON DELETE CASCADE,
-    -- results(id): 1=WON, 2=LOST. NULL = nao deu pra decidir; `reason` explica.
+    -- results(id): 1=WON, 2=LOST, 3=CANCELED (linha inteira empatada numa
+    -- aposta simples devolve o stake). NULL = nao deu pra decidir; `reason`
+    -- explica.
     suggested_result_id INTEGER REFERENCES results(id),
     -- Codigo curto quando nao ha sugestao (MERCADO_NAO_RECONHECIDO,
     -- FORA_DE_ESCOPO, JOGO_NAO_FINALIZADO, SEM_PLACAR...).
@@ -279,6 +281,11 @@ CREATE TABLE IF NOT EXISTS bet_settlement_suggestions (
     dismissed_at TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_settlement_pending
-    ON bet_settlement_suggestions (suggested_result_id)
-    WHERE dismissed_at IS NULL;
+-- A tela pede sempre o mesmo subconjunto: sugestao decidida e nao recusada.
+-- Indexar `suggested_result_id` nao servia pra isso — sao 3 valores possiveis e
+-- nenhuma consulta filtra por um deles, so' por IS NOT NULL. Parcial por bet_id
+-- deixa o join com bets tocar so' as sugestoes vivas, sem varrer o historico.
+DROP INDEX IF EXISTS idx_settlement_pending;
+CREATE INDEX IF NOT EXISTS idx_settlement_live
+    ON bet_settlement_suggestions (bet_id)
+    WHERE dismissed_at IS NULL AND suggested_result_id IS NOT NULL;

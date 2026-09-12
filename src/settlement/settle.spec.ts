@@ -64,9 +64,7 @@ describe('ambas marcam', () => {
   });
 
   it('nao ganha no 0x0', () => {
-    expect(liquida('Não - Ambas marcam', 0, 0).resultId).toBe(
-      ResultIdEnum.WON,
-    );
+    expect(liquida('Não - Ambas marcam', 0, 0).resultId).toBe(ResultIdEnum.WON);
   });
 
   it('nao perde com os dois marcando', () => {
@@ -225,7 +223,10 @@ describe('recusas que protegem a planilha', () => {
     ['Flamengo - Resultado final 1º tempo', 'TEMPO_PARCIAL'],
     ['Menos de 2.5 gols nos 3 jogos', 'VARIOS_JOGOS'],
     ['Flamengo ou Empate - Resultado final', 'MERCADO_NAO_RECONHECIDO'],
-    ['Flamengo para vencer de zero - Resultado final', 'MERCADO_NAO_RECONHECIDO'],
+    [
+      'Flamengo para vencer de zero - Resultado final',
+      'MERCADO_NAO_RECONHECIDO',
+    ],
     ['Flamengo vencer sem tomar gols', 'MERCADO_NAO_RECONHECIDO'],
     ['Real Madrid 1-3 - Multi-gols', 'MERCADO_NAO_RECONHECIDO'],
     ['Flamengo -1.5 gols - Handicap', 'MERCADO_NAO_RECONHECIDO'],

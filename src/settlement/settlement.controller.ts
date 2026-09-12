@@ -58,10 +58,7 @@ export class SettlementController {
       'Único caminho pelo qual a liquidação automática vira resultado real. ' +
       'Usa o mesmo fluxo de finalização manual, com o mesmo cálculo de lucro.',
   })
-  confirm(
-    @Body() body: ConfirmSettlementDto,
-    @User('userId') userId: number,
-  ) {
+  confirm(@Body() body: ConfirmSettlementDto, @User('userId') userId: number) {
     return this.settlementService.confirm(
       body.betIds as BetId[],
       userId as UserId,

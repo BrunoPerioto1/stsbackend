@@ -83,6 +83,10 @@ const NEGATIVE = /\b(n[aã]o|no|sem)\b/i;
 
 const EXACT_SCORE_LABEL = /\b(resultado correto|placar exato|correct score)\b/i;
 const SCORE_PAIR = /\b(\d{1,2})\s*[-x:]\s*(\d{1,2})\b/;
+// Mesma expressao com /g, pra contar quantos placares o texto tem. Fica aqui em
+// cima pra nao reconstruir a RegExp em cada aposta avaliada. `lastIndex` nao
+// vaza entre chamadas porque String.match com /g sempre reinicia do zero.
+const SCORE_PAIR_ALL = new RegExp(SCORE_PAIR, 'g');
 
 const DRAW = /\b(empate|draw)\b/i;
 // Rotulos que confirmam ser mercado de vencedor da partida.
@@ -93,22 +97,20 @@ function toNumber(raw: string): number {
   return Number(raw.replace(',', '.'));
 }
 
-function mentionsTeam(text: string, team: string): boolean {
-  const target = normalizeTeamName(team);
-  if (!target) return false;
-  const body = ` ${normalizeTeamName(text)} `;
-  if (body.includes(` ${target} `)) return true;
-  const tokens = target.split(' ').filter((t) => t.length >= 4);
-  return tokens.some((token) => body.includes(` ${token} `));
+// Normalizar e' a parte caro daqui (NFD mais varias passadas de regex) e o
+// mesmo fragmento e' medido contra os dois times. Normaliza uma vez e passa o
+// corpo pronto pra `citationStrength`.
+function corpoNormalizado(text: string): string {
+  return ` ${normalizeTeamName(text)} `;
 }
 
 // Quao firmemente o texto cita o time. Graduado porque times de um mesmo jogo
 // dividem token: "Atletico Madrid" cita os dois lados de Real Madrid x
-// Atletico Madrid se "madrid" bastar.
-function citationStrength(text: string, team: string): number {
+// Atletico Madrid se "madrid" bastar. Zero significa "nao cita" — nao existe
+// citacao mais fraca que isso, entao `> 0` e' o teste de mencao.
+function citationStrength(body: string, team: string): number {
   const target = normalizeTeamName(team);
   if (!target) return 0;
-  const body = ` ${normalizeTeamName(text)} `;
   if (body.includes(` ${target} `)) return 1;
   const tokens = target.split(' ').filter((t) => t.length >= 4);
   if (!tokens.length) return 0;
@@ -125,7 +127,11 @@ function parseTotalGoals(fragment: string, teams: Teams): ParseResult | null {
 
   // "Flamengo mais de 1.5" e' gol DO TIME, nao do jogo. Sem saber de quem, a
   // regra do total nao se aplica.
-  if (mentionsTeam(fragment, teams.home) || mentionsTeam(fragment, teams.away))
+  const body = corpoNormalizado(fragment);
+  if (
+    citationStrength(body, teams.home) > 0 ||
+    citationStrength(body, teams.away) > 0
+  )
     return {
       ok: false,
       reason: 'GOLS_DE_UM_TIME',
@@ -171,7 +177,7 @@ function parseBothScore(fragment: string): ParseResult | null {
 
 function parseExactScore(fragment: string): ParseResult | null {
   if (!EXACT_SCORE_LABEL.test(fragment)) return null;
-  const pares = fragment.match(new RegExp(SCORE_PAIR, 'g')) ?? [];
+  const pares = fragment.match(SCORE_PAIR_ALL) ?? [];
   if (pares.length !== 1)
     return {
       ok: false,
@@ -188,8 +194,9 @@ function parseExactScore(fragment: string): ParseResult | null {
 }
 
 function parseMatchResult(fragment: string, teams: Teams): ParseResult | null {
-  const home = citationStrength(fragment, teams.home);
-  const away = citationStrength(fragment, teams.away);
+  const body = corpoNormalizado(fragment);
+  const home = citationStrength(body, teams.home);
+  const away = citationStrength(body, teams.away);
   const draw = DRAW.test(fragment);
 
   if (!home && !away && !draw) return null;
@@ -212,7 +219,7 @@ function parseMatchResult(fragment: string, teams: Teams): ParseResult | null {
         fragment.trim(),
       );
     if (vence?.groups) {
-      const trecho = vence.groups.winner;
+      const trecho = corpoNormalizado(vence.groups.winner);
       const h = citationStrength(trecho, teams.home);
       const a = citationStrength(trecho, teams.away);
       if (h !== a)
@@ -246,8 +253,7 @@ function parseFragment(fragment: string, teams: Teams): ParseResult {
     [MANY_MATCHES, 'VARIOS_JOGOS', 'agregado de varias partidas'],
   ] as const) {
     const found = pattern.exec(fragment);
-    if (found)
-      return { ok: false, reason, detail: `${label}: "${found[0]}"` };
+    if (found) return { ok: false, reason, detail: `${label}: "${found[0]}"` };
   }
 
   const parsed =

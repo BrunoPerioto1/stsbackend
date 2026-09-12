@@ -31,7 +31,20 @@ export class SettlementRepository {
   ) {}
 
   /**
-   * Apostas ainda pendentes cujo jogo ja' terminou e ja' tem placar coletado.
+   * Apostas ainda pendentes cujo jogo ja' terminou, ja' tem placar coletado e
+   * cuja sugestao esta' desatualizada — ou seja, so' o que mudou desde a ultima
+   * recomputacao.
+   *
+   * A sugestao vale enquanto o placar que a gerou nao mudar: `computed_at >=
+   * fetched_at` significa que recalcular daria exatamente a mesma frase. Sem
+   * esse filtro, toda abertura da tela reprocessava o historico inteiro do
+   * usuario e reescrevia as mesmas linhas. Com ele, o `limit` vira lote: o que
+   * sobrou continua sendo candidato na proxima chamada, e o mais antigo vem
+   * primeiro pra fila drenar em ordem em vez de ficar preso atras dos recentes.
+   *
+   * Sugestao recusada nao volta pra ca': ela ja' esta' invisivel na tela e o
+   * upsert nao ressuscita `dismissed_at`, entao recalcular seria trabalho jogado
+   * fora.
    *
    * Os nomes dos times vem de sport_events quando o cache ainda tem o jogo;
    * quando ja' expirou, caem pro texto do proprio `game`, que o avaliador
@@ -51,8 +64,18 @@ export class SettlementRepository {
           .onRef('sportEvents.provider', '=', 'bets.eventProvider')
           .onRef('sportEvents.externalId', '=', 'bets.eventExternalId'),
       )
+      .leftJoin('betSettlementSuggestions as s', 's.betId', 'bets.id')
       .where('bets.userId', '=', userId)
       .where('betResults.resultId', '=', ResultIdEnum.PENDING as ResultId)
+      .where((eb) =>
+        eb.or([
+          eb('s.betId', 'is', null),
+          eb.and([
+            eb('s.dismissedAt', 'is', null),
+            eb('s.computedAt', '<', eb.ref('eventResults.fetchedAt')),
+          ]),
+        ]),
+      )
       .select([
         'bets.id as id',
         'bets.game as game',
@@ -63,7 +86,7 @@ export class SettlementRepository {
         'eventResults.awayScore as awayScore',
         'eventResults.status as eventStatus',
       ])
-      .orderBy('bets.eventStartAt', 'desc')
+      .orderBy('bets.eventStartAt', 'asc')
       .limit(limit)
       .execute();
 
@@ -106,16 +129,28 @@ export class SettlementRepository {
       .execute();
   }
 
-  /** Sugestoes decididas e ainda nao recusadas, prontas pra tela. */
-  async findPendingSuggestions(userId: UserId) {
-    return this.dbRead
+  /**
+   * Sugestoes decididas e ainda nao recusadas, prontas pra tela.
+   *
+   * `betIds` restringe ao que o usuario marcou — e' o que a confirmacao usa pra
+   * nao trazer a lista inteira do banco so' pra descartar quase tudo em memoria.
+   */
+  async findPendingSuggestions(userId: UserId, betIds?: BetId[]) {
+    // `in ()` nao e' SQL valido; lista vazia nao tem o que buscar.
+    if (betIds && !betIds.length) return [];
+
+    let query = this.dbRead
       .selectFrom('betSettlementSuggestions as s')
       .innerJoin('bets', 'bets.id', 's.betId')
       .innerJoin('betResults', 'betResults.betId', 'bets.id')
       .where('bets.userId', '=', userId)
       .where('betResults.resultId', '=', ResultIdEnum.PENDING as ResultId)
       .where('s.dismissedAt', 'is', null)
-      .where('s.suggestedResultId', 'is not', null)
+      .where('s.suggestedResultId', 'is not', null);
+
+    if (betIds) query = query.where('s.betId', 'in', betIds);
+
+    return query
       .select([
         's.betId as betId',
         's.suggestedResultId as suggestedResultId',
@@ -133,19 +168,23 @@ export class SettlementRepository {
       .execute();
   }
 
-  async dismiss(betIds: BetId[], userId: UserId) {
-    if (!betIds.length) return;
-    await this.dbWrite
+  /** -> quantas sugestoes a recusa realmente atingiu (id de outro usuario nao conta). */
+  async dismiss(betIds: BetId[], userId: UserId): Promise<number> {
+    if (!betIds.length) return 0;
+    const result = await this.dbWrite
       .updateTable('betSettlementSuggestions')
       .set({ dismissedAt: new Date() })
       .where('betId', 'in', betIds)
-      .where(({ eb, selectFrom }) =>
+      // Cerca de dono: sem isso um id de outro usuario seria recusado aqui.
+      .where((eb) =>
         eb(
           'betId',
           'in',
-          selectFrom('bets').select('id').where('userId', '=', userId),
+          eb.selectFrom('bets').select('id').where('userId', '=', userId),
         ),
       )
-      .execute();
+      .executeTakeFirst();
+
+    return Number(result?.numUpdatedRows ?? 0);
   }
 }

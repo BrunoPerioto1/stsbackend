@@ -16,6 +16,11 @@ export class SettlementService {
     private readonly betService: BetService,
   ) {}
 
+  // Lote de uma recomputacao. O repositorio so' devolve aposta cuja sugestao
+  // esta' desatualizada, entao o que sobrar do lote continua candidato na
+  // chamada seguinte — nenhuma aposta fica presa fora da janela.
+  private static readonly LOTE = 200;
+
   /**
    * Recalcula as sugestoes das apostas pendentes com jogo ja' encerrado.
    *
@@ -23,7 +28,10 @@ export class SettlementService {
    * tela de conferencia mostra pro usuario confirmar.
    */
   async computeSuggestions(userId: UserId) {
-    const bets = await this.repository.findSettleable(userId);
+    const bets = await this.repository.findSettleable(
+      userId,
+      SettlementService.LOTE,
+    );
     const suggestions = bets.map((bet) => {
       // O placar vem do provider na ordem dele (mandante primeiro). Os nomes
       // saem de sport_events quando o cache ainda tem o jogo; senao, do texto
@@ -60,6 +68,9 @@ export class SettlementService {
       analyzed: bets.length,
       suggested: decididas.length,
       undecided: suggestions.length - decididas.length,
+      // Lote cheio: pode ter sobrado backlog. A tela chama de novo em vez de
+      // deixar aposta antiga sem sugestao pra sempre.
+      hasMore: bets.length === SettlementService.LOTE,
     };
   }
 
@@ -87,16 +98,19 @@ export class SettlementService {
    * transacao), agrupando por resultado sugerido.
    */
   async confirm(betIds: BetId[], userId: UserId) {
-    const pendentes = await this.repository.findPendingSuggestions(userId);
+    // O filtro vai no SQL: so' as sugestoes que o usuario marcou voltam do
+    // banco, em vez de trazer a lista toda pra descartar quase tudo aqui.
+    const pendentes = await this.repository.findPendingSuggestions(
+      userId,
+      betIds,
+    );
     const porResultado = new Map<ResultIdEnum, BetId[]>();
 
     for (const sugestao of pendentes) {
-      if (!betIds.includes(sugestao.betId)) continue;
       const resultId = sugestao.suggestedResultId as ResultIdEnum;
-      porResultado.set(resultId, [
-        ...(porResultado.get(resultId) ?? []),
-        sugestao.betId,
-      ]);
+      const grupo = porResultado.get(resultId);
+      if (grupo) grupo.push(sugestao.betId);
+      else porResultado.set(resultId, [sugestao.betId]);
     }
 
     let confirmadas = 0;
@@ -109,7 +123,9 @@ export class SettlementService {
   }
 
   async dismiss(betIds: BetId[], userId: UserId) {
-    await this.repository.dismiss(betIds, userId);
-    return { dismissed: betIds.length };
+    // Conta o que o UPDATE atingiu, nao o que veio no body: id de outro usuario
+    // e' filtrado no repositorio e nao pode aparecer como recusado.
+    const dismissed = await this.repository.dismiss(betIds, userId);
+    return { dismissed };
   }
 }

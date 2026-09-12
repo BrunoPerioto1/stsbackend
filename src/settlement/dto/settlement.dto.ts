@@ -31,6 +31,15 @@ export class SettlementSuggestionDto {
   odd!: number;
 
   @ApiProperty({
+    example: '2026-09-09T21:30:00.000Z',
+    nullable: true,
+    description:
+      'Horário do jogo, quando o matching achou o evento. A tela ordena por ' +
+      'ele para o usuário conferir na ordem em que os jogos acabaram.',
+  })
+  eventStartAt!: Date | null;
+
+  @ApiProperty({
     enum: ResultIdEnum,
     example: ResultIdEnum.WON,
     description: 'Resultado proposto. Só vira oficial após confirmação.',
