@@ -23,19 +23,24 @@ function tipRow(id: number, houseLine: string) {
   };
 }
 
-function makeService(rows: any[]) {
+function makeService(rows: any[], eventos: any[] = []) {
   const tipsRepository = { findSummaryForUser: jest.fn().mockResolvedValue(rows) };
   const usersService = {
     findById: jest.fn().mockResolvedValue({ minPercentFilter: null }),
     getUserStake: jest.fn().mockResolvedValue(1000),
   };
   const houseService = { getAllHouses: jest.fn().mockResolvedValue(HOUSES) };
+  // Cache de eventos vazio por padrão: o horário do jogo é consultivo e a
+  // maioria destes testes é sobre extração/filtro. Quem cobre o casamento em
+  // si é event-matching.spec.
+  const sportEventRepository = { findCandidates: jest.fn().mockResolvedValue(eventos) };
   return new TipsService(
     tipsRepository as any,
     usersService as any,
     {} as any,
     {} as any,
     houseService as any,
+    sportEventRepository as any,
   );
 }
 
@@ -71,5 +76,46 @@ describe('tips: filtro de casas', () => {
     expect(semFiltro.data).toHaveLength(3);
     expect(comFiltro.summary.pending).toBe(3);
     expect(comFiltro.total).toBe(1);
+  });
+});
+
+describe('tips: horário do jogo', () => {
+  const JOGO = new Date('2026-09-02T21:30:00Z');
+
+  function evento(home: string, away: string) {
+    return {
+      externalId: `${home}-${away}`,
+      provider: 'sofascore',
+      startAt: JOGO,
+      sport: 'Football',
+      homeName: home,
+      homeShort: null,
+      homeCode: null,
+      awayName: away,
+      awayShort: null,
+      awayCode: null,
+    };
+  }
+
+  it('devolve o início do jogo quando o confronto casa com o cache', async () => {
+    const service = makeService([tipRow(1, 'Bet365')], [evento('Flamengo', 'Vasco')]);
+    const res = await service.listForUser(1, { page: 1, perPage: 30 });
+    expect(res.data[0].eventStartAt).toEqual(JOGO);
+  });
+
+  it('fica null quando o cache não tem o confronto', async () => {
+    const service = makeService([tipRow(1, 'Bet365')], [evento('Santos', 'Corinthians')]);
+    const res = await service.listForUser(1, { page: 1, perPage: 30 });
+    expect(res.data[0].eventStartAt).toBeNull();
+  });
+
+  it('cache indisponível não derruba a lista', async () => {
+    const service = makeService([tipRow(1, 'Bet365')]);
+    (service as any).sportEventRepository.findCandidates = jest
+      .fn()
+      .mockRejectedValue(new Error('db fora'));
+    const res = await service.listForUser(1, { page: 1, perPage: 30 });
+    expect(res.data).toHaveLength(1);
+    expect(res.data[0].eventStartAt).toBeNull();
   });
 });

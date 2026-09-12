@@ -158,6 +158,13 @@ export class TipItemDto {
   })
   calcLink!: string | null;
 
+  @ApiProperty({
+    nullable: true,
+    description:
+      'Início do jogo, do cache de eventos do provider. Null quando o confronto não foi reconhecido com confiança.',
+  })
+  eventStartAt!: Date | null;
+
   @ApiProperty({ description: 'Mensagem de SOBRECARGA/AVISO' })
   isAviso!: boolean;
 
