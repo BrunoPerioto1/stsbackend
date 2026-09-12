@@ -7,7 +7,10 @@ import { HouseService } from '../house/house.service';
 import { matchHouseIdByName } from '../common/utils/house-match.util';
 import { normalizeBetData } from '../bet/bet-normalization';
 import { createMatchCache, matchEvent } from '../bet/event-matching';
-import { SportEventRepository } from '../infra/repository/sport-event.repository';
+import {
+  DIAS_ANTES_RETIDOS,
+  SportEventRepository,
+} from '../infra/repository/sport-event.repository';
 import type { CandidateEvent, MatchCache } from '../bet/event-matching';
 import {
   extractCalcLinkFromEntities,
@@ -277,7 +280,10 @@ export class TipsService {
   // tips, então erro vira cache vazio e as tips saem sem horário.
   private async findEventCandidates(): Promise<CandidateEvent[]> {
     try {
-      return await this.sportEventRepository.findCandidates(new Date());
+      return await this.sportEventRepository.findCandidates(
+        new Date(),
+        DIAS_ANTES_RETIDOS,
+      );
     } catch (error) {
       console.warn('[TIP_EVENT] result=error', (error as Error).message);
       return [];

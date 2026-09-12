@@ -1,4 +1,5 @@
 import { TipsService } from './tips.service';
+import { DIAS_ANTES_RETIDOS } from '../infra/repository/sport-event.repository';
 import { matchHouseIdByName } from '../common/utils/house-match.util';
 
 const HOUSES = [
@@ -154,4 +155,20 @@ describe('tips: custo da lista nao acompanha o historico', () => {
     expect(res.total).toBe(400);
     expect(levou).toBeLessThan(3000);
   }, 30000);
+});
+
+// A criacao de aposta e a lista de tips querem janelas diferentes: aposta olha
+// pra frente, a lista precisa do jogo que ja aconteceu pra nao mostrar "—" em
+// tip de ontem. O teto e' a retencao do job (2 dias), nao um numero solto.
+describe('tips: janela de busca de eventos', () => {
+  it('varre tudo que o job ainda guarda, nao so 1 dia pra tras', async () => {
+    const service = makeService([tipRow(1, 'Bet365')]);
+    const repo = (service as any).sportEventRepository;
+    await service.listForUser(1, { page: 1, perPage: 30 });
+
+    expect(repo.findCandidates).toHaveBeenCalledWith(
+      expect.any(Date),
+      DIAS_ANTES_RETIDOS,
+    );
+  });
 });

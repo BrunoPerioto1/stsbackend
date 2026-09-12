@@ -11,6 +11,13 @@ import type { CandidateEvent } from '../../bet/event-matching';
 const DIAS_ANTES = 1;
 const DIAS_DEPOIS = 30;
 
+// A LISTA de tips quer o contrario da criacao de aposta: mostrar tambem o
+// horario de jogo que ja aconteceu. O teto e' o proprio job, que apaga o evento
+// 2 dias depois do apito (RETENCAO_DIAS em jobs/sofascore/collect.py) — olhar
+// mais pra tras nao acha nada, porque a linha nao existe mais. Tip mais velha
+// que isso fica sem horario, e so persistindo na tip pra resolver.
+export const DIAS_ANTES_RETIDOS = 2;
+
 const DIA_MS = 24 * 60 * 60 * 1000;
 
 @Injectable()
@@ -27,7 +34,10 @@ export class SportEventRepository {
   // Sem filtro por esporte de proposito: a extracao escreve em portugues
   // ("Futebol") e o provider grava em ingles ("Football"). Hoje o cache so tem
   // futebol; quando tiver outro esporte, aqui entra um mapa dos dois nomes.
-  async findCandidates(referencia: Date): Promise<CandidateEvent[]> {
+  async findCandidates(
+    referencia: Date,
+    diasAntes: number = DIAS_ANTES,
+  ): Promise<CandidateEvent[]> {
     const rows = await this.dbRead
       .selectFrom('sportEvents')
       .select([
@@ -45,7 +55,7 @@ export class SportEventRepository {
       .where(
         'startAt',
         '>=',
-        new Date(referencia.getTime() - DIAS_ANTES * DIA_MS),
+        new Date(referencia.getTime() - diasAntes * DIA_MS),
       )
       .where(
         'startAt',
