@@ -63,3 +63,6 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 # Bytecode dos jobs em jobs/ — o .pyc chegou a ser commitado sem esta regra.
 __pycache__/
 *.pyc
+
+# venv local pra rodar os jobs na mao (o Actions usa setup-python)
+.venv/
