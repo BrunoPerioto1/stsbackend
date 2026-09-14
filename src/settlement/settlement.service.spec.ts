@@ -74,7 +74,7 @@ describe('computeSuggestions', () => {
     expect(repository.saveSuggestions).toHaveBeenCalledWith([
       expect.objectContaining({
         suggestedResultId: null,
-        reason: 'OUTRA_CATEGORIA',
+        reason: 'DADO_INDISPONIVEL',
       }),
     ]);
   });

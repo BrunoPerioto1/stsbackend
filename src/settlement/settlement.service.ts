@@ -1,11 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SettlementRepository } from '../infra/repository/settlement.repository';
 import { BetService } from '../bet/bet.service';
-import { splitConfronto } from '../bet/event-matching';
 import { UserId } from '../db_types/Users';
 import { BetId } from '../db_types/Bet';
 import { ResultIdEnum } from '../bet/dto/result-id.enum';
 import { settleBet } from './settle';
+import { decodeFacts } from './event-facts';
+import { normalize } from './market-parser';
+import { splitConfronto } from '../bet/event-matching';
 
 @Injectable()
 export class SettlementService {
@@ -46,7 +48,16 @@ export class SettlementService {
           ? { home: bet.homeScore, away: bet.awayScore }
           : null;
 
-      const settlement = settleBet(bet.market, teams, score, bet.eventStatus);
+      const football = (sport: string | null) => ['futebol', 'football', 'soccer'].includes(normalize(sport ?? ''));
+      const settlement = settleBet(bet.market, teams, score, bet.eventStatus, {
+        ...decodeFacts(bet.facts),
+        sport: bet.sport == null && bet.eventSport == null
+          ? 'football'
+          : (bet.sport == null || football(bet.sport)) && (bet.eventSport == null || football(bet.eventSport))
+            ? 'football'
+            : null,
+        scoreScope: bet.scoreScope == null || bet.scoreScope === 'REGULATION' ? 'REGULATION' : 'UNKNOWN',
+      });
       return {
         betId: bet.id,
         suggestedResultId: settlement.resultId,
@@ -88,6 +99,10 @@ export class SettlementService {
       homeScore: row.homeScore,
       awayScore: row.awayScore,
     }));
+  }
+
+  async listReview(userId: UserId) {
+    return this.repository.findPendingSuggestions(userId, undefined, true);
   }
 
   /**

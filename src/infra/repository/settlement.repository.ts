@@ -9,6 +9,7 @@ import { BetId } from '../../db_types/Bet';
 import { UserId } from '../../db_types/Users';
 import { ResultId } from '../../db_types/Results';
 import { ResultIdEnum } from '../../bet/dto/result-id.enum';
+import { ENGINE_VERSION } from '../../settlement/settle';
 
 export interface SettleableBet {
   id: BetId;
@@ -19,6 +20,10 @@ export interface SettleableBet {
   homeScore: number | null;
   awayScore: number | null;
   eventStatus: string | null;
+  sport: string | null;
+  eventSport: string | null;
+  scoreScope: string | null;
+  facts: unknown;
 }
 
 @Injectable()
@@ -68,6 +73,11 @@ export class SettlementRepository {
           .onRef('sportEvents.externalId', '=', 'bets.eventExternalId'),
       )
       .leftJoin('betSettlementSuggestions as s', 's.betId', 'bets.id')
+      .leftJoin('eventFacts as f', (join) => join
+        .onRef('f.provider', '=', 'eventResults.provider')
+        .onRef('f.externalId', '=', 'eventResults.externalId')
+        .onRef('f.fetchedAt', '=', 'eventResults.fetchedAt')
+        .on('f.formatVersion', '=', 1))
       .where('bets.userId', '=', userId)
       .where('betResults.resultId', '=', ResultIdEnum.PENDING as ResultId)
       .where((eb) =>
@@ -76,6 +86,8 @@ export class SettlementRepository {
           eb.and([
             eb('s.dismissedAt', 'is', null),
             eb.or([
+              eb('s.engineVersion', 'is', null),
+              eb('s.engineVersion', '!=', ENGINE_VERSION),
               eb('s.computedAt', '<', eb.ref('eventResults.fetchedAt')),
               eb('s.computedAt', '<', eb.ref('bets.updatedAt')),
             ]),
@@ -86,8 +98,12 @@ export class SettlementRepository {
         'bets.id as id',
         'bets.game as game',
         'bets.market as market',
-        'sportEvents.homeName as homeName',
-        'sportEvents.awayName as awayName',
+        'eventResults.homeName as homeName',
+        'eventResults.awayName as awayName',
+        'bets.sport as sport',
+        'eventResults.sport as eventSport',
+        'eventResults.scoreScope as scoreScope',
+        'f.dataJson as facts',
         'eventResults.homeScore as homeScore',
         'eventResults.awayScore as awayScore',
         'eventResults.status as eventStatus',
@@ -116,6 +132,7 @@ export class SettlementRepository {
         suggestions.map((s) => ({
           ...s,
           computedAt: new Date(),
+          engineVersion: ENGINE_VERSION,
           dismissedAt: null,
         })),
       )
@@ -130,6 +147,7 @@ export class SettlementRepository {
           homeScore: eb.ref('excluded.homeScore'),
           awayScore: eb.ref('excluded.awayScore'),
           computedAt: eb.ref('excluded.computedAt'),
+          engineVersion: eb.ref('excluded.engineVersion'),
         })),
       )
       .execute();
@@ -141,7 +159,7 @@ export class SettlementRepository {
    * `betIds` restringe ao que o usuario marcou — e' o que a confirmacao usa pra
    * nao trazer a lista inteira do banco so' pra descartar quase tudo em memoria.
    */
-  async findPendingSuggestions(userId: UserId, betIds?: BetId[]) {
+  async findPendingSuggestions(userId: UserId, betIds?: BetId[], review = false) {
     // `in ()` nao e' SQL valido; lista vazia nao tem o que buscar.
     if (betIds && !betIds.length) return [];
 
@@ -149,10 +167,17 @@ export class SettlementRepository {
       .selectFrom('betSettlementSuggestions as s')
       .innerJoin('bets', 'bets.id', 's.betId')
       .innerJoin('betResults', 'betResults.betId', 'bets.id')
+      .innerJoin('eventResults as er', (join) => join
+        .onRef('er.provider', '=', 'bets.eventProvider')
+        .onRef('er.externalId', '=', 'bets.eventExternalId'))
       .where('bets.userId', '=', userId)
       .where('betResults.resultId', '=', ResultIdEnum.PENDING as ResultId)
       .where('s.dismissedAt', 'is', null)
-      .where('s.suggestedResultId', 'is not', null);
+      .where('s.engineVersion', '=', ENGINE_VERSION)
+      .whereRef('s.computedAt', '>=', 'bets.updatedAt')
+      .whereRef('s.computedAt', '>=', 'er.fetchedAt');
+
+    query = review ? query.where('s.suggestedResultId', 'is', null) : query.where('s.suggestedResultId', 'is not', null);
 
     if (betIds) query = query.where('s.betId', 'in', betIds);
 
@@ -161,6 +186,7 @@ export class SettlementRepository {
         's.betId as betId',
         's.suggestedResultId as suggestedResultId',
         's.explanation as explanation',
+        's.reason as reason',
         's.homeScore as homeScore',
         's.awayScore as awayScore',
         's.computedAt as computedAt',

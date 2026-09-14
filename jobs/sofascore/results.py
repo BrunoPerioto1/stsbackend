@@ -17,7 +17,7 @@ ENDPOINT
 Verificado contra api.sofascore.com em 2026-09-09. Passa pelo Cloudflare pelo
 fingerprint TLS do wreq, mesma dependencia do collect.py.
 
-PLACAR: usamos `normaltime` (90min) com fallback pra `current`. Mercado de
+PLACAR: usamos somente `normaltime` (90min), sem fallback para `current`. Mercado de
 futebol liquida em tempo normal; `current` inclui prorrogacao e daria resultado
 errado em mata-mata.
 """
@@ -33,6 +33,8 @@ from typing import Any
 
 import psycopg
 from wreq import Client, Emulation
+from psycopg.types.json import Jsonb
+from settlement_adapter import normalize_event
 
 # ---------------- config ----------------
 EMULATION = "Chrome149"
@@ -130,13 +132,10 @@ def extrai_placar(evento: dict) -> tuple | None:
     if status not in STATUS_FINAL:
         return None
 
-    home = _gols(evento.get("homeScore"), ("normaltime", "current"))
-    away = _gols(evento.get("awayScore"), ("normaltime", "current"))
-    if status == "finished" and (home is None or away is None):
-        # Diz que acabou mas nao tem placar: nao inventa 0x0.
+    normalized = normalize_event(evento)
+    if normalized is None:
         return None
-
-    return (home or 0, away or 0, status)
+    return (normalized['home'], normalized['away'], normalized['status'])
 
 
 # Eventos de apostas ainda pendentes cujo jogo ja' devia ter acabado, e que
@@ -153,19 +152,32 @@ SELECT DISTINCT b.event_external_id
    AND b.event_external_id IS NOT NULL
    AND b.event_start_at < CURRENT_TIMESTAMP - %s::interval
    AND b.event_start_at > CURRENT_TIMESTAMP - %s::interval
-   AND (er.external_id IS NULL OR er.status <> 'finished')
+   AND (er.external_id IS NULL OR er.fetched_at < CURRENT_TIMESTAMP - INTERVAL '6 hours')
  ORDER BY b.event_external_id
  LIMIT %s
 """
 
 UPSERT = """
 INSERT INTO event_results (
-    provider, external_id, home_score, away_score, status, fetched_at
-) VALUES (%s,%s,%s,%s,%s, CURRENT_TIMESTAMP)
+    provider, external_id, home_score, away_score, status, score_scope,
+    sport, home_name, away_name, fetched_at
+) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s, CURRENT_TIMESTAMP)
 ON CONFLICT (provider, external_id) DO UPDATE SET
     home_score = EXCLUDED.home_score,
     away_score = EXCLUDED.away_score,
     status = EXCLUDED.status,
+    score_scope = EXCLUDED.score_scope,
+    sport = EXCLUDED.sport,
+    home_name = EXCLUDED.home_name,
+    away_name = EXCLUDED.away_name,
+    fetched_at = CURRENT_TIMESTAMP
+"""
+
+UPSERT_FACTS = """
+INSERT INTO event_facts (provider, external_id, data_json, format_version, fetched_at)
+VALUES (%s, %s, %s, 1, CURRENT_TIMESTAMP)
+ON CONFLICT (provider, external_id) DO UPDATE SET
+    data_json = EXCLUDED.data_json, format_version = 1,
     fetched_at = CURRENT_TIMESTAMP
 """
 
@@ -203,21 +215,26 @@ async def main() -> None:
 
         client = Client(emulation=getattr(Emulation, EMULATION))
         linhas: list[tuple] = []
+        facts: list[tuple] = []
         for external_id in ids:
             dados = await fetch(client, f"/event/{external_id}")
             await asyncio.sleep(random.uniform(DELAY_MIN, DELAY_MAX))
             evento = (dados or {}).get("event")
             if not evento:
                 continue
-            placar = extrai_placar(evento)
-            if placar is None:
+            result = normalize_event(evento)
+            if result is None:
                 continue
-            linhas.append((PROVIDER, external_id, *placar))
-            log(f"{external_id}: {placar[0]}x{placar[1]} ({placar[2]})")
+            linhas.append((PROVIDER, external_id, result['home'], result['away'],
+                           result['status'], result['score_scope'], result['sport'],
+                           result['home_name'], result['away_name']))
+            facts.append((PROVIDER, external_id, Jsonb(result['facts'])))
+            log(f"{external_id}: {result['home']}x{result['away']} ({result['status']})")
 
         if linhas:
             with conn.cursor() as cur:
                 cur.executemany(UPSERT, linhas)
+                cur.executemany(UPSERT_FACTS, facts)
                 conn.commit()
         log(f"{len(linhas)} placares gravados de {len(ids)} eventos")
 

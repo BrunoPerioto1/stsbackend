@@ -8,8 +8,12 @@ export default interface EventResultsTable {
   provider: ColumnType<string, string, never>;
   externalId: ColumnType<string, string, never>;
   // Tempo normal (90min), nao o placar com prorrogacao.
-  homeScore: ColumnType<number, number, number>;
-  awayScore: ColumnType<number, number, number>;
+  homeScore: ColumnType<number | null, number | null, number | null>;
+  awayScore: ColumnType<number | null, number | null, number | null>;
+  scoreScope: ColumnType<string, string | undefined, string>;
+  sport: ColumnType<string | null, string | null | undefined, string | null>;
+  homeName: ColumnType<string | null, string | null | undefined, string | null>;
+  awayName: ColumnType<string | null, string | null | undefined, string | null>;
   status: ColumnType<string, string, string>;
   fetchedAt: ColumnType<Date, Date | undefined, Date>;
 }
