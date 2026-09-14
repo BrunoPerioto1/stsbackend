@@ -10,6 +10,7 @@ function makeService(
     settleable?: any[];
     pending?: any[];
     dismissed?: number;
+    queue?: any;
   } = {},
 ) {
   const repository = {
@@ -19,6 +20,9 @@ function makeService(
       .fn()
       .mockResolvedValue(overrides.pending ?? []),
     dismiss: jest.fn().mockResolvedValue(overrides.dismissed ?? 0),
+    queue: jest.fn().mockResolvedValue(
+      overrides.queue ?? { pending: 0, settleable: 0, suggestions: 0, undecided: 0 },
+    ),
   };
   const betService = { finalizeMany: jest.fn().mockResolvedValue(undefined) };
   const service = new SettlementService(repository as any, betService as any);
@@ -146,5 +150,29 @@ describe('dismiss', () => {
     expect(await service.dismiss([1, 2] as any, 10 as any)).toEqual({
       dismissed: 1,
     });
+  });
+});
+
+describe('queue', () => {
+  it('sinaliza lote restante quando ainda ha candidato', async () => {
+    const { service } = makeService({
+      queue: { pending: 40, settleable: 18, suggestions: 12, undecided: 3 },
+    });
+
+    await expect(service.queue(1 as any)).resolves.toEqual({
+      pending: 40,
+      settleable: 18,
+      suggestions: 12,
+      undecided: 3,
+      hasMore: true,
+    });
+  });
+
+  it('fila drenada nao oferece proximo lote', async () => {
+    const { service } = makeService({
+      queue: { pending: 5, settleable: 0, suggestions: 0, undecided: 2 },
+    });
+
+    await expect(service.queue(1 as any)).resolves.toMatchObject({ hasMore: false });
   });
 });

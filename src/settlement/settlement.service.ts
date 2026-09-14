@@ -85,6 +85,17 @@ export class SettlementService {
     };
   }
 
+  /** Contadores da fila, pra tela nao depender da resposta do ultimo compute. */
+  async queue(userId: UserId) {
+    const counts = await this.repository.queue(userId);
+    return {
+      ...counts,
+      // Sobrou candidato: a tela oferece "calcular proximo lote" em vez de dar
+      // a impressao de que nao ha mais nada esperando.
+      hasMore: counts.settleable > 0,
+    };
+  }
+
   async listSuggestions(userId: UserId) {
     const rows = await this.repository.findPendingSuggestions(userId);
     return rows.map((row) => ({

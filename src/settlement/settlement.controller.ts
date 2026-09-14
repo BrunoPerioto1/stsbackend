@@ -21,6 +21,7 @@ import { SettlementService } from './settlement.service';
 import { MARKET_REGISTRY } from './market-registry';
 import {
   ConfirmSettlementDto,
+  SettlementQueueDto,
   SettlementSuggestionDto,
 } from './dto/settlement.dto';
 
@@ -35,6 +36,19 @@ export class SettlementController {
   @ApiOperation({ summary: 'Capacidades, dados exigidos e limitações dos mercados' })
   support() {
     return MARKET_REGISTRY.map(({ parser, evaluator, ...support }) => support);
+  }
+
+  @Get('queue')
+  @ApiOperation({
+    summary: 'Contadores da fila de conferência',
+    description:
+      'Pendentes, quantas entrariam no próximo lote, quantas propostas ' +
+      'aguardam confirmação e quantas o bot não soube resolver. A tela usa ' +
+      'isso no load, sem depender da resposta do último compute.',
+  })
+  @ApiResponse({ status: HttpStatus.OK, type: SettlementQueueDto })
+  queue(@User('userId') userId: number) {
+    return this.settlementService.queue(userId as UserId);
   }
 
   @Get('review')

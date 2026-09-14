@@ -58,6 +58,99 @@ export class SettlementRepository {
    * quando ja' expirou, caem pro texto do proprio `game`, que o avaliador
    * consegue quebrar. Nao e' motivo pra deixar de liquidar.
    */
+  /**
+   * Contadores da fila. A tela precisa deles no load: hoje esses numeros so'
+   * existem na resposta do ultimo `compute`, entao um F5 apaga tanto o aviso de
+   * fila restante quanto o de aposta sem proposta.
+   *
+   * `undecided` sao as apostas que o bot analisou e nao soube resolver. Elas
+   * seguem pendentes e nunca entram na lista de propostas — sem esse numero,
+   * virariam silencio na tela.
+   */
+  async queue(userId: UserId): Promise<{
+    pending: number;
+    settleable: number;
+    suggestions: number;
+    undecided: number;
+  }> {
+    const [bets, suggestions] = await Promise.all([
+      this.dbRead
+        .selectFrom('bets')
+        .innerJoin('betResults', 'betResults.betId', 'bets.id')
+        // left join: aposta pendente sem placar coletado ainda conta em
+        // `pending`, so' nao entra em `settleable`.
+        .leftJoin('eventResults', (join) =>
+          join
+            .onRef('eventResults.provider', '=', 'bets.eventProvider')
+            .onRef('eventResults.externalId', '=', 'bets.eventExternalId'),
+        )
+        .leftJoin('betSettlementSuggestions as s', 's.betId', 'bets.id')
+        .where('bets.userId', '=', userId)
+        .where('betResults.resultId', '=', ResultIdEnum.PENDING as ResultId)
+        .select((eb) => [
+          eb.fn.countAll<string>().as('pending'),
+          eb.fn
+            .count<string>('bets.id')
+            // Mesmo filtro de findSettleable: o que entraria no proximo lote.
+            // Se um mudar, o outro tem que mudar junto.
+            .filterWhere((fb) =>
+              fb.and([
+                fb('eventResults.externalId', 'is not', null),
+                fb.or([
+                  fb('s.betId', 'is', null),
+                  fb.and([
+                    fb('s.dismissedAt', 'is', null),
+                    fb.or([
+                      fb('s.engineVersion', 'is', null),
+                      fb('s.engineVersion', '!=', ENGINE_VERSION),
+                      fb('s.computedAt', '<', fb.ref('eventResults.fetchedAt')),
+                      fb('s.computedAt', '<', fb.ref('bets.updatedAt')),
+                    ]),
+                  ]),
+                ]),
+              ]),
+            )
+            .as('settleable'),
+        ])
+        .executeTakeFirstOrThrow(),
+      this.dbRead
+        .selectFrom('betSettlementSuggestions as s')
+        .innerJoin('bets', 'bets.id', 's.betId')
+        .innerJoin('betResults', 'betResults.betId', 'bets.id')
+        .innerJoin('eventResults as er', (join) =>
+          join
+            .onRef('er.provider', '=', 'bets.eventProvider')
+            .onRef('er.externalId', '=', 'bets.eventExternalId'),
+        )
+        .where('bets.userId', '=', userId)
+        .where('betResults.resultId', '=', ResultIdEnum.PENDING as ResultId)
+        .where('s.dismissedAt', 'is', null)
+        .where('s.engineVersion', '=', ENGINE_VERSION)
+        // Mesma cerca de frescor de findPendingSuggestions: o contador tem que
+        // bater com a lista que a tela mostra, nao com o que ficou no banco.
+        .whereRef('s.computedAt', '>=', 'bets.updatedAt')
+        .whereRef('s.computedAt', '>=', 'er.fetchedAt')
+        .select((eb) => [
+          eb.fn
+            .count<string>('s.betId')
+            .filterWhere('s.suggestedResultId', 'is not', null)
+            .as('suggestions'),
+          eb.fn
+            .count<string>('s.betId')
+            .filterWhere('s.suggestedResultId', 'is', null)
+            .as('undecided'),
+        ])
+        .executeTakeFirstOrThrow(),
+    ]);
+
+    return {
+      pending: Number(bets.pending),
+      settleable: Number(bets.settleable),
+      suggestions: Number(suggestions.suggestions),
+      undecided: Number(suggestions.undecided),
+    };
+  }
+
   async findSettleable(userId: UserId, limit = 200): Promise<SettleableBet[]> {
     const rows = await this.dbRead
       .selectFrom('bets')

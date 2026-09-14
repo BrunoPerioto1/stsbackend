@@ -58,3 +58,33 @@ export class SettlementSuggestionDto {
   @ApiProperty({ example: 1, nullable: true })
   awayScore!: number | null;
 }
+
+export class SettlementQueueDto {
+  @ApiProperty({ example: 40, description: 'Apostas ainda pendentes do usuário.' })
+  pending!: number;
+
+  @ApiProperty({
+    example: 18,
+    description:
+      'Pendentes com placar coletado e sugestão desatualizada — o que entraria ' +
+      'no próximo compute.',
+  })
+  settleable!: number;
+
+  @ApiProperty({ example: 12, description: 'Propostas aguardando confirmação.' })
+  suggestions!: number;
+
+  @ApiProperty({
+    example: 3,
+    description:
+      'Apostas analisadas que o bot não soube resolver. Seguem pendentes para ' +
+      'resolução manual.',
+  })
+  undecided!: number;
+
+  @ApiProperty({
+    example: true,
+    description: 'Ainda há aposta fora do lote já calculado.',
+  })
+  hasMore!: boolean;
+}
