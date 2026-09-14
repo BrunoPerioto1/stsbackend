@@ -11,11 +11,21 @@ evento, sem paginar liga nenhuma. Isso tambem tira o limite de competicoes:
 funciona pra Libertadores, Conference League ou qualquer torneio que o usuario
 tenha apostado, nao so' pras ligas listadas no collect.py.
 
-ENDPOINT
-    GET /api/v1/event/{id}  ->  {"event": {... homeScore, awayScore, status}}
+ENDPOINTS
+    GET /api/v1/event/{id}             ->  {"event": {... homeScore, awayScore, status}}
+    GET /api/v1/event/{id}/statistics  ->  escanteios, chutes, faltas, cartoes
+    GET /api/v1/event/{id}/incidents   ->  gols em ordem, penaltis, vermelhos
+    GET /api/v1/event/{id}/lineups     ->  gols/assistencias/chutes por jogador
 
-Verificado contra api.sofascore.com em 2026-09-09. Passa pelo Cloudflare pelo
-fingerprint TLS do wreq, mesma dependencia do collect.py.
+O primeiro foi verificado contra api.sofascore.com em 2026-09-09. Os tres
+extras alimentam os mercados de estatistica (escanteio, chute, assistencia) e
+custam 3 GETs a mais por evento — desligue com FATOS=0 se bater rate limit. As
+chaves de cada payload estao mapeadas em settlement_adapter.py e precisam de
+uma rodada de conferencia contra resposta real: chave errada nao liquida
+errado, so' deixa o mercado sem proposta.
+
+Passa pelo Cloudflare pelo fingerprint TLS do wreq, mesma dependencia do
+collect.py.
 
 PLACAR: usamos somente `normaltime` (90min), sem fallback para `current`. Mercado de
 futebol liquida em tempo normal; `current` inclui prorrogacao e daria resultado
@@ -34,7 +44,7 @@ from typing import Any
 import psycopg
 from wreq import Client, Emulation
 from psycopg.types.json import Jsonb
-from settlement_adapter import normalize_event
+from settlement_adapter import SofascoreFactsCollector, UnverifiedFactsCollector, normalize_event
 
 # ---------------- config ----------------
 EMULATION = "Chrome149"
@@ -53,6 +63,9 @@ ATRASO_MINIMO_HORAS = 3
 # cancelado ou o provider perdeu, e o usuario resolve na mao.
 JANELA_MAXIMA_DIAS = 30
 MAX_EVENTOS_POR_RODADA = 300
+# Estatisticas/incidentes/escalacao: 3 GETs a mais por evento. FATOS=0 volta ao
+# comportamento antigo (so placar) sem mexer em codigo, se o provider apertar.
+COLETA_FATOS = (os.environ.get("FATOS") or "1").strip() != "0"
 
 HEADERS = {
     "Accept": "*/*",
@@ -214,6 +227,18 @@ async def main() -> None:
             return
 
         client = Client(emulation=getattr(Emulation, EMULATION))
+
+        async def busca(path: str) -> Any:
+            return await fetch(client, path)
+
+        async def pausa() -> None:
+            await asyncio.sleep(random.uniform(DELAY_MIN, DELAY_MAX))
+
+        # Mesmo cliente, mesmo retry, mesmo intervalo entre requests do placar:
+        # o coletor nao abre caminho paralelo pro provider.
+        coletor = SofascoreFactsCollector(busca, pausa, log) if COLETA_FATOS else UnverifiedFactsCollector()
+        log("coleta de estatisticas: " + ("ligada" if COLETA_FATOS else "desligada (FATOS=0)"))
+
         linhas: list[tuple] = []
         facts: list[tuple] = []
         for external_id in ids:
@@ -225,11 +250,20 @@ async def main() -> None:
             result = normalize_event(evento)
             if result is None:
                 continue
+            # So' vale buscar estatistica de jogo de futebol com placar fechado:
+            # adiado ou cancelado nao tem sumula, e seriam 3 requests jogados
+            # fora em cima do provider.
+            extras: dict = {}
+            if result['score_scope'] == 'REGULATION':
+                extras = await coletor.collect(external_id, result['home'] + result['away'])
+                result['facts'].update(extras)
+
             linhas.append((PROVIDER, external_id, result['home'], result['away'],
                            result['status'], result['score_scope'], result['sport'],
                            result['home_name'], result['away_name']))
             facts.append((PROVIDER, external_id, Jsonb(result['facts'])))
-            log(f"{external_id}: {result['home']}x{result['away']} ({result['status']})")
+            coletadas = "+".join(sorted(extras)) or "so placar"
+            log(f"{external_id}: {result['home']}x{result['away']} ({result['status']}) [{coletadas}]")
 
         if linhas:
             with conn.cursor() as cur:
@@ -237,6 +271,13 @@ async def main() -> None:
                 cur.executemany(UPSERT_FACTS, facts)
                 conn.commit()
         log(f"{len(linhas)} placares gravados de {len(ids)} eventos")
+
+        # Resumo pra conferir o mapa de chaves numa olhada: se um mercado nao
+        # esta' liquidando, o nome que falta no mapa esta' nesta linha.
+        desconhecidas = getattr(coletor, "desconhecidas", set())
+        if desconhecidas:
+            log(f"campos do provider fora do mapa ({len(desconhecidas)}): "
+                f"{', '.join(sorted(desconhecidas))}")
 
     m, s = divmod(int(time.time() - inicio), 60)
     log(f"fim em {m}m{s:02d}s, {requests_feitos} requests, {len(erros)} erros")
