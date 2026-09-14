@@ -62,7 +62,9 @@ ATRASO_MINIMO_HORAS = 3
 # Jogo velho demais nao volta a ser tentado: se nao finalizou ate' agora, foi
 # cancelado ou o provider perdeu, e o usuario resolve na mao.
 JANELA_MAXIMA_DIAS = 30
-MAX_EVENTOS_POR_RODADA = 300
+# Teto do lote. MAX_EVENTOS=10 faz uma rodada curta de conferencia sem
+# esperar o lote inteiro — util depois de mexer no mapa de chaves.
+MAX_EVENTOS_POR_RODADA = int((os.environ.get("MAX_EVENTOS") or "300").strip())
 # Estatisticas/incidentes/escalacao: 3 GETs a mais por evento. FATOS=0 volta ao
 # comportamento antigo (so placar) sem mexer em codigo, se o provider apertar.
 COLETA_FATOS = (os.environ.get("FATOS") or "1").strip() != "0"
