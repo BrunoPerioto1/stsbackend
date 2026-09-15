@@ -1,6 +1,7 @@
 import asyncio
 import unittest
 from settlement_adapter import (
+    normalize_card_points,
     SofascoreFactsCollector,
     UnverifiedFactsCollector,
     normalize_event,
@@ -93,14 +94,11 @@ class StatisticsTests(unittest.TestCase):
             {'statisticsItems': [item('cornerKicks', 7, 3)]}]}]})
         self.assertEqual(linhas, [])
 
-    def test_total_cards_only_when_red_is_present(self):
-        so_amarelo = normalize_statistics(stats(items=[item('yellowCards', 3, 2)]))
-        self.assertEqual([l['metric'] for l in so_amarelo], ['yellowCards'])
-
-        com_vermelho = normalize_statistics(stats(items=[item('yellowCards', 3, 2), item('redCards', 1, 0)]))
-        self.assertIn({'scope': 'REGULATION', 'metric': 'cards', 'home': 4, 'away': 2}, com_vermelho)
-        # O vermelho sozinho não vira métrica do motor, só entra na soma.
-        self.assertNotIn('redCards', [l['metric'] for l in com_vermelho])
+    def test_statistics_never_emit_total_cards(self):
+        # redCards some do payload quando é zero; total de cartões vem do feed
+        # de incidentes (normalize_card_points), nunca daqui.
+        linhas = normalize_statistics(stats(items=[item('yellowCards', 3, 2), item('redCards', 1, 0)]))
+        self.assertEqual([l['metric'] for l in linhas], ['yellowCards'])
 
     def test_garbage_payload(self):
         for payload in [None, {}, {'statistics': 'x'}, {'statistics': [{'period': 'AET'}]}]:
@@ -218,7 +216,10 @@ class CollectorTests(unittest.TestCase):
             return {'incidents': [gol(30)]} if path.endswith('/incidents') else None
 
         facts = asyncio.run(SofascoreFactsCollector(fetch).collect('1'))
-        self.assertEqual(list(facts), ['incidents'])
+        # teamStats aqui é só o cardPoints zerado: o feed completo prova que não
+        # houve cartão, mesmo com statistics e escalação fora do ar.
+        self.assertEqual(sorted(facts), ['incidents', 'teamStats'])
+        self.assertEqual({s['metric'] for s in facts['teamStats']}, {'cardPoints'})
 
 
 if __name__ == '__main__':
@@ -299,3 +300,63 @@ class MetricaAusenteTests(unittest.TestCase):
                                                 totalScoringAttempt=4)]}}
         chutes = [i for i in normalize_lineups(payload, 1)['items'] if i['metric'] == 'shots']
         self.assertEqual([i['value'] for i in chutes], [4])
+
+
+def cartao(time, classe, is_home=True, player_id=1, **extra):
+    return {'incidentType': 'card', 'incidentClass': classe, 'time': time, 'isHome': is_home,
+            'player': {'id': player_id, 'name': f'jogador {player_id}'}, 'rescinded': False, **extra}
+
+
+class CardPointsTests(unittest.TestCase):
+    """Regra da casa: amarelo 1, vermelho 2."""
+
+    def pontos(self, lances, escopo='REGULATION'):
+        linhas = normalize_card_points({'incidents': lances})
+        return next(((l['home'], l['away']) for l in linhas if l['scope'] == escopo), None)
+
+    def test_red_counts_two(self):
+        # Coritiba x Athletico (15235476): 3 amarelos + 1 vermelho em casa,
+        # 4 amarelos fora -> 5 x 4.
+        lances = [cartao(28, 'yellow', True, 1), cartao(45, 'yellow', True, 2), cartao(45, 'yellow', True, 3),
+                  cartao(45, 'red', True, 4), cartao(34, 'yellow', False, 5), cartao(43, 'yellow', False, 6),
+                  cartao(45, 'yellow', False, 7), cartao(90, 'yellow', False, 8)]
+        self.assertEqual(self.pontos(lances), (5, 4))
+        self.assertEqual(self.pontos(lances, 'FIRST_HALF'), (5, 3))
+        self.assertEqual(self.pontos(lances, 'SECOND_HALF'), (0, 1))
+
+    def test_second_yellow_is_one_plus_two(self):
+        self.assertEqual(self.pontos([cartao(30, 'yellow', True, 9), cartao(70, 'yellowRed', True, 9)]), (3, 0))
+
+    def test_zero_is_proven_by_the_feed(self):
+        self.assertEqual(self.pontos([gol(30)]), (0, 0))
+
+    def test_rescinded_card_does_not_count(self):
+        self.assertEqual(self.pontos([cartao(30, 'red', True, 1, rescinded=True), cartao(50, 'yellow', False, 2)]), (0, 1))
+
+    def test_extra_time_card_does_not_count(self):
+        self.assertEqual(self.pontos([cartao(105, 'red', True, 1), cartao(50, 'yellow', True, 2)]), (1, 0))
+
+    def test_card_without_player_makes_count_unknown(self):
+        # Banco ou técnico: não sabemos se a casa conta.
+        sem_jogador = {'incidentType': 'card', 'incidentClass': 'yellow', 'time': 60, 'isHome': True, 'manager': {'id': 3}}
+        self.assertEqual(normalize_card_points({'incidents': [cartao(30, 'yellow'), sem_jogador]}), [])
+
+    def test_unknown_class_makes_count_unknown(self):
+        self.assertEqual(normalize_card_points({'incidents': [cartao(30, 'orange')]}), [])
+
+    def test_second_yellow_registered_twice_is_ambiguous(self):
+        lances = [cartao(20, 'yellow', True, 9), cartao(60, 'yellow', True, 9), cartao(60, 'yellowRed', True, 9)]
+        self.assertEqual(normalize_card_points({'incidents': lances}), [])
+
+    def test_collector_adds_card_points_only_with_complete_feed(self):
+        async def completo(path):
+            return {'incidents': [gol(30), cartao(40, 'red', False, 2)]} if path.endswith('/incidents') else None
+
+        async def incompleto(path):
+            if path.endswith('/incidents'):
+                return {'incidents': [cartao(40, 'red', False, 2), {'incidentType': 'lanceNovo', 'time': 50, 'isHome': True}]}
+            return None
+
+        facts = asyncio.run(SofascoreFactsCollector(completo).collect('1'))
+        self.assertIn({'scope': 'REGULATION', 'metric': 'cardPoints', 'home': 0, 'away': 2}, facts['teamStats'])
+        self.assertNotIn('teamStats', asyncio.run(SofascoreFactsCollector(incompleto).collect('1')))

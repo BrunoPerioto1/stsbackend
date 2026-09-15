@@ -9,7 +9,7 @@ const teams={home:'Flamengo',away:'Palmeiras'};
 const context: SettlementContext={sport:'Futebol',scoreScope:'REGULATION',
   periods:{FIRST_HALF:{home:1,away:0},SECOND_HALF:{home:1,away:1}},
   teamStats:[{scope:'REGULATION',metric:'corners',home:6,away:3},{scope:'FIRST_HALF',metric:'corners',home:2,away:1},
-    ...['shots','shotsOnTarget','fouls','offsides','saves','cards'].map(metric=>({scope:'REGULATION' as const,metric,home:3,away:2}))],
+    ...['shots','shotsOnTarget','fouls','offsides','saves','cardPoints'].map(metric=>({scope:'REGULATION' as const,metric,home:3,away:2}))],
   incidents:{complete:true,items:[
     {type:'GOAL',scope:'REGULATION',side:'HOME',sequence:1},
     {type:'GOAL',scope:'REGULATION',side:'AWAY',sequence:2},
@@ -50,7 +50,7 @@ describe('mercados por capacidades',()=>{
   it('cartões exigem regra da casa tanto para equipe quanto jogador',()=>{
     for (const market of ['Mais de 4.5 - Cartões','Pedro - Cartões do jogador']) {
       expect(run(market)).toMatchObject({resultId:null,reason:'REGRA_NAO_SUPORTADA'});
-      expect(run(market,{...context,cardCounting:'YELLOW_PLUS_RED'}).resultId).toBe(R.WON);
+      expect(run(market,{...context,cardCounting:'RED_COUNTS_TWO'}).resultId).toBe(R.WON);
     }
   });
   it.each(['Basquete','Tênis','Beisebol','Hóquei no Gelo','eSports',null])('esporte fora do escopo: %s',sport=>{

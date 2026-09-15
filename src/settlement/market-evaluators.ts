@@ -54,15 +54,21 @@ export function evaluatePeriods(c: Condition, ctx: EvaluationContext): Evaluatio
     return ft ? decided(result(first)===c.picks![0] && result(ft)===c.picks![1],`intervalo ${first.home}x${first.away}; final ${ft.home}x${ft.away}`) : unknown('placar de tempo normal indisponível');
   }
   if (!second) return unknown('placar do segundo tempo indisponível');
+  if (c.normalizedMarket==='VENCER_UM_DOS_TEMPOS') {
+    const venceu=result(first)===c.side || result(second)===c.side;
+    return decided(venceu===c.expected,`1T ${first.home}x${first.away}; 2T ${second.home}x${second.away}`);
+  }
   const met = c.side ? (c.side==='HOME' ? first.home>0 && second.home>0 : first.away>0 && second.away>0) : first.home+first.away>0 && second.home+second.away>0;
   return decided(met===c.expected,`1T ${first.home}x${first.away}; 2T ${second.home}x${second.away}`);
 }
 export function evaluateTeamStat(c: Condition, ctx: EvaluationContext): Evaluation {
   const rows = ctx.teamStats?.filter(s=>s.scope===c.scope && s.metric===c.metric) ?? [];
   if (rows.length!==1 || !validCount(rows[0].home) || !validCount(rows[0].away)) return unknown(`${c.metric} indisponível/duplicado em ${c.scope}`);
-  if (c.metric==='cards' && ctx.cardCounting!=='YELLOW_PLUS_RED') return unknown('contagem de cartões da casa não confirmada','REGRA_NAO_SUPORTADA');
+  if (c.metric==='cardPoints' && ctx.cardCounting!=='RED_COUNTS_TWO') return unknown('contagem de cartões da casa não confirmada','REGRA_NAO_SUPORTADA');
   const s=rows[0];
-  if (c.normalizedMarket==='EQUIPE_MAIS_ESCANTEIOS') return decided(result(s)===c.pick,`escanteios ${s.home}x${s.away}`);
+  // Empate na estatística perde pra quem apostou num time: "maior número de"
+  // tem a opção empate própria.
+  if (c.normalizedMarket.startsWith('EQUIPE_MAIS_')) return decided(result(s)===c.pick,`${METRICA_PT[c.metric!] ?? c.metric}${ESCOPO_PT[c.scope]}: ${ctx.teams.home} ${s.home} x ${s.away} ${ctx.teams.away}`);
   const value=c.side==='HOME' ? s.home : c.side==='AWAY' ? s.away : s.home+s.away;
   // A explicação é o que o usuário lê na conferência pra aceitar ou não: sem
   // dizer de quem é o número, "shots: 9" não deixava checar se o lado estava certo.
@@ -96,12 +102,12 @@ export function evaluatePlayer(c: Condition, ctx: EvaluationContext): Evaluation
     if (matching.length!==1 || !validCount(matching[0].value)) return unknown(`estatística ${metric} indisponível/duplicada`);
     value+=matching[0].value;
   }
-  if (c.metric==='cards' && ctx.cardCounting!=='YELLOW_PLUS_RED') return unknown('regra de cartões da casa não confirmada','REGRA_NAO_SUPORTADA');
+  if (c.metric==='cards' && ctx.cardCounting!=='RED_COUNTS_TWO') return unknown('regra de cartões da casa não confirmada','REGRA_NAO_SUPORTADA');
   // Nome como veio do provider ("José Manuel López"), não o normalizado da aposta.
   return compare(value,c,`${rows[0].name}: ${value} ${METRICA_PT[c.metric!] ?? c.metric}`);
 }
 const METRICA_PT: Record<string,string> = {
   corners:'escanteios', shots:'chutes', shotsOnTarget:'chutes a gol', fouls:'faltas', offsides:'impedimentos',
-  saves:'defesas', cards:'cartões', yellowCards:'cartões amarelos', goals:'gols', assists:'assistências', goalsAssists:'gols + assistências',
+  saves:'defesas', cards:'cartões', cardPoints:'cartões (vermelho vale 2)', yellowCards:'cartões amarelos', goals:'gols', assists:'assistências', goalsAssists:'gols + assistências',
 };
 const ESCOPO_PT: Record<Scope,string> = { REGULATION:'', FIRST_HALF:' no 1º tempo', SECOND_HALF:' no 2º tempo' };

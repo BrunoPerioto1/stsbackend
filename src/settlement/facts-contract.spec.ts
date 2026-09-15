@@ -22,6 +22,7 @@ const score = { home: 2, away: 1 };
 const context: SettlementContext = {
   sport: 'Football',
   scoreScope: 'REGULATION',
+  cardCounting: 'RED_COUNTS_TWO', // igual ao SettlementService
   ...decodeFacts(raw),
 };
 const run = (market: string) => settleBet(market, teams, score, 'finished', context);
@@ -66,7 +67,7 @@ describe('facts do coletor sofascore', () => {
     ['Palmeiras - Primeiro gol', R.LOST],
     ['Flamengo - Último gol', R.WON],
     ['Sim - Pênalti no jogo', R.WON],
-    ['Sim - Cartão vermelho', R.LOST],
+    ['Sim - Cartão vermelho', R.WON],
   ])('incidentes: %s', (market, esperado) => {
     expect(run(market).resultId).toBe(esperado);
   });
@@ -79,11 +80,13 @@ describe('facts do coletor sofascore', () => {
     expect(settlement.reason).toBe('DADO_INDISPONIVEL');
   });
 
-  it('total de cartoes nao sai sem a linha de vermelhos', () => {
-    // O jogo teve 2x3 amarelos e nenhum vermelho no payload. O coletor NAO
-    // soma assumindo zero vermelho, entao "total de cartoes" fica indefinido
-    // e so' o mercado de amarelos liquida.
-    expect(run('Mais de 4.5 - Cartões').reason).toBe('DADO_INDISPONIVEL');
-    expect(run('Mais de 4.5 - Cartões amarelos').resultId).toBe(R.WON);
+  it('cartoes pela regra da casa: vermelho vale 2', () => {
+    // Do feed: Flamengo 2 amarelos = 2; Palmeiras 2 amarelos + 1 vermelho = 4.
+    expect(run('Mais de 5.5 - Cartões').resultId).toBe(R.WON);
+    expect(run('Menos de 6.5 - Cartões').resultId).toBe(R.WON);
+    expect(run('Palmeiras - Maior número de cartões').resultId).toBe(R.WON);
+    expect(run('Palmeiras mais de 3.5 - Total de cartões').resultId).toBe(R.WON);
+    // Amarelos continuam vindo do statistics, sem o peso do vermelho.
+    expect(run('Mais de 3.5 - Cartões amarelos').resultId).toBe(R.WON);
   });
 });

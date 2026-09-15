@@ -52,6 +52,18 @@ Por isso `parseMarket` recusa, com `MERCADO_TRUNCADO`, todo texto com exatamente
 
 Além dos rótulos originais, o parser aceita a escrita do canal: `Marcar em qualquer momento`, `Marcar gol ou dar assistência`, `Chutes a gol`/`ao gol`/`no gol` sem "do jogador" (`Clay Holstad 1+ - Chutes a gol`) e o verbo grudado no nome (`Vitor Roque marca - Jogador para marcar`). Como "Chutes a gol" também é rótulo de mercado de time, participante que resolve para um dos times do confronto é recusado pelo parser de jogador. Nome ambíguo continua sem proposta: "Pedro" com Pedro Guilherme e Pedro Milans em campo não é adivinhado.
 
+## Cartões
+
+Regra da casa informada pelo usuário em 2026-09-15: **amarelo vale 1, vermelho vale 2**. Expulsão por segundo amarelo conta o primeiro amarelo (1) e a expulsão (2), 3 pro jogador. O `SettlementService` passa `cardCounting: 'RED_COUNTS_TWO'`; sem essa regra no contexto, mercado de cartão devolve `REGRA_NAO_SUPORTADA`.
+
+A contagem vem do feed de incidentes (`normalize_card_points`), e não de `statistics`: o provider omite `redCards` quando é zero, e só o feed completo prova que não houve vermelho. Cartão anulado pelo VAR (`rescinded`) não conta; cartão sem jogador (banco, técnico), classe desconhecida ou segundo amarelo registrado duas vezes deixam a contagem ambígua e nenhuma linha é gravada.
+
+A métrica chama `cardPoints`, e não `cards`, de propósito: `event_facts` de produção guardou `cards` na contagem antiga (amarelo + vermelho valendo 1) até 2026-09-15, e ler aquilo com a regra nova daria número errado até o job regravar o evento. Linha `cards` antiga é simplesmente ignorada. "Cartões amarelos" continua vindo de `statistics`, sem peso de vermelho.
+
+## Frases e siglas do canal
+
+`teamPick` tenta de novo sem sigla de estado e de clube (`Flamengo RJ`, `Bahia BA`, `EC Bahia`, `Atlético MG`), sempre só contra os dois times do confronto. Também são lidos: `Maior número de cartões/chutes ao gol/chutes/escanteios` (`EQUIPE_MAIS_*`, empate perde), `vence um dos tempos` com sim/não de qualquer lado do " - " (`VENCER_UM_DOS_TEMPOS`), `Ganhar sem sofrer gols`, `Próximo gol (Gol 1)`, `Ambas equipes marcam - Sim` e `X marca em ambos os tempos - Resultado da partida`. `rotulos-canal.spec.ts` cobre cada um com o texto real.
+
 ## API de inspeção
 
 `GET /settlement/support` expõe aliases, capacidades, confiança e estado de cada mercado. `GET /settlement/review` lista sugestões indefinidas para revisão manual.

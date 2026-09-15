@@ -57,6 +57,9 @@ export class SettlementService {
             ? 'football'
             : null,
         scoreScope: bet.scoreScope == null || bet.scoreScope === 'REGULATION' ? 'REGULATION' : 'UNKNOWN',
+        // Regra da casa informada pelo usuário em 2026-09-15: vermelho vale 2
+        // amarelos. O coletor já grava cardPoints nessa regra.
+        cardCounting: 'RED_COUNTS_TWO',
       });
       return {
         betId: bet.id,

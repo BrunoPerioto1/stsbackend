@@ -35,7 +35,8 @@ export interface SettlementContext extends Facts {
   sport: string | null;
   scoreScope: 'REGULATION' | 'EXTRA_TIME' | 'UNKNOWN';
   // Regra da casa resolvida externamente; nunca inferida do placar/provedor.
-  cardCounting?: 'YELLOW_PLUS_RED';
+  // RED_COUNTS_TWO: amarelo 1, vermelho 2 — regra da casa informada pelo usuário.
+  cardCounting?: 'RED_COUNTS_TWO';
 }
 export interface EvaluationContext extends SettlementContext { score: FinalScore | null; teams: Teams }
 export type Evaluation = { outcome: 'WON' | 'LOST' | 'VOID'; text: string } | { outcome: 'UNKNOWN'; reason: Reason; text: string };

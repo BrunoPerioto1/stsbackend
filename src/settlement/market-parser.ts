@@ -16,8 +16,17 @@ export function teamPick(text: string, teams: Teams): Side | null {
     const hm = h.split(' ').includes(name), am = a.split(' ').includes(name);
     if (hm !== am) return hm ? 'HOME' : 'AWAY';
   }
-  return null;
+  // O canal escreve "Flamengo RJ", "Bahia BA", "EC Bahia", "Atlético MG"; o
+  // provider, "Flamengo", "Bahia", "Atlético Mineiro". Tira sigla de estado e
+  // de clube e tenta de novo — só contra os dois times do confronto, então
+  // não tem como cair num terceiro time.
+  const semSigla = name.split(' ').filter((t) => !SIGLAS_DE_TIME.has(t)).join(' ');
+  return semSigla && semSigla !== name ? teamPick(semSigla, teams) : null;
 }
+const SIGLAS_DE_TIME = new Set([
+  'ac','al','am','ap','ba','ce','df','es','go','ma','mg','ms','mt','pa','pb','pe','pi','pr','rj','rn','ro','rr','rs','sc','se','sp','to',
+  'ec','sa','ae',
+]);
 export function resultPick(text: string, teams: Teams): SelectionPick | null {
   return /^(empate|draw|x)$/i.test(text.trim()) ? 'DRAW' : teamPick(text, teams);
 }
@@ -58,8 +67,9 @@ export function parseScoreMarket(text: string, teams: Teams): Condition | null {
     const m = /^(\d{1,2})\s*[-x:]\s*(\d{1,2})$/.exec(sel);
     return m ? c('RESULTADO_CORRETO', { home: +m[1], away: +m[2] }) : null;
   }
-  if (labels.both.test(label) || (!label && labels.both.test(sel))) {
-    const expected = label ? yesNo(sel) : true;
+  // Também na ordem invertida do canal: "Ambas equipes marcam - Sim".
+  if (labels.both.test(label) || (!label && labels.both.test(sel)) || (labels.both.test(sel) && yesNo(label) !== null)) {
+    const expected = labels.both.test(label) ? yesNo(sel) : label ? yesNo(label) : true;
     return expected === null ? null : c('AMBAS_MARCAM', { expected });
   }
   if (/^(dupla chance|chance dupla|double chance)$/.test(label) || ((!label || labels.result.test(label)) && / ou /.test(sel))) {
@@ -78,6 +88,10 @@ export function parseScoreMarket(text: string, teams: Teams): Condition | null {
   if (clean && (!label || labels.result.test(label))) {
     const side = teamPick(clean[1], teams);
     return side ? c(clean[2] ? 'VENCER_SEM_SOFRER' : 'CLEAN_SHEET', { side, expected: clean[3] !== 'nao' }) : null;
+  }
+  if (/^(?:ganhar|ganha|vencer|vence) sem (?:sofrer|tomar|levar) gols?$/.test(label)) {
+    const side = teamPick(sel, teams);
+    return side ? c('VENCER_SEM_SOFRER', { side, expected: true }) : null;
   }
   if (/^(clean sheet|sem sofrer gols)$/.test(label)) {
     const m = /^(.+?)(?:\s+(sim|nao))?$/.exec(sel), side = m && teamPick(m[1], teams);
@@ -109,11 +123,12 @@ export function parseScoreMarket(text: string, teams: Teams): Condition | null {
 
 export const statMetrics: Record<string, string> = {
   'escanteios': 'corners', 'escanteio': 'corners', 'corners': 'corners',
-  'cartoes': 'cards', 'cards': 'cards', 'cartoes amarelos': 'yellowCards',
+  // cardPoints e não cards: ver normalize_card_points no coletor.
+  'cartoes': 'cardPoints', 'cards': 'cardPoints', 'cartoes amarelos': 'yellowCards',
   'chutes': 'shots', 'finalizacoes': 'shots', 'chutes a gol': 'shotsOnTarget', 'chutes ao gol': 'shotsOnTarget', 'chutes no gol': 'shotsOnTarget',
   'faltas': 'fouls', 'impedimentos': 'offsides', 'defesas': 'saves',
 };
-export const metricMarkets: Record<string, string> = { corners: 'TOTAL_ESCANTEIOS', cards: 'TOTAL_CARTOES', yellowCards: 'TOTAL_CARTOES', shots: 'TOTAL_CHUTES', shotsOnTarget: 'TOTAL_CHUTES_A_GOL', fouls: 'FALTAS', offsides: 'IMPEDIMENTOS', saves: 'DEFESAS' };
+export const metricMarkets: Record<string, string> = { corners: 'TOTAL_ESCANTEIOS', cards: 'TOTAL_CARTOES', cardPoints: 'TOTAL_CARTOES', yellowCards: 'TOTAL_CARTOES', shots: 'TOTAL_CHUTES', shotsOnTarget: 'TOTAL_CHUTES_A_GOL', fouls: 'FALTAS', offsides: 'IMPEDIMENTOS', saves: 'DEFESAS' };
 export function parseTeamStat(text: string, teams: Teams): Condition | null {
   const sc = scoped(text); if (!sc) return null;
   let { selection, label } = splitLabel(sc.text);
@@ -121,9 +136,13 @@ export function parseTeamStat(text: string, teams: Teams): Condition | null {
     const m = /^(.*?)\s+(escanteios?|corners|cartoes(?: amarelos)?|cards|chutes(?: a gol| ao gol| no gol)?|finalizacoes|faltas|impedimentos|defesas)$/.exec(selection);
     if (!m) return null; selection = m[1]; label = m[2];
   }
-  if (/^(mais escanteios|equipe com mais escanteios|escanteios 1x2)$/.test(label)) {
+  // "Remo - Maior número de cartões", "Flamengo - Maior número de chutes ao gol".
+  const mais = label === 'escanteios 1x2' ? 'escanteios' : /^(?:mais|maior numero de|equipe com mais|time com mais) (escanteios|cartoes|chutes ao gol|chutes a gol|chutes no gol|chutes)$/.exec(label)?.[1];
+  if (mais) {
+    const metric = statMetrics[mais];
+    const normalizedMarket = ({ corners: 'EQUIPE_MAIS_ESCANTEIOS', cardPoints: 'EQUIPE_MAIS_CARTOES', shotsOnTarget: 'EQUIPE_MAIS_CHUTES_A_GOL', shots: 'EQUIPE_MAIS_CHUTES' } as Record<string, string>)[metric];
     const pick = resultPick(selection, teams);
-    return pick ? { normalizedMarket: 'EQUIPE_MAIS_ESCANTEIOS', scope: sc.scope, metric: 'corners', pick } : null;
+    return pick && normalizedMarket ? { normalizedMarket, scope: sc.scope, metric, pick } : null;
   }
   const metric = statMetrics[label.replace(/^(?:total de |total |totais )/, '').replace(/ mais\/menos$/, '')];
   if (!metric) return null;
@@ -133,7 +152,7 @@ export function parseTeamStat(text: string, teams: Teams): Condition | null {
     if (m) { side = teamPick(m[1], teams); if (side) line = lineSelection(m[2]); }
   }
   if (!line) return null;
-  const normalizedMarket = side && metric === 'corners' ? 'TIME_TOTAL_ESCANTEIOS' : side && metric === 'cards' ? 'TIME_TOTAL_CARTOES' : metricMarkets[metric];
+  const normalizedMarket = side && metric === 'corners' ? 'TIME_TOTAL_ESCANTEIOS' : side && metric === 'cardPoints' ? 'TIME_TOTAL_CARTOES' : metricMarkets[metric];
   return { normalizedMarket, scope: sc.scope, metric, ...line, ...(side ? { side } : {}) };
 }
 export function parsePeriods(text: string, teams: Teams): Condition | null {
@@ -147,10 +166,24 @@ export function parsePeriods(text: string, teams: Teams): Condition | null {
     const expected = yesNo(selection);
     return expected === null ? null : { normalizedMarket: 'AMBOS_TEMPOS_COM_GOL', scope: 'REGULATION', expected };
   }
-  const m = /^(.+?) (?:para )?marcar em ambos os tempos$/.exec(selection);
-  if (m && /^(sim|nao)$/.test(label)) {
-    const side = teamPick(m[1], teams);
-    return side ? { normalizedMarket: 'TIME_MARCA_EM_AMBOS_TEMPOS', scope: 'REGULATION', side, expected: label === 'sim' } : null;
+  // O canal escreve a frase dos dois lados do " - ": "Sim - Flamengo para vencer
+  // um dos tempos", "Atlético MG vence um dos tempos - Sim", e às vezes com um
+  // rótulo que não diz nada ("Cruzeiro marca em ambos os tempos - Resultado da
+  // partida"). Sem sim/não, a frase só vale como afirmação.
+  const resposta = yesNo(label) ?? yesNo(selection);
+  const frase = yesNo(label) !== null ? selection : yesNo(selection) !== null ? label : selection;
+  const semResposta = resposta === null && (!label || labels.result.test(label));
+  if (resposta === null && !semResposta) return null;
+  const expected = resposta ?? true;
+  const ambos = /^(.+?) (?:para )?marcar? em ambos os tempos$/.exec(frase);
+  if (ambos) {
+    const side = teamPick(ambos[1], teams);
+    return side ? { normalizedMarket: 'TIME_MARCA_EM_AMBOS_TEMPOS', scope: 'REGULATION', side, expected } : null;
+  }
+  const umDos = /^(.+?) (?:para )?(?:vencer|vence|ganhar|ganha) (?:um dos|pelo menos um dos|algum dos) tempos$/.exec(frase);
+  if (umDos) {
+    const side = teamPick(umDos[1], teams);
+    return side ? { normalizedMarket: 'VENCER_UM_DOS_TEMPOS', scope: 'REGULATION', side, expected } : null;
   }
   return null;
 }
@@ -160,9 +193,11 @@ export function parseIncidents(text: string, teams: Teams): Condition | null {
     const expected = yesNo(selection);
     return expected === null ? null : { normalizedMarket: label === 'cartao vermelho' ? 'CARTAO_VERMELHO' : 'PENALTI_NO_JOGO', scope: 'REGULATION', expected };
   }
-  if (/^(primeiro gol|ultimo gol|proximo gol \d+)$/.test(label)) {
+  // "Próximo gol (Gol 1)" é como o canal escreve "próximo gol 1".
+  const ordem = /^(?:primeiro gol|ultimo gol|proximo gol (?:\(gol )?(\d+)\)?)$/.exec(label);
+  if (ordem) {
     const pick = /^(nenhum|sem gol)$/.test(selection) ? 'NONE' : teamPick(selection, teams);
-    const ordinal = label.startsWith('proximo') ? Number(label.split(' ').at(-1)) : 1;
+    const ordinal = label.startsWith('proximo') ? Number(ordem[1]) : 1;
     return pick && Number.isSafeInteger(ordinal) && ordinal > 0 ? { normalizedMarket: label.startsWith('primeiro') ? 'PRIMEIRO_GOL' : label.startsWith('ultimo') ? 'ULTIMO_GOL' : 'PROXIMO_GOL', scope: 'REGULATION', pick, ordinal } : null;
   }
   return null;

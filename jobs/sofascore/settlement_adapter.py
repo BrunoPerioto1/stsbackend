@@ -163,13 +163,9 @@ def normalize_statistics(payload: Any, desconhecidas: set | None = None) -> list
         if valores is not None and metric != _RED_KEY
     ]
 
-    # "Total de cartões" no motor é amarelos + vermelhos. Só sai quando as DUAS
-    # linhas vieram: somar com vermelho ausente seria afirmar que não houve.
-    for scope in PERIOD_SCOPES.values():
-        amarelos, vermelhos = coletado.get((scope, 'yellowCards')), coletado.get((scope, _RED_KEY))
-        if amarelos and vermelhos:
-            linhas.append({'scope': scope, 'metric': 'cards',
-                           'home': amarelos[0] + vermelhos[0], 'away': amarelos[1] + vermelhos[1]})
+    # "Total de cartões" NÃO sai daqui: statistics omite redCards quando é zero,
+    # e só o feed completo de incidentes prova que não houve vermelho. Ver
+    # normalize_card_points.
     return linhas
 
 
@@ -191,6 +187,56 @@ def _incident_scope(minuto: int) -> str | None:
     if minuto <= 90:
         return 'SECOND_HALF'
     return None  # prorrogação: fora do tempo normal, que é o placar que temos
+
+
+# Regra da casa, informada pelo usuário em 2026-09-15: vermelho vale 2 amarelos.
+# Expulsão por segundo amarelo conta o primeiro amarelo (1) e a expulsão (2).
+CARD_POINTS = {'yellow': 1, 'red': 2, 'yellowred': 2}
+
+
+def normalize_card_points(payload: Any) -> list[dict]:
+    """-> linhas 'cardPoints' por escopo (amarelo 1, vermelho 2), ou [] se não der pra provar.
+
+    A métrica tem nome próprio, e não 'cards', porque event_facts de produção
+    já guarda 'cards' na contagem antiga (amarelo + vermelho valendo 1): ler
+    aquilo com a regra nova daria número errado até o job regravar o evento.
+
+    Só é chamada com feed de incidentes completo — é o que autoriza zero.
+    Cartão anulado pelo VAR (`rescinded`) não conta. Cartão sem jogador (banco,
+    técnico), classe desconhecida, ou jogador com dois amarelos E expulsão por
+    segundo amarelo (o provider teria registrado o segundo amarelo duas vezes)
+    deixam a contagem ambígua: nenhuma linha, e o mercado fica sem proposta.
+    """
+    lances = block(payload).get('incidents')
+    if not isinstance(lances, list):
+        return []
+    pontos = {escopo: [0, 0] for escopo in ('REGULATION', 'FIRST_HALF', 'SECOND_HALF')}
+    amarelos: dict[str, int] = {}
+    expulsos_por_amarelo: set[str] = set()
+    for lance in lances:
+        if not isinstance(lance, dict) or str(lance.get('incidentType', '')).lower() != 'card':
+            continue
+        if lance.get('rescinded') is True:
+            continue
+        classe = str(lance.get('incidentClass', '')).lower()
+        ident = block(lance.get('player')).get('id')
+        minuto, lado = count(lance.get('time')), lance.get('isHome')
+        if classe not in CARD_POINTS or ident in (None, '') or minuto is None or not isinstance(lado, bool):
+            return []
+        escopo = _incident_scope(minuto)
+        if escopo is None:
+            continue  # prorrogação não entra no tempo normal
+        if classe == 'yellow':
+            amarelos[str(ident)] = amarelos.get(str(ident), 0) + 1
+        elif classe == 'yellowred':
+            expulsos_por_amarelo.add(str(ident))
+        coluna = 0 if lado else 1
+        for alvo in ('REGULATION', escopo):
+            pontos[alvo][coluna] += CARD_POINTS[classe]
+    if any(amarelos.get(jogador, 0) > 1 for jogador in expulsos_por_amarelo):
+        return []
+    return [{'scope': escopo, 'metric': 'cardPoints', 'home': casa, 'away': fora}
+            for escopo, (casa, fora) in pontos.items()]
 
 
 def normalize_incidents(payload: Any, desconhecidos: set | None = None) -> dict:
@@ -387,10 +433,13 @@ class SofascoreFactsCollector:
         if estatisticas:
             facts['teamStats'] = estatisticas
 
-        incidentes = normalize_incidents(
-            await self._get(f'/event/{external_id}/incidents'), novas)
+        feed = await self._get(f'/event/{external_id}/incidents')
+        incidentes = normalize_incidents(feed, novas)
         if incidentes['complete']:
             facts['incidents'] = incidentes
+            pontos = normalize_card_points(feed)
+            if pontos:
+                facts.setdefault('teamStats', []).extend(pontos)
 
         jogadores = normalize_lineups(await self._get(f'/event/{external_id}/lineups'), gols)
         if jogadores['complete']:
