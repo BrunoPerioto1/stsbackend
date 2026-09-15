@@ -64,6 +64,14 @@ A métrica chama `cardPoints`, e não `cards`, de propósito: `event_facts` de p
 
 `teamPick` tenta de novo sem sigla de estado e de clube (`Flamengo RJ`, `Bahia BA`, `EC Bahia`, `Atlético MG`), sempre só contra os dois times do confronto. Também são lidos: `Maior número de cartões/chutes ao gol/chutes/escanteios` (`EQUIPE_MAIS_*`, empate perde), `vence um dos tempos` com sim/não de qualquer lado do " - " (`VENCER_UM_DOS_TEMPOS`), `Ganhar sem sofrer gols`, `Próximo gol (Gol 1)`, `Ambas equipes marcam - Sim` e `X marca em ambos os tempos - Resultado da partida`. `rotulos-canal.spec.ts` cobre cada um com o texto real.
 
+## Combinadas do mesmo jogo em frase
+
+`parseMarket` lê combinada escrita com " e " (`clausulas` em `market-conditions.ts`): "Palmeiras vence e tem mais escanteios - Resultado final e escanteios", "Bahia ganha 1º tempo e Bahia tem mais chutes ao gol -", "Palmeiras vence e Vitor Roque marca a qualquer momento -", "0-0 HT e u3.5 gols", "Los Angeles FC e +3.5 gols". Cada cláusula vira um mercado canônico e passa pelo mesmo registro das apostas simples; o escopo é da cláusula ("1º tempo" numa perna não vaza pra outra) e cláusula sem time herda o da anterior ("… e ter mais escanteios"). Cláusula sem verbo usa o rótulo só quando o pareamento é inequívoco; time sozinho só vale vitória ao lado de total de gols.
+
+Se qualquer cláusula não casar, a aposta inteira fica sem proposta — liquidar a parte entendida daria GANHOU sem a perna que ficou de fora. `combinadas-canal.spec.ts` cobre os textos reais e os casos que precisam continuar recusados ("entre 10 e 20 minutos", dois jogadores pra um rótulo).
+
+Combinada de jogos diferentes continua fora: a aposta guarda um único `event_external_id`.
+
 ## API de inspeção
 
 `GET /settlement/support` expõe aliases, capacidades, confiança e estado de cada mercado. `GET /settlement/review` lista sugestões indefinidas para revisão manual.
