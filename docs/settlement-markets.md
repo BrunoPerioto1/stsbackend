@@ -48,6 +48,10 @@ O canal de tips corta a linha do mercado em 100 caracteres antes de a mensagem c
 
 Por isso `parseMarket` recusa, com `MERCADO_TRUNCADO`, todo texto com exatamente `LIMITE_DO_CANAL` (100) code points. Quando o corte cai na fronteira entre duas pernas, uma múltipla de 3 vira uma de 2 perfeitamente válida e seria proposta como ganha sem a perna que faltou — a aposta 12063 é exatamente isso. `canal-real.spec.ts` trava a regra com esse texto real.
 
+### Perna perdida decide
+
+Múltipla perde quando qualquer perna perde, então **PERDEU pode sair mesmo com perna indefinida, anulada ou escondida pelo corte; GANHOU nunca**. Em texto cortado, entram só as pernas "seleção - rótulo" antes da última — a última visível é sempre ignorada, porque pode estar partida no meio ("Total de cartões" pode ter sido "Total de cartões 1ºT"). Exemplo real, aposta 11909: "… / Mais de 0.5 - Total de gols 1ºT / Mais de 9.5 - Escan" com 1T 0x0 é perdida, não importa o que vinha depois de "Escan". Coberto em `perna-perdida.spec.ts`.
+
 ## Rótulos de jogador
 
 Além dos rótulos originais, o parser aceita a escrita do canal: `Marcar em qualquer momento`, `Marcar gol ou dar assistência`, `Chutes a gol`/`ao gol`/`no gol` sem "do jogador" (`Clay Holstad 1+ - Chutes a gol`) e o verbo grudado no nome (`Vitor Roque marca - Jogador para marcar`). Como "Chutes a gol" também é rótulo de mercado de time, participante que resolve para um dos times do confronto é recusado pelo parser de jogador. Nome ambíguo continua sem proposta: "Pedro" com Pedro Guilherme e Pedro Milans em campo não é adivinhado.

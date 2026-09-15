@@ -74,7 +74,8 @@ export function evaluateTeamStat(c: Condition, ctx: EvaluationContext): Evaluati
   // dizer de quem é o número, "shots: 9" não deixava checar se o lado estava certo.
   const rotulo=`${value} ${METRICA_PT[c.metric!] ?? c.metric}${ESCOPO_PT[c.scope]}`;
   const quem=c.side==='HOME' ? ctx.teams.home : c.side==='AWAY' ? ctx.teams.away : null;
-  return compare(value,c,quem ? `${quem}: ${rotulo}` : `${rotulo} no jogo`);
+  // "no jogo" só quando é o jogo inteiro: "3 escanteios no 1º tempo" já diz o escopo.
+  return compare(value,c,quem ? `${quem}: ${rotulo}` : c.scope==='REGULATION' ? `${rotulo} no jogo` : rotulo);
 }
 export function evaluateIncidents(c: Condition, ctx: EvaluationContext): Evaluation {
   const feed=ctx.incidents;

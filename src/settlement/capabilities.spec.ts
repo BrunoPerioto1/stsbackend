@@ -63,8 +63,14 @@ describe('mercados por capacidades',()=>{
     }
   });
   it('perna desconhecida/dado ausente/push impede liquidar parcialmente',()=>{
-    expect(run('Palmeiras - Resultado final / Mais de 3 - Total de gols')).toMatchObject({resultId:null,reason:'PERNA_ANULADA'});
-    expect(run('Palmeiras - Resultado final / Pedro - Jogador para marcar',{...context,playerStats:undefined})).toMatchObject({resultId:null,reason:'DADO_INDISPONIVEL'});
+    // Push com as outras pernas ganhando: odd ajustada não é calculada.
+    expect(run('Flamengo - Resultado final / Mais de 3 - Total de gols')).toMatchObject({resultId:null,reason:'PERNA_ANULADA'});
+    // Push com uma perna perdida: a múltipla perdeu de qualquer jeito.
+    expect(run('Palmeiras - Resultado final / Mais de 3 - Total de gols').resultId).toBe(R.LOST);
+    // Perna indefinida com as outras ganhando: não liquida pela metade.
+    expect(run('Flamengo - Resultado final / Pedro - Jogador para marcar',{...context,playerStats:undefined})).toMatchObject({resultId:null,reason:'DADO_INDISPONIVEL'});
+    // Perna indefinida com uma perdida: perdeu de qualquer jeito.
+    expect(run('Palmeiras - Resultado final / Pedro - Jogador para marcar',{...context,playerStats:undefined}).resultId).toBe(R.LOST);
     expect(run('Palmeiras - Resultado final / desconhecido').resultId).toBeNull();
   });
   it('placar inválido ou de prorrogação não resolve tempo normal',()=>{
