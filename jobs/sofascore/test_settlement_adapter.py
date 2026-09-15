@@ -160,8 +160,9 @@ class LineupsTests(unittest.TestCase):
     def base(self, **kwargs):
         return {'confirmed': True,
                 'home': {'players': [jogador('Pedro', 7, goals=1, goalAssist=1,
-                                             totalScoringAttempt=4, onTargetScoringAttempt=2)]},
-                'away': {'players': [jogador('Rony', 11)]}, **kwargs}
+                                             totalShots=4, onTargetScoringAttempt=2)]},
+                'away': {'players': [jogador('Rony', 11, goals=0, goalAssist=0,
+                                             totalShots=0, onTargetScoringAttempt=0)]}, **kwargs}
 
     def test_metrics_of_a_player_who_played(self):
         items = normalize_lineups(self.base())['items']
@@ -266,3 +267,35 @@ class MapaDeChavesTests(unittest.TestCase):
         asyncio.run(coletor.collect('1'))
         asyncio.run(coletor.collect('2'))
         self.assertEqual(coletor.desconhecidas, {'expectedGoals'})
+
+
+class MetricaAusenteTests(unittest.TestCase):
+    """O bug que passou: 3 chaves certas e uma errada davam zero silencioso."""
+
+    def test_metric_absent_from_every_player_is_not_emitted(self):
+        # Foi exatamente isto com totalShots: as outras chaves existiam, o
+        # snapshot era aceito, e "total de chutes do jogador" saía zerado —
+        # liquidando como PERDIDA uma aposta que o jogador tinha ganho.
+        payload = {'confirmed': True, 'away': {'players': []},
+                   'home': {'players': [jogador('Pedro', 7, goals=1, goalAssist=1,
+                                                onTargetScoringAttempt=2)]}}
+        feed = normalize_lineups(payload, 1)
+        self.assertTrue(feed['complete'])
+        self.assertEqual(sorted({i['metric'] for i in feed['items']}),
+                         ['assists', 'goals', 'shotsOnTarget'])
+
+    def test_zero_from_the_provider_is_not_absence(self):
+        # Chave presente com 0 conta como vista: o provider manda goalAssist: 0
+        # explicitamente, e aí "não deu assistência" é fato, não silêncio.
+        payload = {'confirmed': True, 'away': {'players': []},
+                   'home': {'players': [jogador('Pedro', 7, goals=1, goalAssist=0)]}}
+        feed = normalize_lineups(payload, 1)
+        assists = [i for i in feed['items'] if i['metric'] == 'assists']
+        self.assertEqual([i['value'] for i in assists], [0])
+
+    def test_old_and_new_shot_keys_do_not_add_up(self):
+        payload = {'confirmed': True, 'away': {'players': []},
+                   'home': {'players': [jogador('Pedro', 7, goals=1, totalShots=4,
+                                                totalScoringAttempt=4)]}}
+        chutes = [i for i in normalize_lineups(payload, 1)['items'] if i['metric'] == 'shots']
+        self.assertEqual([i['value'] for i in chutes], [4])

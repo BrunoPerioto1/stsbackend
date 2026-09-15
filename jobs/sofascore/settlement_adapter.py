@@ -269,7 +269,8 @@ def normalize_incidents(payload: Any, desconhecidos: set | None = None) -> dict:
 PLAYER_KEYS = {
     'goals': 'goals',
     'goalAssist': 'assists',
-    'totalScoringAttempt': 'shots',
+    'totalShots': 'shots',
+    'totalScoringAttempt': 'shots',  # nome antigo, visto em payloads mais velhos
     'onTargetScoringAttempt': 'shotsOnTarget',
 }
 
@@ -286,7 +287,10 @@ def normalize_lineups(payload: Any, gols_esperados: int | None = None) -> dict:
     mundo sairia com zero assistência num snapshot marcado como completo, e
     "jogador dar assistência" viraria aposta perdida. Duas travas contra isso:
 
-    1. nenhuma das chaves mapeadas apareceu no jogo inteiro -> o mapa quebrou;
+    1. métrica que não apareceu em NENHUM jogador do jogo não é emitida. A
+       trava é por métrica, e não global, porque foi assim que `totalShots`
+       passou despercebido: as outras três chaves existiam, o snapshot era
+       aceito, e só "total de chutes do jogador" saía zerado;
     2. a soma dos gols dos jogadores tem que bater com o placar (quando ele é
        informado). Jogo com gol contra não fecha essa conta e fica de fora —
        perder a liquidação de um jogo é barato, liquidar errado não é.
@@ -312,22 +316,29 @@ def normalize_lineups(payload: Any, gols_esperados: int | None = None) -> dict:
             minutos = count(estatisticas.get('minutesPlayed'))
             if not minutos:
                 continue
+            # Duas chaves podem apontar pra mesma métrica (nome novo e antigo do
+            # provider): vale a primeira que existir, nunca a soma das duas.
+            valores: dict[str, int] = {}
             for chave, metric in PLAYER_KEYS.items():
                 valor = count(estatisticas.get(chave))
-                if valor is not None:
-                    vistas.add(chave)
-                    if metric == 'goals':
-                        gols_somados += valor
+                if valor is not None and metric not in valores:
+                    valores[metric] = valor
+                    vistas.add(metric)
+            gols_somados += valores.get('goals', 0)
+
+            for metric in dict.fromkeys(PLAYER_KEYS.values()):
                 items.append({
                     'scope': 'REGULATION', 'name': nome.strip(),
                     'participantId': str(identificador), 'played': True,
-                    'metric': metric, 'value': valor if valor is not None else 0,
+                    'metric': metric, 'value': valores.get(metric, 0),
                 })
 
-    mapa_vivo = bool(vistas)
     gols_batem = gols_esperados is None or gols_somados == gols_esperados
-    completo = confirmado and mapa_vivo and gols_batem
-    return {'complete': completo, 'items': items if completo else []}
+    completo = confirmado and bool(vistas) and gols_batem
+    # Métrica nunca vista sai: zero em cima de chave que não existe é o que
+    # transformaria "jogador deu assistência" em aposta perdida.
+    return {'complete': completo,
+            'items': [i for i in items if i['metric'] in vistas] if completo else []}
 
 
 class AdditionalFactsCollector(Protocol):

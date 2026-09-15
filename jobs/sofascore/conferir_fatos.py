@@ -28,6 +28,14 @@ from settlement_adapter import (
 
 SIM, NAO = "OK  ", "-- "
 
+# O console do Windows abre em cp1252 e "Nicolo` Barella" derrubava o script no
+# meio do relatorio. O dado no banco e' UTF-8; aqui e' so' a impressao.
+for fluxo in (sys.stdout, sys.stderr):
+    try:
+        fluxo.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):  # noqa: PERF203
+        pass
+
 
 async def main(external_id: str) -> int:
     client = Client(emulation=getattr(Emulation, EMULATION))
