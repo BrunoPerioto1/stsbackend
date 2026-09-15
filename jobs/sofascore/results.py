@@ -39,6 +39,7 @@ import os
 import random
 import sys
 import time
+from pathlib import Path
 from typing import Any
 
 import psycopg
@@ -197,13 +198,54 @@ ON CONFLICT (provider, external_id) DO UPDATE SET
 """
 
 
+def _env_do_backend() -> dict[str, str]:
+    """Le o .env da raiz do backend, o mesmo que src/infra/db/db.ts usa.
+
+    Sem python-dotenv: e' so' KEY=VALUE, e uma dependencia a mais no runner
+    nao se paga pra isso.
+    """
+    caminho = Path(__file__).resolve().parents[2] / ".env"
+    if not caminho.is_file():
+        return {}
+    valores: dict[str, str] = {}
+    for linha in caminho.read_text(encoding="utf-8").splitlines():
+        linha = linha.strip()
+        if not linha or linha.startswith("#") or "=" not in linha:
+            continue
+        chave, valor = linha.split("=", 1)
+        valores[chave.strip()] = valor.strip().strip('"').strip("'")
+    return valores
+
+
 def conecta() -> psycopg.Connection:
+    # prepare_threshold=None: o Supabase atende pelo pooler em modo transacao
+    # (porta 6543), onde prepared statement do servidor nao sobrevive entre
+    # transacoes, e o executemany do psycopg prepara depois de 5 repeticoes.
+    #
     # .strip() porque secret colada com Enter no fim guarda a quebra de linha,
     # e ai o ultimo parametro da URL vira "require<LF>".
     url = (os.environ.get("DATABASE_URL") or "").strip()
-    if not url:
-        raise SystemExit("DATABASE_URL nao definida")
-    return psycopg.connect(url)
+    if url:
+        return psycopg.connect(url, prepare_threshold=None)
+
+    # Rodando na mao: sem DATABASE_URL, usa as mesmas DB_* do backend. No
+    # Actions o secret existe e este caminho nunca e' tomado. Variavel de
+    # ambiente ganha do arquivo, pra dar pra apontar pra outro banco.
+    env = {**_env_do_backend(), **os.environ}
+    faltando = [k for k in ("DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME") if not env.get(k)]
+    if faltando:
+        raise SystemExit(
+            "sem DATABASE_URL e sem " + ", ".join(faltando) + " no .env do backend"
+        )
+    log(f"conectando pelo .env do backend: {env['DB_HOST']}:{env.get('DB_PORT') or 5432}/{env['DB_NAME']}")
+    return psycopg.connect(
+        host=env["DB_HOST"],
+        port=int(env.get("DB_PORT") or 5432),
+        user=env["DB_USER"],
+        password=env["DB_PASSWORD"],
+        dbname=env["DB_NAME"],
+        prepare_threshold=None,
+    )
 
 
 def busca_pendentes(conn: psycopg.Connection) -> list[str]:
