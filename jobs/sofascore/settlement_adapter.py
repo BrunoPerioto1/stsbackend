@@ -400,7 +400,8 @@ class SofascoreFactsCollector:
             # recusado: ou o mapa de chaves quebrou, ou os gols não fecharam.
             self._log(f'{external_id}: escalação recusada na reconciliação')
 
-        if novas - self.desconhecidas and self._log is not None:
-            self._log(f'{external_id}: campos não reconhecidos -> {", ".join(sorted(novas))}')
+        # Sem log por evento: o provider manda ~40 campos que o motor não usa
+        # (passes, xG, duelos), e a primeira rodada real virou uma linha de 40
+        # nomes a cada jogo. O resumo único no fim do results.py basta.
         self.desconhecidas |= novas
         return facts
