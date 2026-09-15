@@ -6,7 +6,9 @@ import { FinalScore, Reason, SettlementContext, Teams } from './settlement.types
 export type { FinalScore } from './settlement.types';
 export type SettlementReason = Reason;
 export interface Settlement { resultId: ResultIdEnum | null; reason: Reason | null; explanation: string }
-export const ENGINE_VERSION = '2026-09-12-capabilities-v1';
+// v2: mercado no limite de 100 caracteres do canal é recusado, e rótulos de
+// jogador novos. Trocar a versão faz toda sugestão antiga ser recalculada.
+export const ENGINE_VERSION = '2026-09-15-capabilities-v2';
 // Callers antigos declaram implicitamente futebol/tempo normal. Produção
 // fornece sempre contexto explícito lido do banco, sem esse default.
 export function settleBet(market: string, teams: Teams, score: FinalScore | null, eventStatus: string | null,

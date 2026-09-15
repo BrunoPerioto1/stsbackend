@@ -42,6 +42,16 @@ Na análise fornecida há 29.950 apostas, 24.658 de futebol. O parser reconheceu
 
 O relatório com os 100 mercados normalizados e o agrupamento por `requiredData` foi gerado em `auditoria-mercados.md` no diretório de outputs da análise.
 
+## Texto cortado pelo canal
+
+O canal de tips corta a linha do mercado em 100 caracteres antes de a mensagem chegar — conferido contra `tips.text`, onde a linha termina em "Handicap de escan" e a odd vem logo abaixo. Em 2026-09-15 eram 697 apostas com `market` de exatamente 100 caracteres, de todas as origens (importação antiga, Telegram e app manual, que copia da tip). A coluna aceita 255: o corte não é do banco nem do código.
+
+Por isso `parseMarket` recusa, com `MERCADO_TRUNCADO`, todo texto com exatamente `LIMITE_DO_CANAL` (100) code points. Quando o corte cai na fronteira entre duas pernas, uma múltipla de 3 vira uma de 2 perfeitamente válida e seria proposta como ganha sem a perna que faltou — a aposta 12063 é exatamente isso. `canal-real.spec.ts` trava a regra com esse texto real.
+
+## Rótulos de jogador
+
+Além dos rótulos originais, o parser aceita a escrita do canal: `Marcar em qualquer momento`, `Marcar gol ou dar assistência`, `Chutes a gol`/`ao gol`/`no gol` sem "do jogador" (`Clay Holstad 1+ - Chutes a gol`) e o verbo grudado no nome (`Vitor Roque marca - Jogador para marcar`). Como "Chutes a gol" também é rótulo de mercado de time, participante que resolve para um dos times do confronto é recusado pelo parser de jogador. Nome ambíguo continua sem proposta: "Pedro" com Pedro Guilherme e Pedro Milans em campo não é adivinhado.
+
 ## API de inspeção
 
 `GET /settlement/support` expõe aliases, capacidades, confiança e estado de cada mercado. `GET /settlement/review` lista sugestões indefinidas para revisão manual.

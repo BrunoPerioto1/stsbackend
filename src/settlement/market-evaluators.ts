@@ -64,7 +64,11 @@ export function evaluateTeamStat(c: Condition, ctx: EvaluationContext): Evaluati
   const s=rows[0];
   if (c.normalizedMarket==='EQUIPE_MAIS_ESCANTEIOS') return decided(result(s)===c.pick,`escanteios ${s.home}x${s.away}`);
   const value=c.side==='HOME' ? s.home : c.side==='AWAY' ? s.away : s.home+s.away;
-  return compare(value,c,`${c.metric}: ${value} (${c.scope})`);
+  // A explicação é o que o usuário lê na conferência pra aceitar ou não: sem
+  // dizer de quem é o número, "shots: 9" não deixava checar se o lado estava certo.
+  const rotulo=`${value} ${METRICA_PT[c.metric!] ?? c.metric}${ESCOPO_PT[c.scope]}`;
+  const quem=c.side==='HOME' ? ctx.teams.home : c.side==='AWAY' ? ctx.teams.away : null;
+  return compare(value,c,quem ? `${quem}: ${rotulo}` : `${rotulo} no jogo`);
 }
 export function evaluateIncidents(c: Condition, ctx: EvaluationContext): Evaluation {
   const feed=ctx.incidents;
@@ -93,5 +97,11 @@ export function evaluatePlayer(c: Condition, ctx: EvaluationContext): Evaluation
     value+=matching[0].value;
   }
   if (c.metric==='cards' && ctx.cardCounting!=='YELLOW_PLUS_RED') return unknown('regra de cartões da casa não confirmada','REGRA_NAO_SUPORTADA');
-  return compare(value,c,`${c.participant}: ${c.metric} = ${value}`);
+  // Nome como veio do provider ("José Manuel López"), não o normalizado da aposta.
+  return compare(value,c,`${rows[0].name}: ${value} ${METRICA_PT[c.metric!] ?? c.metric}`);
 }
+const METRICA_PT: Record<string,string> = {
+  corners:'escanteios', shots:'chutes', shotsOnTarget:'chutes a gol', fouls:'faltas', offsides:'impedimentos',
+  saves:'defesas', cards:'cartões', yellowCards:'cartões amarelos', goals:'gols', assists:'assistências', goalsAssists:'gols + assistências',
+};
+const ESCOPO_PT: Record<Scope,string> = { REGULATION:'', FIRST_HALF:' no 1º tempo', SECOND_HALF:' no 2º tempo' };

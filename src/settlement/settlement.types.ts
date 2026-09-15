@@ -4,7 +4,7 @@ export type Side = 'HOME' | 'AWAY';
 export type Pick = Side | 'DRAW' | 'NONE';
 export interface Teams { home: string; away: string }
 export interface FinalScore { home: number; away: number }
-export type Reason = 'MERCADO_NAO_RECONHECIDO' | 'OUTRA_CATEGORIA' | 'TEMPO_PARCIAL' | 'GOLS_DE_UM_TIME' | 'VARIOS_JOGOS' | 'CONDICAO_ALTERNATIVA' | 'COMBINADA_NAO_SEPARADA' | 'DADO_INDISPONIVEL' | 'ESPORTE_FORA_ESCOPO' | 'ESCOPO_NAO_SUPORTADO' | 'REGRA_NAO_SUPORTADA' | 'PERNA_ANULADA' | 'JOGO_NAO_FINALIZADO' | 'SEM_PLACAR';
+export type Reason = 'MERCADO_NAO_RECONHECIDO' | 'OUTRA_CATEGORIA' | 'TEMPO_PARCIAL' | 'GOLS_DE_UM_TIME' | 'VARIOS_JOGOS' | 'CONDICAO_ALTERNATIVA' | 'COMBINADA_NAO_SEPARADA' | 'DADO_INDISPONIVEL' | 'ESPORTE_FORA_ESCOPO' | 'ESCOPO_NAO_SUPORTADO' | 'REGRA_NAO_SUPORTADA' | 'PERNA_ANULADA' | 'JOGO_NAO_FINALIZADO' | 'SEM_PLACAR' | 'MERCADO_TRUNCADO';
 export interface Condition {
   normalizedMarket: string;
   scope: Scope;

@@ -167,21 +167,31 @@ export function parseIncidents(text: string, teams: Teams): Condition | null {
   }
   return null;
 }
-export function parsePlayer(text: string): Condition | null {
+export function parsePlayer(text: string, teams?: Teams): Condition | null {
   const sc = scoped(text); if (!sc) return null;
   let { selection, label } = splitLabel(sc.text);
   const metrics: Record<string, [string,string]> = {
-    'marcar a qualquer momento': ['JOGADOR_MARCA','goals'], 'jogador para marcar': ['JOGADOR_MARCA','goals'],
+    'marcar a qualquer momento': ['JOGADOR_MARCA','goals'], 'marcar em qualquer momento': ['JOGADOR_MARCA','goals'], 'jogador para marcar': ['JOGADOR_MARCA','goals'],
     'jogador assistencia': ['JOGADOR_ASSISTENCIA','assists'], 'assistencias do jogador': ['JOGADOR_ASSISTENCIA','assists'],
-    'gol ou assistencia': ['JOGADOR_GOL_OU_ASSISTENCIA','goalsAssists'], 'jogador marcar ou dar assistencia': ['JOGADOR_GOL_OU_ASSISTENCIA','goalsAssists'],
+    'gol ou assistencia': ['JOGADOR_GOL_OU_ASSISTENCIA','goalsAssists'], 'jogador marcar ou dar assistencia': ['JOGADOR_GOL_OU_ASSISTENCIA','goalsAssists'], 'marcar gol ou dar assistencia': ['JOGADOR_GOL_OU_ASSISTENCIA','goalsAssists'],
     'chutes a gol do jogador': ['JOGADOR_CHUTE_A_GOL','shotsOnTarget'], 'jogador - chutes ao gol': ['JOGADOR_CHUTE_A_GOL','shotsOnTarget'],
+    // Rótulo sem "do jogador", como o canal escreve ("José Manuel López - Chutes
+    // a gol", "Clay Holstad 1+ - Chutes a gol"). É o mesmo rótulo do mercado de
+    // time; quem desempata é a trava de time logo abaixo.
+    'chutes a gol': ['JOGADOR_CHUTE_A_GOL','shotsOnTarget'], 'chutes ao gol': ['JOGADOR_CHUTE_A_GOL','shotsOnTarget'], 'chutes no gol': ['JOGADOR_CHUTE_A_GOL','shotsOnTarget'],
     'total de chutes do jogador': ['TOTAL_CHUTES_JOGADOR','shots'], 'cartoes do jogador': ['CARTAO_JOGADOR','cards'],
   };
   const def = metrics[label]; if (!def) return null;
   const m = /^(.+?)\s+((?:mais|menos|over|under|acima|abaixo)\s+.*|\d+\+)$/.exec(selection);
   const line = m ? lineSelection(m[2]) : { operator: 'OVER' as const, line: 0.5 };
-  const participant = m ? m[1] : selection;
+  let participant = m ? m[1] : selection;
+  // "Pedro Guilherme marca - Jogador para marcar": o verbo vem grudado no nome.
+  if (def[0] === 'JOGADOR_MARCA') participant = participant.replace(/\s+marcar?$/, '');
   if (!line || /\b(e|ou|sim|nao|mais|menos|jogador)\b|\//.test(participant) || !/[a-z]/.test(participant)) return null;
+  // Time nunca é jogador. Sem isto, "Flamengo mais de 6.5 - Chutes a gol"
+  // casaria aqui E no mercado de time, e o registro recusa ambiguidade — o
+  // mercado de time, que funcionava, deixaria de liquidar.
+  if (teams && teamPick(participant, teams)) return null;
   return { normalizedMarket: def[0], scope: sc.scope, participant, metric: def[1], ...line };
 }
 

@@ -33,9 +33,17 @@ function single(text: string, teams: Teams): Condition | null {
 }
 function isLabel(text: string): boolean {
   const s=scoped(text)?.text ?? text;
-  return Object.values(labels).some(p=>p.test(s)) || /^(?:total de |total |totais )?(?:escanteios|corners|cartoes(?: amarelos)?|cards|chutes(?: a gol| ao gol| no gol)?|faltas|impedimentos|defesas)(?: mais\/menos)?$/.test(s) || /^(?:dupla chance|chance dupla|double chance|handicap(?: asiatico)?|clean sheet|sem sofrer gols|mais escanteios|equipe com mais escanteios|escanteios 1x2|primeiro gol|ultimo gol|proximo gol \d+|penalti no jogo|cartao vermelho|marcar a qualquer momento|jogador para marcar|jogador assistencia|assistencias do jogador|gol ou assistencia|jogador marcar ou dar assistencia|chutes a gol do jogador|total de chutes do jogador|cartoes do jogador)$/.test(s);
+  return Object.values(labels).some(p=>p.test(s)) || /^(?:total de |total |totais )?(?:escanteios|corners|cartoes(?: amarelos)?|cards|chutes(?: a gol| ao gol| no gol)?|faltas|impedimentos|defesas)(?: mais\/menos)?$/.test(s) || /^(?:dupla chance|chance dupla|double chance|handicap(?: asiatico)?|clean sheet|sem sofrer gols|mais escanteios|equipe com mais escanteios|escanteios 1x2|primeiro gol|ultimo gol|proximo gol \d+|penalti no jogo|cartao vermelho|marcar a qualquer momento|marcar em qualquer momento|jogador para marcar|jogador assistencia|assistencias do jogador|gol ou assistencia|jogador marcar ou dar assistencia|marcar gol ou dar assistencia|chutes a gol do jogador|total de chutes do jogador|cartoes do jogador)$/.test(s);
 }
+// O canal de tips corta a linha do mercado em 100 caracteres: conferido contra
+// tips.text, onde a linha termina em "Handicap de escan" e a odd vem logo abaixo.
+// Com exatamente 100 não dá pra saber se faltou uma perna — uma múltipla de 3
+// cortada bem na fronteira vira uma de 2 perfeitamente válida, e seria proposta
+// como ganha sem a perna que ficou de fora. Em code points, como o length() do
+// Postgres, que foi onde o pico de 697 apostas em 100 apareceu.
+export const LIMITE_DO_CANAL = 100;
 export function parseMarket(market: string, teams: Teams): ParseResult {
+  if ([...(market ?? '')].length === LIMITE_DO_CANAL) return fail('MERCADO_TRUNCADO',`texto no limite de ${LIMITE_DO_CANAL} caracteres do canal; pode faltar perna`);
   const text=normalize(market??'');
   if (!text) return fail('MERCADO_NAO_RECONHECIDO','mercado vazio');
   if (/\b(?:prorrogacao|extra time|penaltis|incluindo|classificar|classificacao)\b/.test(text)) return fail('ESCOPO_NAO_SUPORTADO','escopo além do tempo normal ou qualificação');
