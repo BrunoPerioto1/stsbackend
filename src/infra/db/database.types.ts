@@ -15,6 +15,7 @@ import type SportEventsTable from '../../db_types/SportEvents';
 import type EventResultsTable from '../../db_types/EventResults';
 import type EventFactsTable from '../../db_types/EventFacts';
 import type BetSettlementSuggestionsTable from '../../db_types/BetSettlementSuggestions';
+import type BetEventsTable from '../../db_types/BetEvents';
 
 export interface Database {
   bets: BetsTable;
@@ -33,4 +34,5 @@ export interface Database {
   eventResults: EventResultsTable
   eventFacts: EventFactsTable
   betSettlementSuggestions: BetSettlementSuggestionsTable
+  betEvents: BetEventsTable
 }

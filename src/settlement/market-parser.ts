@@ -16,6 +16,21 @@ export function teamPick(text: string, teams: Teams): Side | null {
     const hm = h.split(' ').includes(name), am = a.split(' ').includes(name);
     if (hm !== am) return hm ? 'HOME' : 'AWAY';
   }
+  // "Como 1907" x "Como", "Inter Milan" x "Inter", "Bayern Munich" x "FC Bayern
+  // München": o canal acrescenta cidade ou ano que o provider não tem. Vale
+  // quando toda palavra do texto que pertence a um time do confronto é
+  // exclusiva do MESMO lado — "Manchester" num Manchester United x City segue
+  // sem lado, porque é dos dois. No máximo UMA palavra estranha aos dois times
+  // ("milan", "munich"; número não conta), e nunca palavra de mercado: sem isso
+  // "Flamengo marca em ambos os tempos" inteiro virava o nome do Flamengo.
+  const hs = new Set(h.split(' ')), as = new Set(a.split(' '));
+  const palavras = name.split(' ').filter((t) => !/^\d+$/.test(t) && !SIGLAS_DE_TIME.has(t));
+  const estranhas = palavras.filter((t) => !hs.has(t) && !as.has(t));
+  if (estranhas.length <= 1 && !estranhas.some((t) => PALAVRAS_DE_MERCADO.test(t))) {
+    const daCasa = palavras.some((t) => t.length >= 4 && hs.has(t) && !as.has(t));
+    const deFora = palavras.some((t) => t.length >= 4 && as.has(t) && !hs.has(t));
+    if (daCasa !== deFora) return daCasa ? 'HOME' : 'AWAY';
+  }
   // O canal escreve "Flamengo RJ", "Bahia BA", "EC Bahia", "Atlético MG"; o
   // provider, "Flamengo", "Bahia", "Atlético Mineiro". Tira sigla de estado e
   // de clube e tenta de novo — só contra os dois times do confronto, então
@@ -23,6 +38,7 @@ export function teamPick(text: string, teams: Teams): Side | null {
   const semSigla = name.split(' ').filter((t) => !SIGLAS_DE_TIME.has(t)).join(' ');
   return semSigla && semSigla !== name ? teamPick(semSigla, teams) : null;
 }
+const PALAVRAS_DE_MERCADO = /^(?:vence|vencer|ganha|ganhar|marca|marcar|mais|menos|tem|ter|gols?|sim|nao|para|ambos|ambas|tempos?|escanteios|cartoes|chutes|empate|ou|e|com|sem|sofre|sofrer|toma|tomar|qualquer|momento|resultado|final|total)$/;
 const SIGLAS_DE_TIME = new Set([
   'ac','al','am','ap','ba','ce','df','es','go','ma','mg','ms','mt','pa','pb','pe','pi','pr','rj','rn','ro','rr','rs','sc','se','sp','to',
   'ec','sa','ae',
@@ -46,7 +62,11 @@ export function scoped(text: string): { text: string; scope: Scope } | null {
   const second = /\b(?:2o?\s*(?:tempo|t)\b|segundo tempo)/g;
   const f = first.test(text), s = second.test(text);
   if (f && s) return null;
-  return { scope: f ? 'FIRST_HALF' : s ? 'SECOND_HALF' : 'REGULATION', text: text.replace(first, '').replace(second, '').replace(/-\s*-/g, '-').replace(/^\s*-\s*|\s*-\s*$/g, '').replace(/resultado do\s*$/, 'resultado').replace(/\s+/g, ' ').trim() };
+  let semEscopo = text.replace(first, '').replace(second, '');
+  // "Gols no 1º tempo", "Escanteios no 1º tempo": sem o tempo, o "no" sobrava
+  // grudado no rótulo e "gols no" não é rótulo de nada.
+  if (f || s) semEscopo = semEscopo.replace(/\s(?:no|do|na|em)(?=\s*(?:-|$))/g, '');
+  return { scope: f ? 'FIRST_HALF' : s ? 'SECOND_HALF' : 'REGULATION', text: semEscopo.replace(/-\s*-/g, '-').replace(/^\s*-\s*|\s*-\s*$/g, '').replace(/resultado do\s*$/, 'resultado').replace(/\s+/g, ' ').trim() };
 }
 export function splitLabel(text: string): { selection: string; label: string } {
   const parts = text.split(/\s+[-–—]\s+/);
@@ -54,7 +74,9 @@ export function splitLabel(text: string): { selection: string; label: string } {
 }
 export const labels = {
   result: /^(resultado final|resultado da partida|resultado do jogo|resultado|vencedor(?: do encontro| da partida)?|vitoria|1\s?x\s?2|ml|money ?line|match winner)$/,
-  goals: /^(total de gols(?: acima\/abaixo)?|total gols|gols|total de gols mais\/menos)$/,
+  // "total" sozinho: "Mais de 0.5 - Total 1ºT". A trava de linha até 9.5 em
+  // parseScoreMarket segura o total de pontos de outro esporte.
+  goals: /^(total de gols(?: acima\/abaixo)?|total gols|gols|total|total de gols mais\/menos)$/,
   both: /^(amb[ao]s\s+(?:(?:os\s+)?times|(?:as\s+)?equipes)?\s*marcam|ambas marcam|btts|both teams to score)$/,
   exact: /^(resultado correto|placar exato|correct score)$/,
 };
@@ -69,7 +91,8 @@ export function parseScoreMarket(text: string, teams: Teams): Condition | null {
   }
   // Também na ordem invertida do canal: "Ambas equipes marcam - Sim".
   if (labels.both.test(label) || (!label && labels.both.test(sel)) || (labels.both.test(sel) && yesNo(label) !== null)) {
-    const expected = labels.both.test(label) ? yesNo(sel) : label ? yesNo(label) : true;
+    // "Ambas marcam - Ambas marcam": o canal repete o rótulo no lugar do "Sim".
+    const expected = labels.both.test(label) ? yesNo(sel) ?? (labels.both.test(sel) ? true : null) : label ? yesNo(label) : true;
     return expected === null ? null : c('AMBAS_MARCAM', { expected });
   }
   if (/^(dupla chance|chance dupla|double chance)$/.test(label) || ((!label || labels.result.test(label)) && / ou /.test(sel))) {
@@ -83,6 +106,13 @@ export function parseScoreMarket(text: string, teams: Teams): Condition | null {
     const side = m && teamPick(m[1], teams), line = m && Number(m[2].replace(',', '.'));
     // Inteiros só no asiático explícito: handicap europeu possui três saídas.
     return side && line !== null && Math.abs(line) <= 9 && line * 2 % 1 === 0 && (line % 1 !== 0 || label.includes('asiatico')) ? c('HANDICAP', { side, line }) : null;
+  }
+  // "Sim - Flamengo não sofre gol", "Flamengo não sofre gols".
+  for (const [frase, resposta] of [[label, sel], [sel, label]]) {
+    const naoSofre = /^(.+?) nao (?:sofre|sofrer|toma|tomar|leva|levar) gols?$/.exec(frase);
+    if (!naoSofre) continue;
+    const side = teamPick(naoSofre[1], teams), expected = resposta ? yesNo(resposta) : true;
+    return side && expected !== null ? c('CLEAN_SHEET', { side, expected }) : null;
   }
   const clean = /^(.+?)\s+(?:para )?(?:(vencer|vence|vencer de|vence de)\s+)?(?:sem (?:sofrer|tomar|levar) gols?|zero|0)(?::?\s*(sim|nao))?$/.exec(sel);
   if (clean && (!label || labels.result.test(label))) {
@@ -170,11 +200,19 @@ export function parsePeriods(text: string, teams: Teams): Condition | null {
   // um dos tempos", "Atlético MG vence um dos tempos - Sim", e às vezes com um
   // rótulo que não diz nada ("Cruzeiro marca em ambos os tempos - Resultado da
   // partida"). Sem sim/não, a frase só vale como afirmação.
+  // "Real Madrid - Vencer cada tempo": o time de um lado, o verbo do outro.
+  const junto = yesNo(label) === null && yesNo(selection) === null && /^(?:para )?(?:marcar?|vencer|vence|ganhar|ganha)\b/.test(label) && teamPick(selection, teams)
+    ? `${selection} ${label.replace(/^para /, '')}` : null;
   const resposta = yesNo(label) ?? yesNo(selection);
-  const frase = yesNo(label) !== null ? selection : yesNo(selection) !== null ? label : selection;
-  const semResposta = resposta === null && (!label || labels.result.test(label));
+  const frase = junto ?? (yesNo(label) !== null ? selection : yesNo(selection) !== null ? label : selection);
+  const semResposta = resposta === null && (!!junto || !label || labels.result.test(label));
   if (resposta === null && !semResposta) return null;
   const expected = resposta ?? true;
+  const cada = /^(.+?) (?:para )?(?:vencer|vence|ganhar|ganha) (?:cada tempo|ambos os tempos|os dois tempos)$/.exec(frase);
+  if (cada) {
+    const side = teamPick(cada[1], teams);
+    return side ? { normalizedMarket: 'VENCER_AMBOS_TEMPOS', scope: 'REGULATION', side, expected } : null;
+  }
   const ambos = /^(.+?) (?:para )?marcar? em ambos os tempos$/.exec(frase);
   if (ambos) {
     const side = teamPick(ambos[1], teams);
@@ -188,27 +226,42 @@ export function parsePeriods(text: string, teams: Teams): Condition | null {
   return null;
 }
 export function parseIncidents(text: string, teams: Teams): Condition | null {
-  const { selection, label } = splitLabel(text);
+  const { selection, label: rotulo } = splitLabel(text);
+  // "Flamengo - 1º gol".
+  const label = rotulo === '1o gol' ? 'primeiro gol' : rotulo;
   if (/^(penalti no jogo|penalti na partida|cartao vermelho)$/.test(label)) {
     const expected = yesNo(selection);
     return expected === null ? null : { normalizedMarket: label === 'cartao vermelho' ? 'CARTAO_VERMELHO' : 'PENALTI_NO_JOGO', scope: 'REGULATION', expected };
   }
   // "Próximo gol (Gol 1)" é como o canal escreve "próximo gol 1".
-  const ordem = /^(?:primeiro gol|ultimo gol|proximo gol (?:\(gol )?(\d+)\)?)$/.exec(label);
+  // "Flamengo - 1º gol" chega normalizado como "1o gol".
+  const ordem = /^(?:primeiro gol|1o gol|ultimo gol|proximo gol (?:\(gol )?(\d+)\)?)$/.exec(label);
   if (ordem) {
     const pick = /^(nenhum|sem gol)$/.test(selection) ? 'NONE' : teamPick(selection, teams);
     const ordinal = label.startsWith('proximo') ? Number(ordem[1]) : 1;
-    return pick && Number.isSafeInteger(ordinal) && ordinal > 0 ? { normalizedMarket: label.startsWith('primeiro') ? 'PRIMEIRO_GOL' : label.startsWith('ultimo') ? 'ULTIMO_GOL' : 'PROXIMO_GOL', scope: 'REGULATION', pick, ordinal } : null;
+    return pick && Number.isSafeInteger(ordinal) && ordinal > 0 ? { normalizedMarket: label.startsWith('primeiro') || label === '1o gol' ? 'PRIMEIRO_GOL' : label.startsWith('ultimo') ? 'ULTIMO_GOL' : 'PROXIMO_GOL', scope: 'REGULATION', pick, ordinal } : null;
   }
   return null;
 }
 export function parsePlayer(text: string, teams?: Teams): Condition | null {
   const sc = scoped(text); if (!sc) return null;
   let { selection, label } = splitLabel(sc.text);
+  // "Kylian Mbappé 3+ chutes a gol": linha e métrica grudadas no nome, sem rótulo.
+  if (!label) {
+    const grudado = /^(.+?\s(?:\d+\+|(?:mais|menos) de \d+(?:[.,]\d+)?))\s+(chutes a gol|chutes ao gol|chutes no gol)$/.exec(selection);
+    if (grudado) { selection = grudado[1]; label = grudado[2]; }
+  }
   const metrics: Record<string, [string,string]> = {
     'marcar a qualquer momento': ['JOGADOR_MARCA','goals'], 'marcar em qualquer momento': ['JOGADOR_MARCA','goals'], 'jogador para marcar': ['JOGADOR_MARCA','goals'],
+    // Variações do canal: "Marcador a qualquer momento", "Para marcar a qualquer
+    // momento", "A marcar", "Marcar gol".
+    'marcador a qualquer momento': ['JOGADOR_MARCA','goals'], 'marcador em qualquer momento': ['JOGADOR_MARCA','goals'], 'para marcar a qualquer momento': ['JOGADOR_MARCA','goals'],
+    'a marcar': ['JOGADOR_MARCA','goals'], 'a marcar a qualquer momento': ['JOGADOR_MARCA','goals'], 'marcar gol': ['JOGADOR_MARCA','goals'], 'marcar um gol': ['JOGADOR_MARCA','goals'],
+    'anytime scorer': ['JOGADOR_MARCA','goals'],
     'jogador assistencia': ['JOGADOR_ASSISTENCIA','assists'], 'assistencias do jogador': ['JOGADOR_ASSISTENCIA','assists'],
     'gol ou assistencia': ['JOGADOR_GOL_OU_ASSISTENCIA','goalsAssists'], 'jogador marcar ou dar assistencia': ['JOGADOR_GOL_OU_ASSISTENCIA','goalsAssists'], 'marcar gol ou dar assistencia': ['JOGADOR_GOL_OU_ASSISTENCIA','goalsAssists'],
+    // "Michael Olise - Jogador a marcar ou dar assistência".
+    'jogador a marcar ou dar assistencia': ['JOGADOR_GOL_OU_ASSISTENCIA','goalsAssists'], 'a marcar ou dar assistencia': ['JOGADOR_GOL_OU_ASSISTENCIA','goalsAssists'],
     'chutes a gol do jogador': ['JOGADOR_CHUTE_A_GOL','shotsOnTarget'], 'jogador - chutes ao gol': ['JOGADOR_CHUTE_A_GOL','shotsOnTarget'],
     // Rótulo sem "do jogador", como o canal escreve ("José Manuel López - Chutes
     // a gol", "Clay Holstad 1+ - Chutes a gol"). É o mesmo rótulo do mercado de

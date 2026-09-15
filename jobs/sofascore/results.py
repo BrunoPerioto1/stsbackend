@@ -156,20 +156,36 @@ def extrai_placar(evento: dict) -> tuple | None:
 
 # Eventos de apostas ainda pendentes cujo jogo ja' devia ter acabado, e que
 # ainda nao tem placar gravado (ou ficaram num status nao-final).
+#
+# Dois lugares apontam pra evento: bets.event_* (aposta simples, ou o jogo que
+# abre a multipla) e bet_events (cada jogo de uma multipla de varios jogos).
+# Sem o segundo, so' o primeiro jogo da multipla ganhava placar e as outras
+# pernas ficavam sem liquidar pra sempre. Exige a migration 20260915_bet_events.
 PENDENTES = """
-SELECT DISTINCT b.event_external_id
-  FROM bets b
-  JOIN bet_results br ON br.bet_id = b.id
+SELECT ev.external_id
+  FROM (
+        SELECT b.event_provider AS provider,
+               b.event_external_id AS external_id,
+               b.event_start_at AS start_at
+          FROM bets b
+          JOIN bet_results br ON br.bet_id = b.id
+         WHERE br.result_id = 9
+           AND b.event_external_id IS NOT NULL
+        UNION
+        SELECT be.provider, be.external_id, be.start_at
+          FROM bet_events be
+          JOIN bet_results br ON br.bet_id = be.bet_id
+         WHERE br.result_id = 9
+       ) ev
   LEFT JOIN event_results er
-         ON er.provider = b.event_provider
-        AND er.external_id = b.event_external_id
- WHERE br.result_id = 9
-   AND b.event_provider = %s
-   AND b.event_external_id IS NOT NULL
-   AND b.event_start_at < CURRENT_TIMESTAMP - %s::interval
-   AND b.event_start_at > CURRENT_TIMESTAMP - %s::interval
+         ON er.provider = ev.provider
+        AND er.external_id = ev.external_id
+ WHERE ev.provider = %s
+   AND ev.start_at < CURRENT_TIMESTAMP - %s::interval
+   AND ev.start_at > CURRENT_TIMESTAMP - %s::interval
    AND (er.external_id IS NULL OR er.fetched_at < CURRENT_TIMESTAMP - INTERVAL '6 hours')
- ORDER BY b.event_external_id
+ GROUP BY ev.external_id
+ ORDER BY ev.external_id
  LIMIT %s
 """
 

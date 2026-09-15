@@ -8,6 +8,7 @@ import { ResultIdEnum } from '../bet/dto/result-id.enum';
 function makeService(
   overrides: {
     settleable?: any[];
+    legs?: any[];
     pending?: any[];
     dismissed?: number;
     queue?: any;
@@ -15,6 +16,7 @@ function makeService(
 ) {
   const repository = {
     findSettleable: jest.fn().mockResolvedValue(overrides.settleable ?? []),
+    findLegs: jest.fn().mockResolvedValue(overrides.legs ?? []),
     saveSuggestions: jest.fn().mockResolvedValue(undefined),
     findPendingSuggestions: jest
       .fn()
@@ -79,6 +81,32 @@ describe('computeSuggestions', () => {
       expect.objectContaining({
         suggestedResultId: null,
         reason: 'DADO_INDISPONIVEL',
+      }),
+    ]);
+  });
+
+  it('multipla de varios jogos liquida cada perna no proprio jogo', async () => {
+    const perna = (position: number, homeName: string, awayName: string, home: number, away: number) => ({
+      betId: 5, position, homeName, awayName, homeScore: home, awayScore: away,
+      eventStatus: 'finished', eventSport: 'Football', scoreScope: 'REGULATION', facts: null,
+    });
+    const { service, repository } = makeService({
+      settleable: [{
+        ...aposta(5, 'Boca Juniors e São Paulo vencerem - Resultado final', 0, 2),
+        game: 'CD Recoleta x Boca Juniors / São Paulo x Bolívar',
+      }],
+      legs: [perna(0, 'CD Recoleta', 'Boca Juniors', 0, 2), perna(1, 'São Paulo', 'Bolívar', 2, 0)],
+    });
+
+    await service.computeSuggestions(10 as any);
+
+    expect(repository.findLegs).toHaveBeenCalledWith([5]);
+    expect(repository.saveSuggestions).toHaveBeenCalledWith([
+      expect.objectContaining({
+        betId: 5,
+        suggestedResultId: ResultIdEnum.WON,
+        homeScore: null,
+        awayScore: null,
       }),
     ]);
   });

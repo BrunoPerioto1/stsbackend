@@ -8,7 +8,10 @@ export type SettlementReason = Reason;
 export interface Settlement { resultId: ResultIdEnum | null; reason: Reason | null; explanation: string }
 // v2: mercado no limite de 100 caracteres do canal é recusado, e rótulos de
 // jogador novos. Trocar a versão faz toda sugestão antiga ser recalculada.
-export const ENGINE_VERSION = '2026-09-15-capabilities-v3';
+// v4: facts chegavam com as chaves de `periods` renomeadas pelo CamelCasePlugin;
+// toda sugestão calculada antes disso pode ter "indisponível" falso.
+// v5: múltipla de vários jogos liquidada por perna, e rótulos novos do canal.
+export const ENGINE_VERSION = '2026-09-15-capabilities-v5';
 // Múltipla perde quando QUALQUER perna perde. Então PERDEU pode sair mesmo com
 // perna indefinida ou escondida pelo corte do canal — GANHOU nunca: exige todas
 // as pernas vistas e decididas. Em texto cortado a última perna visível é

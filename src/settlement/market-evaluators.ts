@@ -54,6 +54,10 @@ export function evaluatePeriods(c: Condition, ctx: EvaluationContext): Evaluatio
     return ft ? decided(result(first)===c.picks![0] && result(ft)===c.picks![1],`intervalo ${first.home}x${first.away}; final ${ft.home}x${ft.away}`) : unknown('placar de tempo normal indisponível');
   }
   if (!second) return unknown('placar do segundo tempo indisponível');
+  if (c.normalizedMarket==='VENCER_AMBOS_TEMPOS') {
+    const venceu=result(first)===c.side && result(second)===c.side;
+    return decided(venceu===c.expected,`1T ${first.home}x${first.away}; 2T ${second.home}x${second.away}`);
+  }
   if (c.normalizedMarket==='VENCER_UM_DOS_TEMPOS') {
     const venceu=result(first)===c.side || result(second)===c.side;
     return decided(venceu===c.expected,`1T ${first.home}x${first.away}; 2T ${second.home}x${second.away}`);

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { Kysely } from 'kysely';
+import { Kysely, sql } from 'kysely';
 import {
   DATABASE_READ_CONNECTION,
   DATABASE_WRITE_CONNECTION,
@@ -34,6 +34,68 @@ export class SettlementRepository {
     @Inject(DATABASE_READ_CONNECTION)
     private readonly dbRead: Kysely<Database>,
   ) {}
+
+  /**
+   * Por aposta, o placar mais recente entre os jogos de uma multipla de varios
+   * jogos (bet_events). bets.event_* so' guarda o jogo que abre a multipla — ou
+   * nada, se algum confronto nao casou —, entao sem isto placar novo de outra
+   * perna nao invalidaria a sugestao, e multipla sem evento principal nunca
+   * entraria na fila.
+   */
+  private legsFetched() {
+    return this.dbRead
+      .selectFrom('betEvents as be')
+      .innerJoin('eventResults as ler', (join) =>
+        join
+          .onRef('ler.provider', '=', 'be.provider')
+          .onRef('ler.externalId', '=', 'be.externalId'),
+      )
+      .select('be.betId as betId')
+      .select((eb) => eb.fn.max('ler.fetchedAt').as('fetchedAt'))
+      .groupBy('be.betId');
+  }
+
+  /** Jogos das multiplas de varios jogos, cada um com placar e fatos proprios. */
+  async findLegs(betIds: BetId[]) {
+    if (!betIds.length) return [];
+    const rows = await this.dbRead
+      .selectFrom('betEvents as be')
+      .leftJoin('eventResults as er', (join) =>
+        join
+          .onRef('er.provider', '=', 'be.provider')
+          .onRef('er.externalId', '=', 'be.externalId'),
+      )
+      .leftJoin('eventFacts as f', (join) =>
+        join
+          .onRef('f.provider', '=', 'er.provider')
+          .onRef('f.externalId', '=', 'er.externalId')
+          .onRef('f.fetchedAt', '=', 'er.fetchedAt')
+          .on('f.formatVersion', '=', 1),
+      )
+      .where('be.betId', 'in', betIds)
+      .select([
+        'be.betId as betId',
+        'be.position as position',
+        'er.homeName as homeName',
+        'er.awayName as awayName',
+        'er.homeScore as homeScore',
+        'er.awayScore as awayScore',
+        'er.status as eventStatus',
+        'er.sport as eventSport',
+        'er.scoreScope as scoreScope',
+        // Texto pelo mesmo motivo de findSettleable: o CamelCasePlugin
+        // renomearia as chaves de `periods`.
+        sql<string | null>`f.data_json::text`.as('facts'),
+      ])
+      .orderBy('be.betId')
+      .orderBy('be.position')
+      .execute();
+
+    return rows.map(({ facts, ...row }) => ({
+      ...row,
+      facts: facts == null ? null : (JSON.parse(facts) as unknown),
+    }));
+  }
 
   /**
    * Apostas ainda pendentes cujo jogo ja' terminou, ja' tem placar coletado e
@@ -85,6 +147,9 @@ export class SettlementRepository {
             .onRef('eventResults.externalId', '=', 'bets.eventExternalId'),
         )
         .leftJoin('betSettlementSuggestions as s', 's.betId', 'bets.id')
+        .leftJoin(this.legsFetched().as('legs'), (join) =>
+          join.onRef('legs.betId', '=', 'bets.id'),
+        )
         .where('bets.userId', '=', userId)
         .where('betResults.resultId', '=', ResultIdEnum.PENDING as ResultId)
         .select((eb) => [
@@ -95,7 +160,10 @@ export class SettlementRepository {
             // Se um mudar, o outro tem que mudar junto.
             .filterWhere((fb) =>
               fb.and([
-                fb('eventResults.externalId', 'is not', null),
+                fb.or([
+                  fb('eventResults.externalId', 'is not', null),
+                  fb('legs.betId', 'is not', null),
+                ]),
                 fb.or([
                   fb('s.betId', 'is', null),
                   fb.and([
@@ -104,6 +172,7 @@ export class SettlementRepository {
                       fb('s.engineVersion', 'is', null),
                       fb('s.engineVersion', '!=', ENGINE_VERSION),
                       fb('s.computedAt', '<', fb.ref('eventResults.fetchedAt')),
+                      fb('s.computedAt', '<', fb.ref('legs.fetchedAt')),
                       fb('s.computedAt', '<', fb.ref('bets.updatedAt')),
                     ]),
                   ]),
@@ -117,10 +186,13 @@ export class SettlementRepository {
         .selectFrom('betSettlementSuggestions as s')
         .innerJoin('bets', 'bets.id', 's.betId')
         .innerJoin('betResults', 'betResults.betId', 'bets.id')
-        .innerJoin('eventResults as er', (join) =>
+        .leftJoin('eventResults as er', (join) =>
           join
             .onRef('er.provider', '=', 'bets.eventProvider')
             .onRef('er.externalId', '=', 'bets.eventExternalId'),
+        )
+        .leftJoin(this.legsFetched().as('legs'), (join) =>
+          join.onRef('legs.betId', '=', 'bets.id'),
         )
         .where('bets.userId', '=', userId)
         .where('betResults.resultId', '=', ResultIdEnum.PENDING as ResultId)
@@ -129,7 +201,13 @@ export class SettlementRepository {
         // Mesma cerca de frescor de findPendingSuggestions: o contador tem que
         // bater com a lista que a tela mostra, nao com o que ficou no banco.
         .whereRef('s.computedAt', '>=', 'bets.updatedAt')
-        .whereRef('s.computedAt', '>=', 'er.fetchedAt')
+        .where((eb) =>
+          eb.and([
+            eb.or([eb('er.externalId', 'is not', null), eb('legs.betId', 'is not', null)]),
+            eb.or([eb('er.fetchedAt', 'is', null), eb('s.computedAt', '>=', eb.ref('er.fetchedAt'))]),
+            eb.or([eb('legs.fetchedAt', 'is', null), eb('s.computedAt', '>=', eb.ref('legs.fetchedAt'))]),
+          ]),
+        )
         .select((eb) => [
           eb.fn
             .count<string>('s.betId')
@@ -155,10 +233,15 @@ export class SettlementRepository {
     const rows = await this.dbRead
       .selectFrom('bets')
       .innerJoin('betResults', 'betResults.betId', 'bets.id')
-      .innerJoin('eventResults', (join) =>
+      // left join: multipla de varios jogos pode nao ter evento principal e
+      // ainda assim ter placar nas pernas (legs).
+      .leftJoin('eventResults', (join) =>
         join
           .onRef('eventResults.provider', '=', 'bets.eventProvider')
           .onRef('eventResults.externalId', '=', 'bets.eventExternalId'),
+      )
+      .leftJoin(this.legsFetched().as('legs'), (join) =>
+        join.onRef('legs.betId', '=', 'bets.id'),
       )
       .leftJoin('sportEvents', (join) =>
         join
@@ -175,6 +258,12 @@ export class SettlementRepository {
       .where('betResults.resultId', '=', ResultIdEnum.PENDING as ResultId)
       .where((eb) =>
         eb.or([
+          eb('eventResults.externalId', 'is not', null),
+          eb('legs.betId', 'is not', null),
+        ]),
+      )
+      .where((eb) =>
+        eb.or([
           eb('s.betId', 'is', null),
           eb.and([
             eb('s.dismissedAt', 'is', null),
@@ -182,6 +271,7 @@ export class SettlementRepository {
               eb('s.engineVersion', 'is', null),
               eb('s.engineVersion', '!=', ENGINE_VERSION),
               eb('s.computedAt', '<', eb.ref('eventResults.fetchedAt')),
+              eb('s.computedAt', '<', eb.ref('legs.fetchedAt')),
               eb('s.computedAt', '<', eb.ref('bets.updatedAt')),
             ]),
           ]),
@@ -196,7 +286,11 @@ export class SettlementRepository {
         'bets.sport as sport',
         'eventResults.sport as eventSport',
         'eventResults.scoreScope as scoreScope',
-        'f.dataJson as facts',
+        // Texto, nao jsonb: o CamelCasePlugin tambem renomeia chave de objeto
+        // aninhado, e `periods.FIRST_HALF` virava `FIRSTHALF` — todo mercado
+        // de tempo ficava "placar do primeiro tempo indisponivel" com o dado
+        // no banco. String passa pelo plugin intacta; o parse e' logo abaixo.
+        sql<string | null>`f.data_json::text`.as('facts'),
         'eventResults.homeScore as homeScore',
         'eventResults.awayScore as awayScore',
         'eventResults.status as eventStatus',
@@ -205,7 +299,10 @@ export class SettlementRepository {
       .limit(limit)
       .execute();
 
-    return rows as unknown as SettleableBet[];
+    return rows.map(({ facts, ...row }) => ({
+      ...row,
+      facts: facts == null ? null : (JSON.parse(facts) as unknown),
+    })) as unknown as SettleableBet[];
   }
 
   async saveSuggestions(
@@ -224,7 +321,14 @@ export class SettlementRepository {
       .values(
         suggestions.map((s) => ({
           ...s,
-          computedAt: new Date(),
+          // Relogio do banco, nao do Node. As colunas sao `timestamp without
+          // time zone`: o pg grava `new Date()` na hora local da maquina
+          // (UTC-3 em Sao Paulo), enquanto `event_results.fetched_at` e o
+          // trigger de `bets.updated_at` usam CURRENT_TIMESTAMP em UTC. Com
+          // `new Date()`, `computed_at` nascia 3h "antes" do placar: a lista
+          // escondia a sugestao recem-calculada e o proximo compute pegava
+          // ela de novo, pra sempre.
+          computedAt: sql<Date>`CURRENT_TIMESTAMP`,
           engineVersion: ENGINE_VERSION,
           dismissedAt: null,
         })),
@@ -260,15 +364,22 @@ export class SettlementRepository {
       .selectFrom('betSettlementSuggestions as s')
       .innerJoin('bets', 'bets.id', 's.betId')
       .innerJoin('betResults', 'betResults.betId', 'bets.id')
-      .innerJoin('eventResults as er', (join) => join
+      .leftJoin('eventResults as er', (join) => join
         .onRef('er.provider', '=', 'bets.eventProvider')
         .onRef('er.externalId', '=', 'bets.eventExternalId'))
+      .leftJoin(this.legsFetched().as('legs'), (join) => join.onRef('legs.betId', '=', 'bets.id'))
       .where('bets.userId', '=', userId)
       .where('betResults.resultId', '=', ResultIdEnum.PENDING as ResultId)
       .where('s.dismissedAt', 'is', null)
       .where('s.engineVersion', '=', ENGINE_VERSION)
       .whereRef('s.computedAt', '>=', 'bets.updatedAt')
-      .whereRef('s.computedAt', '>=', 'er.fetchedAt');
+      // Frescor contra o placar do jogo principal E contra o de cada perna da
+      // multipla — mesma cerca de queue().
+      .where((eb) => eb.and([
+        eb.or([eb('er.externalId', 'is not', null), eb('legs.betId', 'is not', null)]),
+        eb.or([eb('er.fetchedAt', 'is', null), eb('s.computedAt', '>=', eb.ref('er.fetchedAt'))]),
+        eb.or([eb('legs.fetchedAt', 'is', null), eb('s.computedAt', '>=', eb.ref('legs.fetchedAt'))]),
+      ]));
 
     query = review ? query.where('s.suggestedResultId', 'is', null) : query.where('s.suggestedResultId', 'is not', null);
 

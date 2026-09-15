@@ -33,7 +33,7 @@ function single(text: string, teams: Teams): Condition | null {
 }
 function isLabel(text: string): boolean {
   const s=scoped(text)?.text ?? text;
-  return Object.values(labels).some(p=>p.test(s)) || /^(?:total de |total |totais )?(?:escanteios|corners|cartoes(?: amarelos)?|cards|chutes(?: a gol| ao gol| no gol)?|faltas|impedimentos|defesas)(?: mais\/menos)?$/.test(s) || /^(?:dupla chance|chance dupla|double chance|handicap(?: asiatico)?|clean sheet|sem sofrer gols|mais escanteios|equipe com mais escanteios|escanteios 1x2|(?:maior numero de|equipe com mais|time com mais) (?:escanteios|cartoes|chutes ao gol|chutes a gol|chutes no gol|chutes)|(?:ganhar|vencer) sem (?:sofrer|tomar|levar) gols?|primeiro gol|ultimo gol|proximo gol (?:\(gol )?\d+\)?|penalti no jogo|cartao vermelho|marcar a qualquer momento|marcar em qualquer momento|jogador para marcar|jogador assistencia|assistencias do jogador|gol ou assistencia|jogador marcar ou dar assistencia|marcar gol ou dar assistencia|chutes a gol do jogador|total de chutes do jogador|cartoes do jogador)$/.test(s);
+  return Object.values(labels).some(p=>p.test(s)) || /^(?:total de |total |totais )?(?:escanteios|corners|cartoes(?: amarelos)?|cards|chutes(?: a gol| ao gol| no gol)?|faltas|impedimentos|defesas)(?: mais\/menos)?$/.test(s) || /^(?:dupla chance|chance dupla|double chance|handicap(?: asiatico)?|clean sheet|sem sofrer gols|mais escanteios|equipe com mais escanteios|escanteios 1x2|(?:maior numero de|equipe com mais|time com mais) (?:escanteios|cartoes|chutes ao gol|chutes a gol|chutes no gol|chutes)|(?:ganhar|vencer) sem (?:sofrer|tomar|levar) gols?|primeiro gol|ultimo gol|proximo gol (?:\(gol )?\d+\)?|penalti no jogo|cartao vermelho|marcar a qualquer momento|marcar em qualquer momento|marcador a qualquer momento|para marcar a qualquer momento|a marcar a qualquer momento|a marcar|marcar gol|1o gol|(?:vencer|ganhar) (?:cada tempo|ambos os tempos)|jogador para marcar|jogador assistencia|assistencias do jogador|gol ou assistencia|jogador marcar ou dar assistencia|marcar gol ou dar assistencia|chutes a gol do jogador|total de chutes do jogador|cartoes do jogador)$/.test(s);
 }
 // Combinada do mesmo jogo escrita como frase, do jeito que o canal manda:
 // "Palmeiras vence e tem mais escanteios - Resultado final e escanteios",
@@ -93,6 +93,20 @@ function clausulas(text: string, teams: Teams): Condition[] | null {
   const condicoes = canonicos.map((c) => single(c!, teams));
   return condicoes.every((c): c is Condition => !!c) ? condicoes : null;
 }
+// "Cada equipe leva mais de 1.5 cartões - Total de cartões", "Sim - Ambas
+// equipes receberão um cartão": uma frase, duas pernas — uma por time. Só a
+// afirmação: "não" viraria "um OU outro", que não é combinada.
+const CADA_EQUIPE = '(?:cada equipe|cada time|ambas (?:as )?equipes|os dois times)';
+function cadaEquipe(text: string): Condition[] | null {
+  const { selection, label } = splitLabel(text);
+  const acima = new RegExp(`^${CADA_EQUIPE} (?:leva|levar|recebe|receber|tem|ter) mais de (\\d+(?:[.,]\\d+)?) cartoes$`).exec(selection);
+  const umCartao = new RegExp(`^${CADA_EQUIPE} (?:recebera|receberao|recebem|receber|levam|levar|leva) (?:um|pelo menos um|1) cartao$`);
+  let line: number | null = null;
+  if (acima && (!label || /^(?:total de )?cartoes$/.test(label))) line = Number(acima[1].replace(',', '.'));
+  else if ((umCartao.test(label) && yesNo(selection) === true) || (umCartao.test(selection) && (!label || yesNo(label) === true))) line = 0.5;
+  if (line === null || !Number.isFinite(line) || (line * 2) % 1 !== 0) return null;
+  return (['HOME', 'AWAY'] as const).map((side): Condition => ({ normalizedMarket: 'TIME_TOTAL_CARTOES', scope: 'REGULATION', metric: 'cardPoints', operator: 'OVER', line, side }));
+}
 // O canal de tips corta a linha do mercado em 100 caracteres: conferido contra
 // tips.text, onde a linha termina em "Handicap de escan" e a odd vem logo abaixo.
 // Com exatamente 100 não dá pra saber se faltou uma perna — uma múltipla de 3
@@ -108,15 +122,21 @@ export function parseMarket(market: string, teams: Teams): ParseResult {
   if (/\b(?:nos? \d+ jogos?|nas? \d+ partidas?|cada partida|todos os jogos|todas as partidas|todos os times|todas as equipes|rodada|jogo com o gol mais rapido|multipla)\b/.test(text)) return fail('VARIOS_JOGOS','agregado/comparação entre jogos');
   const combined=compound(text,teams);
   if (combined) return {ok:true,conditions:combined};
+  const cada=cadaEquipe(text);
+  if (cada) return {ok:true,conditions:cada};
   const direct=single(text,teams);
   if (direct) return { ok:true,conditions:[direct] };
   // Consome toda a entrada. Rotulo após seleção só é unido se a gramática
   // completa do mercado o reconhecer; nenhum fragmento desconhecido é ignorado.
-  const parts=text.split(/\s+\/\s+|\s+·\s+/).map(s=>s.trim());
+  // "Ambas marcam: Não" é a mesma perna que "Não - Ambas marcam". Exige espaço
+  // depois dos dois-pontos pra não partir horário ("10:00").
+  const parts=text.split(/\s+\/\s+|\s+·\s+/).map(s=>s.trim().replace(/^([^:]+?):\s+(.+)$/,'$2 - $1'));
   if (parts.length>12 || parts.some(p=>!p)) return fail('MERCADO_NAO_RECONHECIDO','separação inválida');
   const paths: Condition[][]=[];
   function visit(i: number, conditions: Condition[]) {
     if (i===parts.length) { paths.push(conditions); return; }
+    const cada=cadaEquipe(parts[i]);
+    if (cada) { visit(i+1,[...conditions,...cada]); return; }
     if (i+1<parts.length && isLabel(parts[i+1])) {
       const c=single(`${parts[i]} - ${parts[i+1]}`,teams);
       if (c) { visit(i+2,[...conditions,c]); return; }

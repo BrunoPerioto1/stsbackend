@@ -310,3 +310,18 @@ CREATE TABLE IF NOT EXISTS event_facts (
   FOREIGN KEY (provider, external_id) REFERENCES event_results(provider, external_id) ON DELETE CASCADE
 );
 COMMIT;
+
+-- === Bet events (multipla de varios jogos) ==============================
+-- Um evento por confronto, na ordem do mercado. Ver
+-- migrations/20260915_bet_events.sql.
+CREATE TABLE IF NOT EXISTS bet_events (
+  bet_id INTEGER NOT NULL REFERENCES bets(id) ON DELETE CASCADE,
+  position SMALLINT NOT NULL CHECK (position >= 0),
+  confronto TEXT NOT NULL,
+  provider VARCHAR(32) NOT NULL,
+  external_id VARCHAR(64) NOT NULL,
+  start_at TIMESTAMP NOT NULL,
+  match_confidence NUMERIC(4,3) NOT NULL,
+  PRIMARY KEY (bet_id, position)
+);
+CREATE INDEX IF NOT EXISTS idx_bet_events_event ON bet_events (provider, external_id);
