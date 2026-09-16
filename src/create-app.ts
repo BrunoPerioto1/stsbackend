@@ -11,7 +11,8 @@ import { ValidationPipe } from '@nestjs/common';
 export async function createNestApp(): Promise<NestExpressApplication> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  app.enableCors();
+  // Cacheia o preflight: sem isso cada request do front paga um OPTIONS extra.
+  app.enableCors({ maxAge: 86400 });
 
   app.useGlobalPipes(
     new ValidationPipe({
