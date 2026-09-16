@@ -74,6 +74,17 @@ LIGAS = {
     1281: "Brasileirao Serie C",
     373: "Copa Betano do Brasil",
     155: "Liga Profesional de Futbol",
+    # Aposta em Independiente Rivadavia x Atletico Tucuman (2026-09-15) ficou
+    # sem evento: era jogo da copa, nao da liga.
+    1024: "Copa Argentina",
+    # Ligas que a planilha de apelidos do grupo mostrou com aposta e sem coleta
+    # (2026-09-16).
+    38: "Pro League (Belgica)",
+    182: "Ligue 2",
+    40: "Allsvenskan",
+    240: "LigaPro Serie A (Equador)",
+    11539: "Primera A (Colombia)",
+    984: "Ligue Professionnelle 1 (Tunisia)",
     384: "CONMEBOL Libertadores",
     480: "CONMEBOL Sudamericana",
     242: "MLS",

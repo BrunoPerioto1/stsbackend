@@ -115,6 +115,29 @@ const ALIASES: Record<string, string> = {
   lyon: 'olympique lyonnais',
   marseille: 'olympique marseille',
   'athletic bilbao': 'athletic',
+  // Alemanha: a casa escreve em portugues/ingles, o provider em alemao.
+  nuremberg: 'nurnberg',
+  nuremberga: 'nurnberg',
+  hamburgo: 'hamburger sv',
+  hamburg: 'hamburger sv',
+  'america mg': 'america mineiro',
+  // Da planilha de apelidos do grupo (2026-09-16): nomes que nao casavam com
+  // o time do provider nem por contencao nem por similaridade.
+  estrasburgo: 'strasbourg',
+  'aek atenas': 'aek athens',
+  'borussia monchengladbach': 'borussia m gladbach',
+  'deportivo la coruna': 'deportivo a coruna',
+  'olympique lyon': 'olympique lyonnais',
+  atleti: 'atletico madrid',
+  'atl madrid': 'atletico madrid',
+  'a madrid': 'atletico madrid',
+  'atletico bilbao': 'athletic',
+  'sporting lisboa': 'sporting cp',
+  'sporting lisbon': 'sporting cp',
+  'inter milan': 'inter',
+  'dyn kiev': 'dynamo kyiv',
+  'dynamo kiev': 'dynamo kyiv',
+  'deportivo toluca': 'toluca',
   'man united': 'manchester united',
   'man city': 'manchester city',
   // Tres Botafogos disputam o mesmo texto: sem o estado explicito a margem de
@@ -125,6 +148,8 @@ const ALIASES: Record<string, string> = {
   'phi eagles': 'philadelphia eagles',
   'den broncos': 'denver broncos',
   'la chargers': 'los angeles chargers',
+  'la rams': 'los angeles rams',
+  'sf 49ers': 'san francisco 49ers',
   // Selecoes: a casa escreve em portugues e o provider em ingles — nao ha
   // similaridade nem contencao que resolva "Alemanha" contra "Germany". Cada
   // nome do lado direito foi conferido contra a busca do provider em
@@ -167,6 +192,10 @@ const ALIASES: Record<string, string> = {
   'costa marfim': 'cote d ivoire',
   'africa sul': 'south africa',
   japao: 'japan',
+  uzbequistao: 'uzbekistan',
+  jordania: 'jordan',
+  tailandia: 'thailand',
+  eua: 'usa',
   'coreia sul': 'south korea',
   ira: 'iran',
   catar: 'qatar',
@@ -284,7 +313,10 @@ export function splitConfronto(texto: string): Lados | null {
 // Alem do " / " canonico, casas escrevem a multipla com virgula e "&"
 // ("A x B, C x D & E x F"). Fragmento que nao e' confronto e' descartado pelo
 // filtro de quem chama, entao virgula dentro de nome de time nao quebra nada.
-export const SEPARADOR_DE_CONFRONTOS = /\s+\/\s+|\s+&\s+|,\s+/;
+// O " e " so separa quando ha confronto dos dois lados ("A x B e C x D"): sem
+// isso "Bosnia e Herzegovina x Italia" perderia metade do nome.
+export const SEPARADOR_DE_CONFRONTOS =
+  /\s+\/\s+|\s+&\s+|,\s+|(?<=\s(?:x|vs\.?|versus)\s.*)\s+e\s+(?=.*\s(?:x|vs\.?|versus)\s)/i;
 
 function fragmentos(texto: string): string[] {
   return texto
@@ -511,16 +543,28 @@ function matchLados(lados: Lados, preparo: Preparo): EventMatch | null {
   const melhor = pontuados[0];
   if (!melhor || melhor.score < MATCH_THRESHOLD) return null;
 
-  const segundo = pontuados.find(
-    (p) => p.evento.externalId !== melhor.evento.externalId,
+  const empatados = pontuados.filter(
+    (p) => melhor.score - p.score < AMBIGUITY_MARGIN,
   );
-  if (segundo && melhor.score - segundo.score < AMBIGUITY_MARGIN) return null;
+  // Empate entre times diferentes e' chute. Mas o MESMO confronto duas vezes na
+  // janela (copa e liga, ida e volta com mando igual) nao e' ambiguidade: a
+  // aposta e' do jogo mais proximo. Caso real: Atletico-MG x Santos pela
+  // Sul-Americana em 16/09 e pelo Brasileirao em 11/10 derrubava os dois.
+  const mesmoConfronto = empatados.every(
+    (p) =>
+      teamId(p.evento, 'home') === teamId(melhor.evento, 'home') &&
+      teamId(p.evento, 'away') === teamId(melhor.evento, 'away'),
+  );
+  if (!mesmoConfronto) return null;
+  const escolhido = empatados.reduce((a, b) =>
+    b.evento.startAt < a.evento.startAt ? b : a,
+  );
 
   return {
-    externalId: melhor.evento.externalId,
-    provider: melhor.evento.provider,
-    startAt: melhor.evento.startAt,
-    confidence: Number(melhor.score.toFixed(3)),
+    externalId: escolhido.evento.externalId,
+    provider: escolhido.evento.provider,
+    startAt: escolhido.evento.startAt,
+    confidence: Number(escolhido.score.toFixed(3)),
   };
 }
 

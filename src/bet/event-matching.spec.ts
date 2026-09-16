@@ -134,6 +134,25 @@ describe('normalizeTeamName', () => {
     ['Man United', 'manchester united'],
     ['Botafogo-RJ', 'botafogo'],
     ['KC Chiefs', 'kansas city chiefs'],
+    // Apostas de 2026-09-09 a 16 sem evento por causa do nome.
+    ['Nuremberg', 'nurnberg'],
+    ['Hamburgo', 'hamburger sv'],
+    ['Hamburger SV', 'hamburger sv'],
+    ['América MG', 'america mineiro'],
+    ['LA Rams', 'los angeles rams'],
+    ['SF 49ers', 'san francisco 49ers'],
+    // Planilha de apelidos do grupo: o alvo e' o nome normalizado no provider.
+    ['Estrasburgo', 'strasbourg'],
+    ['AEK Atenas', 'aek athens'],
+    ['Borussia Mönchengladbach', 'borussia m gladbach'],
+    ["Borussia M'gladbach", 'borussia m gladbach'],
+    ['Deportivo La Coruña', 'deportivo a coruna'],
+    ['Deportivo de A Coruña', 'deportivo a coruna'],
+    ['Sporting Lisboa', 'sporting cp'],
+    ['Atl. Madrid', 'atletico madrid'],
+    ['Dyn. Kiev', 'dynamo kyiv'],
+    ['Uzbequistão', 'uzbekistan'],
+    ['EUA', 'usa'],
     // Selecoes: a casa escreve em portugues, o provider em ingles.
     ['Alemanha', 'germany'],
     ['Países Baixos', 'netherlands'],
@@ -208,6 +227,32 @@ describe('matchEvent', () => {
     expect(matchEvent('Vencedor da Copa', 'Campeão', CANDIDATOS)).toBeNull();
   });
 
+  // Copa e liga com o mesmo confronto dentro da janela de 30 dias.
+  describe('mesmo confronto duas vezes', () => {
+    const repetido = [
+      evento('liga', 'Atlético Mineiro', 'Santos', '2026-10-11T19:00:00Z', {
+        homeShort: 'Atlético-MG',
+      }),
+      evento('copa', 'Atlético Mineiro', 'Santos', '2026-09-16T22:00:00Z', {
+        homeShort: 'Atlético-MG',
+      }),
+    ];
+
+    it('fica com o jogo mais proximo', () => {
+      expect(matchEvent('Atlético MG x Santos', '', repetido)?.externalId).toBe(
+        'copa',
+      );
+    });
+
+    it('continua descartando empate entre confrontos diferentes', () => {
+      const homonimos = [
+        evento('a', 'Santos', 'Botafogo-PB', '2026-09-16T22:00:00Z'),
+        evento('b', 'Santos', 'Botafogo-SP', '2026-09-17T22:00:00Z'),
+      ];
+      expect(matchEvent('Santos x Botafogo', '', homonimos)).toBeNull();
+    });
+  });
+
   it('nao casa quando so um dos lados bate', () => {
     expect(
       matchEvent('Manchester City x Fluminense', '', CANDIDATOS),
@@ -245,6 +290,25 @@ describe('matchEvent', () => {
       const match = matchEvent('Múltipla (2 jogos)', mercado, CANDIDATOS);
       expect(match?.externalId).toBe('10');
       expect(match?.startAt.toISOString()).toBe('2026-09-09T16:45:00.000Z');
+    });
+
+    it('separa o ultimo confronto quando vem com " e "', () => {
+      expect(
+        extractConfrontos(
+          'Real Madrid x Rayo Vallecano, Lazio x AC Milan e Borussia Dortmund x SC Paderborn 07',
+          'Real Madrid, Milan e Borussia Dortmund vencem - Resultado final',
+        ),
+      ).toEqual([
+        'Real Madrid x Rayo Vallecano',
+        'Lazio x AC Milan',
+        'Borussia Dortmund x SC Paderborn 07',
+      ]);
+    });
+
+    it('nao corta " e " de dentro do nome do time', () => {
+      expect(extractConfrontos('Bósnia e Herzegovina x Itália', '')).toEqual([
+        'Bósnia e Herzegovina x Itália',
+      ]);
     });
 
     it('nao casa a multipla inteira se um confronto falhar', () => {
