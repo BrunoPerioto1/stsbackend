@@ -131,6 +131,20 @@ describe('normalizeTeamName', () => {
     ['Atlético MG', 'atletico mineiro'],
     ['Marselha', 'olympique marseille'],
     ['Olympique de Marseille', 'olympique marseille'],
+    ['Man United', 'manchester united'],
+    ['Botafogo-RJ', 'botafogo'],
+    ['KC Chiefs', 'kansas city chiefs'],
+    // Selecoes: a casa escreve em portugues, o provider em ingles.
+    ['Alemanha', 'germany'],
+    ['Países Baixos', 'netherlands'],
+    ['Holanda', 'netherlands'],
+    ['Costa do Marfim', 'cote d ivoire'],
+    ['África do Sul', 'south africa'],
+    ['Coreia do Sul', 'south korea'],
+    ['Turquia', 'turkiye'],
+    // Nao viram alias: o provider ja escreve igual, ou colidiria com clube.
+    ['Peru', 'peru'],
+    ['Clube De Regatas Brasil', 'brasil'],
   ])('normaliza %s', (entrada, esperado) => {
     expect(normalizeTeamName(entrada)).toBe(esperado);
   });
