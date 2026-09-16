@@ -13,6 +13,7 @@ import { ResultId } from "../../db_types/Results";
 import { TipId } from "../../db_types/Tips";
 import { BettingHouseId } from "../../db_types/BettingHouse";
 import { NewBetResult } from "../../db_types/BetsResults";
+import { NewBetEvent } from "../../db_types/BetEvents";
 import type { Database } from "../db/database.types";
 import { endOfDay, startOfDay } from "../../common/utils/bet.utils";
 import { betDate } from "./bet-date";
@@ -101,6 +102,18 @@ export class BetRepository {
     });
 
     return result;
+  }
+
+  // Um jogo por confronto de uma multipla de varios jogos. Fora da transacao da
+  // aposta de proposito: e' consultivo como o evento da aposta — planilhar
+  // nunca pode falhar por causa disso. Ver migrations/20260915_bet_events.sql.
+  async saveBetEvents(betId: BetId, events: Omit<NewBetEvent, "betId">[]) {
+    if (!events.length) return;
+    await this.dbWrite
+      .insertInto("betEvents")
+      .values(events.map((event) => ({ ...event, betId })))
+      .onConflict((oc) => oc.columns(["betId", "position"]).doNothing())
+      .execute();
   }
 
   async update(betId: BetId, update: UpdateBet, userId: UserId) {

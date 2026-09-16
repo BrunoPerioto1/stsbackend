@@ -1,11 +1,39 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SettlementRepository } from '../infra/repository/settlement.repository';
 import { BetService } from '../bet/bet.service';
-import { splitConfronto } from '../bet/event-matching';
 import { UserId } from '../db_types/Users';
 import { BetId } from '../db_types/Bet';
 import { ResultIdEnum } from '../bet/dto/result-id.enum';
 import { settleBet } from './settle';
+import { decodeFacts } from './event-facts';
+import { normalize } from './market-parser';
+import { splitConfronto } from '../bet/event-matching';
+import { EventLeg, settleMultiEvent } from './multi-event';
+import { SettlementContext } from './settlement.types';
+
+const football = (sport: string | null) =>
+  ['futebol', 'football', 'soccer'].includes(normalize(sport ?? ''));
+
+function contexto(
+  facts: unknown,
+  sport: string | null,
+  eventSport: string | null,
+  scoreScope: string | null,
+): SettlementContext {
+  return {
+    ...decodeFacts(facts),
+    sport:
+      sport == null && eventSport == null
+        ? 'football'
+        : (sport == null || football(sport)) && (eventSport == null || football(eventSport))
+          ? 'football'
+          : null,
+    scoreScope: scoreScope == null || scoreScope === 'REGULATION' ? 'REGULATION' : 'UNKNOWN',
+    // Regra da casa informada pelo usuário em 2026-09-15: vermelho vale 2
+    // amarelos. O coletor já grava cardPoints nessa regra.
+    cardCounting: 'RED_COUNTS_TWO',
+  };
+}
 
 @Injectable()
 export class SettlementService {
@@ -32,7 +60,45 @@ export class SettlementService {
       userId,
       SettlementService.LOTE,
     );
+    // Multipla de varios jogos: cada perna olha o placar do proprio jogo.
+    const pernas = bets.length
+      ? await this.repository.findLegs(bets.map((bet) => bet.id))
+      : [];
+
     const suggestions = bets.map((bet) => {
+      const daAposta = pernas.filter((perna) => perna.betId === bet.id);
+      if (daAposta.length) {
+        const legs = daAposta
+          // Perna sem placar coletado nao entra: pra liquidacao e' jogo sem
+          // resultado, igual a confronto que nao casou.
+          .filter((perna) => perna.eventStatus != null)
+          .map(
+            (perna): EventLeg => ({
+              position: perna.position,
+              teams: { home: perna.homeName ?? '', away: perna.awayName ?? '' },
+              score:
+                perna.homeScore != null && perna.awayScore != null
+                  ? { home: perna.homeScore, away: perna.awayScore }
+                  : null,
+              eventStatus: perna.eventStatus,
+              // Esporte da perna pelo provider: "Futebol" da aposta pode vir
+              // como "Vários" numa multipla.
+              context: contexto(perna.facts, null, perna.eventSport, perna.scoreScope),
+            }),
+          );
+        const settlement = settleMultiEvent(bet.game, bet.market, legs);
+        return {
+          betId: bet.id,
+          suggestedResultId: settlement.resultId,
+          reason: settlement.reason,
+          explanation: settlement.explanation,
+          // Placar de um jogo so' enganaria numa multipla: a frase ja' traz o
+          // placar de cada perna.
+          homeScore: null,
+          awayScore: null,
+        };
+      }
+
       // O placar vem do provider na ordem dele (mandante primeiro). Os nomes
       // saem de sport_events quando o cache ainda tem o jogo; senao, do texto
       // da aposta, que ja' foi casado com esse mesmo evento na criacao.
@@ -46,7 +112,13 @@ export class SettlementService {
           ? { home: bet.homeScore, away: bet.awayScore }
           : null;
 
-      const settlement = settleBet(bet.market, teams, score, bet.eventStatus);
+      const settlement = settleBet(
+        bet.market,
+        teams,
+        score,
+        bet.eventStatus,
+        contexto(bet.facts, bet.sport, bet.eventSport, bet.scoreScope),
+      );
       return {
         betId: bet.id,
         suggestedResultId: settlement.resultId,
@@ -74,6 +146,17 @@ export class SettlementService {
     };
   }
 
+  /** Contadores da fila, pra tela nao depender da resposta do ultimo compute. */
+  async queue(userId: UserId) {
+    const counts = await this.repository.queue(userId);
+    return {
+      ...counts,
+      // Sobrou candidato: a tela oferece "calcular proximo lote" em vez de dar
+      // a impressao de que nao ha mais nada esperando.
+      hasMore: counts.settleable > 0,
+    };
+  }
+
   async listSuggestions(userId: UserId) {
     const rows = await this.repository.findPendingSuggestions(userId);
     return rows.map((row) => ({
@@ -88,6 +171,10 @@ export class SettlementService {
       homeScore: row.homeScore,
       awayScore: row.awayScore,
     }));
+  }
+
+  async listReview(userId: UserId) {
+    return this.repository.findPendingSuggestions(userId, undefined, true);
   }
 
   /**

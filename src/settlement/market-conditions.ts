@@ -1,397 +1,165 @@
-// Le o texto do mercado de uma aposta e devolve as condicoes que o placar
-// final resolve. Funcao pura, sem I/O.
-//
-// O texto vem da extracao por IA e e' livre ("Mais de 2.5 - Total de gols",
-// "Flamengo - Resultado final"). " / " separa selecoes em todo o fluxo de
-// ingestao (ver BET_EXTRACTION_RULES), entao e' por ali que a combinada e'
-// quebrada em pernas.
-//
-// A regra de ouro e' recusar na duvida: uma sugestao errada vira lucro errado
-// na planilha do usuario, enquanto um `null` so' pede que ele resolva na mao,
-// que ja e' o que ele faz hoje.
-
-import { normalizeTeamName } from '../bet/event-matching';
-
-export type Condition =
-  | { kind: 'TOTAL_GOALS'; operator: 'OVER' | 'UNDER'; line: number }
-  // Gols de UM time ("Atletico de Madrid mais de 1.5"). O placar traz os dois
-  // lados separados, entao isso resolve — desde que se saiba de qual lado.
-  | { kind: 'TEAM_GOALS'; side: 'HOME' | 'AWAY'; operator: 'OVER' | 'UNDER'; line: number } // prettier-ignore
-  | { kind: 'BOTH_TEAMS_SCORE'; expected: boolean }
-  | { kind: 'MATCH_RESULT'; pick: 'HOME' | 'AWAY' | 'DRAW' }
-  | { kind: 'EXACT_SCORE'; home: number; away: number };
-
-export type ParseFailure =
-  | 'MERCADO_NAO_RECONHECIDO'
-  | 'OUTRA_CATEGORIA'
-  | 'TEMPO_PARCIAL'
-  | 'GOLS_DE_UM_TIME'
-  | 'VARIOS_JOGOS'
-  | 'CONDICAO_ALTERNATIVA'
-  // Duas condicoes no mesmo fragmento sem o separador que a gente sabe quebrar
-  // ("Ambas marcam e mais de 2.5"). Ver contaSinais.
-  | 'COMBINADA_NAO_SEPARADA';
-
-export type ParseResult =
-  | { ok: true; conditions: Condition[] }
-  | { ok: false; reason: ParseFailure; detail: string };
-
-export interface Teams {
-  home: string;
-  away: string;
-}
-
-// --- recusas -------------------------------------------------------------
-// Cada padrao aqui saiu de aposta real do historico. Nenhum e' preventivo.
-
-// Mercado que o placar final nao resolve. Alem das categorias obvias, entram
-// os que dependem de QUANDO ou QUEM marcou — o placar diz quantos, nao a que
-// minuto nem de quem.
-const OTHER_CATEGORY =
-  /\b(escanteios?|corners?|cart[oóõ]es|cart[aã]o|cards?|chutes?|finaliza[cç][oõ]es|shots?|faltas?|impedimentos?|defesas?|posse de bola|assist[eê]ncias?|jogador|marcador|artilheiro|anytime|gol mais r[aá]pido|primeiro gol|[uú]ltimo gol|marcar a qualquer momento|gol de vantagem)\b/i;
-
-// Recorte de tempo. "FT" fica de fora: full time e' o escopo que resolvemos.
-const PARTIAL_TIME =
-  /\b([12]\s*[ºo°]?\s*t\b|[12]\s*[ºo°]\s*tempo|primeiro tempo|segundo tempo|intervalo|half.?time|\bht\b|um dos tempos|ambos os tempos)/i;
-
-// "Multi-gols 1-3" e' faixa de gols de um time, nao placar exato.
-const MULTI_GOALS = /\bmulti[\s-]?gols?\b/i;
-
-// Handicap e dupla chance mudam a regra de vitoria; ficam pra outra versao.
-const HANDICAP = /\b(handicap|asi[aá]tico|asian)\b|[+-]\s?\d+([.,]\d+)?\s*gol/i;
-// As casas escrevem nas duas ordens: "Dupla chance" e "Chance dupla".
-const DOUBLE_CHANCE =
-  /\b(dupla chance|chance dupla|double chance|ou empate|empate ou)\b/i;
-
-// "Vencer de zero" / "sem tomar gols" e' vitoria + clean sheet: duas condicoes
-// numa frase, e a segunda nao esta' no texto como perna separada.
-const CLEAN_SHEET =
-  /\b(sem (tomar|sofrer|levar)|n[aã]o sofre|n[aã]o toma|de zero\b|de 0\b)/i;
-
-// Aposta agregada sobre varias partidas.
-const MANY_MATCHES =
-  /\b(nos?\s+\d+\s+jogos?|nas?\s+\d+\s+partidas?|em todos os jogos|em todas as partidas|todas as equipes|de hoje|na rodada|do dia)\b/i;
-
-// "ou" ligando alternativas: so' uma foi extraida.
-const ALTERNATIVE = /\bou\b(?!\s*$)/i;
-
-// --- reconhecimento ------------------------------------------------------
-
-const TOTAL_GOALS =
-  /\b(mais|menos|over|under|acima|abaixo)\s*(?:de\s*)?(\d+(?:[.,]\d+)?)/i;
-const OVER_WORDS = /^(mais|over|acima)$/i;
-// "o2.5" / "u1.5", como as casas abreviam.
-const SHORT_LINE = /\b([ou])\s?(\d+(?:[.,]\d+)?)\b/i;
-
-const BOTH_SCORE =
-  /\b(amb[ao]s\s+(?:os\s+times|as\s+equipes|times|equipes)?\s*marc|ambas\s+marc|btts|both teams to score)/i;
-const NEGATIVE = /\b(n[aã]o|no|sem)\b/i;
-
-const EXACT_SCORE_LABEL = /\b(resultado correto|placar exato|correct score)\b/i;
-const SCORE_PAIR = /\b(\d{1,2})\s*[-x:]\s*(\d{1,2})\b/;
-// Mesma expressao com /g, pra contar quantos placares o texto tem. Fica aqui em
-// cima pra nao reconstruir a RegExp em cada aposta avaliada. `lastIndex` nao
-// vaza entre chamadas porque String.match com /g sempre reinicia do zero.
-const SCORE_PAIR_ALL = new RegExp(SCORE_PAIR, 'g');
-
-const DRAW = /\b(empate|draw)\b/i;
-// Rotulos que confirmam ser mercado de vencedor da partida. "vitoria" entrou
-// depois: as casas escrevem tanto "Stuttgart - vencedor" quanto "Stuttgart -
-// vitoria", e sem ela a segunda forma era recusada como mercado desconhecido.
-const RESULT_LABEL =
-  /\b(resultado final|resultado da partida|resultado do jogo|vencedor|vence(r|ndo)?|ganha(r)?|vit[oó]ria|1\s?x\s?2|\bml\b|money ?line|match ?winner|resultado)\b/i;
-
-// Margem de vitoria nao e' vitoria: "vencer por 2 gols de diferenca" perde no
-// 1x0 e a regra de resultado simples diria que ganhou. O OTHER_CATEGORY ja'
-// pegava "gol de vantagem" no singular; isto fecha as outras formas, que
-// passaram a alcancar o parser de resultado quando "vitoria" virou rotulo.
-const MARGEM =
-  /\b\d+\s*(\+|ou mais\s*)?gols?\s+(de\s+)?(diferen[çc]a|vantagem)\b/i;
-
-function toNumber(raw: string): number {
-  return Number(raw.replace(',', '.'));
-}
-
-// Normalizar e' a parte caro daqui (NFD mais varias passadas de regex) e o
-// mesmo fragmento e' medido contra os dois times. Normaliza uma vez e passa o
-// corpo pronto pra `citationStrength`.
-function corpoNormalizado(text: string): string {
-  return ` ${normalizeTeamName(text)} `;
-}
-
-// Quao firmemente o texto cita o time. Graduado porque times de um mesmo jogo
-// dividem token: "Atletico Madrid" cita os dois lados de Real Madrid x
-// Atletico Madrid se "madrid" bastar. Zero significa "nao cita" — nao existe
-// citacao mais fraca que isso, entao `> 0` e' o teste de mencao.
-function citationStrength(body: string, team: string): number {
-  const target = normalizeTeamName(team);
-  if (!target) return 0;
-  if (body.includes(` ${target} `)) return 1;
-  const tokens = target.split(' ').filter((t) => t.length >= 4);
-  if (!tokens.length) return 0;
-  if (tokens.every((token) => body.includes(` ${token} `))) return 0.7;
-  return tokens.some((token) => body.includes(` ${token} `)) ? 0.5 : 0;
-}
-
-function parseTotalGoals(fragment: string, teams: Teams): ParseResult | null {
-  const long = TOTAL_GOALS.exec(fragment);
-  const short = long ? null : SHORT_LINE.exec(fragment);
-  if (!long && !short) return null;
-  // Sem a palavra "gol" em algum lugar pode ser linha de qualquer coisa.
-  if (!/\bgo?ls?\b|\bgoals?\b|\bgol\b/i.test(fragment)) return null;
-
-  // "Atletico de Madrid mais de 1.5" e' gol DO TIME, nao do jogo — e o placar
-  // resolve, porque traz os dois lados separados. So' que a mesma citacao pode
-  // ser a casa carimbando o confronto no fim do texto ("Mais de 2.5 gols -
-  // Flamengo x Vasco"), e ai a linha e' do jogo. O que separa os dois casos e'
-  // ONDE o time aparece: a selecao (o trecho antes do primeiro " - ") e' o que
-  // o usuario escolheu; o resto e' rotulo da casa. Time fora da selecao volta a
-  // ser recusa, que e' onde essa funcao ja' estava.
-  const selecao = fragment.split(/\s+[-–—]\s+/)[0];
-  const naSelecao = corpoNormalizado(selecao);
-  const home = citationStrength(naSelecao, teams.home);
-  const away = citationStrength(naSelecao, teams.away);
-  const citaFora =
-    citationStrength(corpoNormalizado(fragment), teams.home) > 0 ||
-    citationStrength(corpoNormalizado(fragment), teams.away) > 0;
-
-  let side: 'HOME' | 'AWAY' | null = null;
-  if (home || away) {
-    // Empate de forca e' os dois times citados: e' o confronto, nao um lado.
-    if (home === away)
-      return {
-        ok: false,
-        reason: 'GOLS_DE_UM_TIME',
-        detail: `linha de gols com os dois times citados: "${fragment}"`,
-      };
-    side = home > away ? 'HOME' : 'AWAY';
-  } else if (citaFora) {
-    return {
-      ok: false,
-      reason: 'GOLS_DE_UM_TIME',
-      detail: `time citado fora da selecao: "${fragment}"`,
-    };
+import { MARKET_REGISTRY } from './market-registry';
+import { normalize, labels, scoped, splitLabel, resultPick, parseScoreMarket, yesNo, teamPick } from './market-parser';
+import { Condition, ParseResult, Reason, Teams } from './settlement.types';
+export type { Condition, Teams, ParseResult } from './settlement.types';
+export type ParseFailure = Reason;
+const fail = (reason: Reason, detail: string): ParseResult => ({ ok:false,reason,detail });
+function compound(text: string, teams: Teams): Condition[] | null {
+  const { selection, label } = splitLabel(text.replace(/\s+\/\s+/g, ' - '));
+  const scope = scoped(text)?.scope;
+  if (scope !== 'REGULATION') return null;
+  if (/^(resultado final e total de gols|resultado da partida \+ total de gols)$/.test(label)) {
+    const m = /^(.+?)\s+e\s+(.+)$/.exec(selection);
+    if (!m) return null;
+    const pick = resultPick(m[1].replace(/\s+para ganhar$/, ''), teams);
+    const total = parseScoreMarket(`${m[2]} - total de gols`, teams);
+    return pick && total?.normalizedMarket === 'TOTAL_GOLS' ? [{normalizedMarket:'RESULTADO_FINAL',scope:'REGULATION',pick}, total] : null;
   }
-
-  const operator = long
-    ? OVER_WORDS.test(long[1])
-      ? 'OVER'
-      : 'UNDER'
-    : short![1].toLowerCase() === 'o'
-      ? 'OVER'
-      : 'UNDER';
-  const line = toNumber(long ? long[2] : short![2]);
-
-  if (!Number.isFinite(line) || line < 0 || line > 9.5)
-    return {
-      ok: false,
-      reason: 'MERCADO_NAO_RECONHECIDO',
-      detail: `linha ${line} implausivel para um jogo`,
-    };
-  // Linha asiatica (.25/.75) resolve em meio-ganho; nao cabe em ganhou/perdeu.
-  if ((line * 2) % 1 !== 0)
-    return {
-      ok: false,
-      reason: 'MERCADO_NAO_RECONHECIDO',
-      detail: `linha asiatica ${line}`,
-    };
-
-  return {
-    ok: true,
-    conditions: [
-      side
-        ? { kind: 'TEAM_GOALS', side, operator, line }
-        : { kind: 'TOTAL_GOALS', operator, line },
-    ],
-  };
-}
-
-function parseBothScore(fragment: string): ParseResult | null {
-  if (!BOTH_SCORE.test(fragment)) return null;
-  // A negacao costuma vir na selecao, antes do rotulo: "Não - Ambas marcam".
-  const selection = fragment.split(/\s+[-–—]\s+/)[0];
-  const expected = !NEGATIVE.test(selection);
-  return {
-    ok: true,
-    conditions: [{ kind: 'BOTH_TEAMS_SCORE', expected }],
-  };
-}
-
-function parseExactScore(fragment: string): ParseResult | null {
-  if (!EXACT_SCORE_LABEL.test(fragment)) return null;
-  const pares = fragment.match(SCORE_PAIR_ALL) ?? [];
-  if (pares.length !== 1)
-    return {
-      ok: false,
-      reason: pares.length ? 'CONDICAO_ALTERNATIVA' : 'MERCADO_NAO_RECONHECIDO',
-      detail: `${pares.length} placares no texto: "${fragment}"`,
-    };
-  const [, home, away] = SCORE_PAIR.exec(fragment)!;
-  return {
-    ok: true,
-    conditions: [
-      { kind: 'EXACT_SCORE', home: Number(home), away: Number(away) },
-    ],
-  };
-}
-
-function parseMatchResult(fragment: string, teams: Teams): ParseResult | null {
-  const body = corpoNormalizado(fragment);
-  const home = citationStrength(body, teams.home);
-  const away = citationStrength(body, teams.away);
-  const draw = DRAW.test(fragment);
-
-  if (!home && !away && !draw) return null;
-  // Time citado sem rotulo de resultado pode ser qualquer mercado do time.
-  if (!RESULT_LABEL.test(fragment) && !draw)
-    return {
-      ok: false,
-      reason: 'MERCADO_NAO_RECONHECIDO',
-      detail: `time citado sem indicar o mercado: "${fragment}"`,
-    };
-
-  if (draw && !home && !away)
-    return { ok: true, conditions: [{ kind: 'MATCH_RESULT', pick: 'DRAW' }] };
-
-  if (home && away) {
-    // "Cottbus vence o Wolfsburg": o verbo diz quem foi apostado, e isso manda
-    // sobre a forca — o perdedor pode estar escrito por extenso.
-    const vence =
-      /^(?<winner>.+?)\s+(?:vencer|vence|ganhar|ganha|bater|bate)\b/i.exec(
-        fragment.trim(),
-      );
-    if (vence?.groups) {
-      const trecho = corpoNormalizado(vence.groups.winner);
-      const h = citationStrength(trecho, teams.home);
-      const a = citationStrength(trecho, teams.away);
-      if (h !== a)
-        return {
-          ok: true,
-          conditions: [{ kind: 'MATCH_RESULT', pick: h > a ? 'HOME' : 'AWAY' }],
-        };
-    }
-    if (home === away)
-      return {
-        ok: false,
-        reason: 'MERCADO_NAO_RECONHECIDO',
-        detail: `os dois times citados sem indicar o vencedor: "${fragment}"`,
-      };
+  if (/^(total de gols e ambas as equipes marcam|total e ambas equipes marcam|total e ambas marcam|total de gols e ambas marcam)$/.test(label)) {
+    const m = /^(.+?) e (sim|nao)$/.exec(selection);
+    const total = m && parseScoreMarket(`${m[1]} - total de gols`, teams);
+    return total?.normalizedMarket==='TOTAL_GOLS' ? [total,{normalizedMarket:'AMBAS_MARCAM',scope:'REGULATION',expected:yesNo(m![2])!}] : null;
   }
-
-  return {
-    ok: true,
-    conditions: [{ kind: 'MATCH_RESULT', pick: home > away ? 'HOME' : 'AWAY' }],
-  };
-}
-
-/**
- * Quantos mercados diferentes o fragmento carrega.
- *
- * Os parsers rodam em cascata e o primeiro que reconhece devolve — o que
- * significa que num texto com duas condicoes a segunda sumia sem deixar
- * rastro. "Ambas marcam e mais de 2.5" no 1x1 virava GANHOU: ambas marcaram
- * mesmo, mas o total foi 2 e a outra perna tinha perdido. Sugestao errada e'
- * pior que sugestao nenhuma, entao dois sinais no mesmo fragmento viram recusa.
- *
- * A checagem da linha aqui e' de proposito mais frouxa que a do parseTotalGoals
- * (que exige a palavra "gol"): ao lado de "ambas marcam", um "mais de 2.5"
- * pelado e' perna, nao coincidencia.
- */
-function contaSinais(fragment: string, teams: Teams): number {
-  const body = corpoNormalizado(fragment);
-  const citaTime =
-    citationStrength(body, teams.home) > 0 ||
-    citationStrength(body, teams.away) > 0;
-
-  const sinais = [
-    BOTH_SCORE.test(fragment),
-    TOTAL_GOALS.test(fragment) || SHORT_LINE.test(fragment),
-    EXACT_SCORE_LABEL.test(fragment),
-    // Resultado da partida so' conta como sinal proprio quando o texto diz que
-    // e' de resultado; time citado sozinho e' ambiguo demais pra somar.
-    (citaTime && RESULT_LABEL.test(fragment)) || DRAW.test(fragment),
-  ];
-  return sinais.filter(Boolean).length;
-}
-
-function parseFragment(fragment: string, teams: Teams): ParseResult {
-  for (const [pattern, reason, label] of [
-    [OTHER_CATEGORY, 'OUTRA_CATEGORIA', 'mercado de outra categoria'],
-    [PARTIAL_TIME, 'TEMPO_PARCIAL', 'recorte de tempo'],
-    [MULTI_GOALS, 'MERCADO_NAO_RECONHECIDO', 'multi-gols (faixa, nao placar)'],
-    [HANDICAP, 'MERCADO_NAO_RECONHECIDO', 'handicap'],
-    [MARGEM, 'MERCADO_NAO_RECONHECIDO', 'margem de vitoria'],
-    [DOUBLE_CHANCE, 'MERCADO_NAO_RECONHECIDO', 'dupla chance'],
-    [CLEAN_SHEET, 'MERCADO_NAO_RECONHECIDO', 'combina clean sheet'],
-    [MANY_MATCHES, 'VARIOS_JOGOS', 'agregado de varias partidas'],
-  ] as const) {
-    const found = pattern.exec(fragment);
-    if (found) return { ok: false, reason, detail: `${label}: "${found[0]}"` };
+  if (!label) {
+    const m = /^(ambas marcam|btts) e (.+)$/.exec(selection);
+    const total = m && parseScoreMarket(`${m[2]} - total de gols`, teams);
+    return total?.normalizedMarket==='TOTAL_GOLS' ? [{normalizedMarket:'AMBAS_MARCAM',scope:'REGULATION',expected:true},total] : null;
   }
-
-  if (contaSinais(fragment, teams) > 1)
-    return {
-      ok: false,
-      reason: 'COMBINADA_NAO_SEPARADA',
-      detail: `duas condicoes no mesmo trecho: "${fragment}"`,
-    };
-
-  const parsed =
-    parseExactScore(fragment) ??
-    parseBothScore(fragment) ??
-    parseTotalGoals(fragment, teams) ??
-    parseMatchResult(fragment, teams);
-
-  return (
-    parsed ?? {
-      ok: false,
-      reason: 'MERCADO_NAO_RECONHECIDO',
-      detail: `nao reconhecido: "${fragment}"`,
-    }
-  );
+  return null;
 }
-
-/**
- * Quebra o mercado em condicoes. Combinada do mesmo jogo vira varias condicoes
- * que precisam valer todas — se qualquer perna nao for reconhecida, a aposta
- * inteira fica sem sugestao, porque liquidar por metade da informacao inverte
- * o resultado (uma "vitoria + mais de 2.5" que so' cumpriu a vitoria PERDEU).
- */
+function single(text: string, teams: Teams): Condition | null {
+  const matches=MARKET_REGISTRY.map(d=>d.parser(text,teams)).filter((c): c is Condition=>!!c);
+  return matches.length===1 ? matches[0] : null;
+}
+function isLabel(text: string): boolean {
+  const s=scoped(text)?.text ?? text;
+  return Object.values(labels).some(p=>p.test(s)) || /^(?:total de |total |totais )?(?:escanteios|corners|cartoes(?: amarelos)?|cards|chutes(?: a gol| ao gol| no gol)?|faltas|impedimentos|defesas)(?: mais\/menos)?$/.test(s) || /^(?:dupla chance|chance dupla|double chance|handicap(?: asiatico)?|clean sheet|sem sofrer gols|mais escanteios|equipe com mais escanteios|escanteios 1x2|(?:maior numero de|equipe com mais|time com mais) (?:escanteios|cartoes|chutes ao gol|chutes a gol|chutes no gol|chutes)|(?:ganhar|vencer) sem (?:sofrer|tomar|levar) gols?|primeiro gol|ultimo gol|proximo gol (?:\(gol )?\d+\)?|penalti no jogo|cartao vermelho|marcar a qualquer momento|marcar em qualquer momento|marcador a qualquer momento|para marcar a qualquer momento|a marcar a qualquer momento|a marcar|marcar gol|1o gol|(?:vencer|ganhar) (?:cada tempo|ambos os tempos)|jogador para marcar|jogador assistencia|assistencias do jogador|gol ou assistencia|jogador marcar ou dar assistencia|marcar gol ou dar assistencia|chutes a gol do jogador|total de chutes do jogador|cartoes do jogador)$/.test(s);
+}
+// Combinada do mesmo jogo escrita como frase, do jeito que o canal manda:
+// "Palmeiras vence e tem mais escanteios - Resultado final e escanteios",
+// "Bahia ganha 1º tempo e Bahia tem mais chutes ao gol -", "0-0 HT e u3.5 gols".
+// Cada cláusula vira um mercado canônico e passa pelo mesmo registro das
+// apostas simples. Cláusula que não case derruba a aposta inteira: liquidar só
+// a parte entendida daria GANHOU sem a perna que ficou de fora. O escopo é de
+// cada cláusula — "1º tempo" numa perna não vaza pra outra.
+const ESTATISTICA_DE_EQUIPE = 'escanteios|cartoes|chutes ao gol|chutes a gol|chutes no gol|chutes';
+function clausulas(text: string, teams: Teams): Condition[] | null {
+  const partes = text.replace(/\s+-\s*$/, '').split(/\s+[-–—]\s+/);
+  if (partes.length > 2) return null;
+  const [selecao, rotulo = ''] = partes;
+  const frases = selecao.split(/\s+e\s+/);
+  if (frases.length < 2 || frases.length > 4) return null;
+  const rotulos = rotulo ? rotulo.split(/\s+e\s+/) : [];
+  // "Bahia marcar em ambos os tempos e ter mais escanteios": a segunda cláusula
+  // herda o time da primeira.
+  let sujeito: string | null = null;
+  const time = (nome: string | undefined): string | null => {
+    if (!nome) return sujeito;
+    if (!teamPick(nome, teams)) return null;
+    sujeito = nome;
+    return nome;
+  };
+  const canonicos = frases.map((frase): string | null => {
+    const vitoria1T = /^(.+?) (?:para )?(?:vence|vencer|ganha|ganhar) (?:o )?(?:1o tempo|primeiro tempo)$/.exec(frase);
+    if (vitoria1T) return time(vitoria1T[1]) && `${vitoria1T[1]} - resultado do 1o tempo`;
+    const vitoria = /^(.+?) (?:para )?(?:vence|vencer|ganha|ganhar)$/.exec(frase);
+    if (vitoria) return time(vitoria[1]) && `${vitoria[1]} - resultado final`;
+    const mais = new RegExp(`^(?:(.+?) )?(?:tem|ter|com) mais (${ESTATISTICA_DE_EQUIPE})$`).exec(frase);
+    if (mais) { const quem = time(mais[1]); return quem && `${quem} - maior numero de ${mais[2]}`; }
+    const ambosTempos = /^(?:(.+?) )?(?:para )?marcar? em ambos os tempos$/.exec(frase);
+    if (ambosTempos) { const quem = time(ambosTempos[1]); return quem && `${quem} marcar em ambos os tempos - sim`; }
+    if (labels.both.test(frase)) return 'sim - ambas marcam';
+    const over = /^(?:\+|o|mais de )\s*(\d+(?:[.,]\d+)?) gols?$/.exec(frase);
+    if (over) return `mais de ${over[1]} - total de gols`;
+    const under = /^(?:-|u|menos de )\s*(\d+(?:[.,]\d+)?) gols?$/.exec(frase);
+    if (under) return `menos de ${under[1]} - total de gols`;
+    const placar1T = /^(\d{1,2})\s*[-x]\s*(\d{1,2}) (?:ht|no intervalo|1o tempo)$/.exec(frase);
+    if (placar1T) return `${placar1T[1]}-${placar1T[2]} - resultado correto 1o tempo`;
+    const marca = /^(.+?) (?:marca|marcar|para marcar) (?:a|em) qualquer momento$/.exec(frase);
+    if (marca && !teamPick(marca[1], teams)) return `${marca[1]} - marcar a qualquer momento`;
+    return null;
+  });
+  const pendentes = canonicos.map((c, i) => (c ? -1 : i)).filter((i) => i >= 0);
+  for (const i of pendentes) {
+    // Cláusula sem verbo ("mais de 10.5") usa o rótulo: pareado quando há um
+    // rótulo por cláusula, ou o rótulo único quando só UMA cláusula precisa dele.
+    const rot = rotulos.length === frases.length ? rotulos[i] : rotulos.length === 1 && pendentes.length === 1 ? rotulos[0] : '';
+    if (rot && !labels.result.test(rot)) { canonicos[i] = `${frases[i]} - ${rot}`; continue; }
+    // Time sozinho ("Los Angeles FC e +3.5 gols") só vale vitória ao lado de
+    // total de gols, como o mercado composto que a casa já oferece.
+    if (teamPick(frases[i], teams) && canonicos.some((c) => c?.endsWith('total de gols'))) canonicos[i] = `${frases[i]} - resultado final`;
+  }
+  if (canonicos.some((c) => !c)) return null;
+  const condicoes = canonicos.map((c) => single(c!, teams));
+  return condicoes.every((c): c is Condition => !!c) ? condicoes : null;
+}
+// "Cada equipe leva mais de 1.5 cartões - Total de cartões", "Sim - Ambas
+// equipes receberão um cartão": uma frase, duas pernas — uma por time. Só a
+// afirmação: "não" viraria "um OU outro", que não é combinada.
+const CADA_EQUIPE = '(?:cada equipe|cada time|ambas (?:as )?equipes|os dois times)';
+function cadaEquipe(text: string): Condition[] | null {
+  const { selection, label } = splitLabel(text);
+  const acima = new RegExp(`^${CADA_EQUIPE} (?:leva|levar|recebe|receber|tem|ter) mais de (\\d+(?:[.,]\\d+)?) cartoes$`).exec(selection);
+  const umCartao = new RegExp(`^${CADA_EQUIPE} (?:recebera|receberao|recebem|receber|levam|levar|leva) (?:um|pelo menos um|1) cartao$`);
+  let line: number | null = null;
+  if (acima && (!label || /^(?:total de )?cartoes$/.test(label))) line = Number(acima[1].replace(',', '.'));
+  else if ((umCartao.test(label) && yesNo(selection) === true) || (umCartao.test(selection) && (!label || yesNo(label) === true))) line = 0.5;
+  if (line === null || !Number.isFinite(line) || (line * 2) % 1 !== 0) return null;
+  return (['HOME', 'AWAY'] as const).map((side): Condition => ({ normalizedMarket: 'TIME_TOTAL_CARTOES', scope: 'REGULATION', metric: 'cardPoints', operator: 'OVER', line, side }));
+}
+// O canal de tips corta a linha do mercado em 100 caracteres: conferido contra
+// tips.text, onde a linha termina em "Handicap de escan" e a odd vem logo abaixo.
+// Com exatamente 100 não dá pra saber se faltou uma perna — uma múltipla de 3
+// cortada bem na fronteira vira uma de 2 perfeitamente válida, e seria proposta
+// como ganha sem a perna que ficou de fora. Em code points, como o length() do
+// Postgres, que foi onde o pico de 697 apostas em 100 apareceu.
+export const LIMITE_DO_CANAL = 100;
 export function parseMarket(market: string, teams: Teams): ParseResult {
-  const text = (market ?? '').trim();
-  if (!text)
-    return {
-      ok: false,
-      reason: 'MERCADO_NAO_RECONHECIDO',
-      detail: 'mercado vazio',
-    };
-
-  // Multipla de jogos diferentes ja' chega com o evento rotulado
-  // "Múltipla (N jogos)" (ver foldMultiEventGame); aqui so' sobra a de um jogo.
-  const fragments = text
-    .split(' / ')
-    .flatMap((part) => part.split(' · '))
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  const conditions: Condition[] = [];
-  for (const fragment of fragments) {
-    if (ALTERNATIVE.test(fragment) && !DOUBLE_CHANCE.test(fragment))
-      return {
-        ok: false,
-        reason: 'CONDICAO_ALTERNATIVA',
-        detail: `alternativa "ou" no texto: "${fragment}"`,
-      };
-    const parsed = parseFragment(fragment, teams);
-    if (!parsed.ok) return parsed;
-    conditions.push(...parsed.conditions);
+  if ([...(market ?? '')].length === LIMITE_DO_CANAL) return fail('MERCADO_TRUNCADO',`texto no limite de ${LIMITE_DO_CANAL} caracteres do canal; pode faltar perna`);
+  const text=normalize(market??'');
+  if (!text) return fail('MERCADO_NAO_RECONHECIDO','mercado vazio');
+  if (/\b(?:prorrogacao|extra time|penaltis|incluindo|classificar|classificacao)\b/.test(text)) return fail('ESCOPO_NAO_SUPORTADO','escopo além do tempo normal ou qualificação');
+  if (/\b(?:nos? \d+ jogos?|nas? \d+ partidas?|cada partida|todos os jogos|todas as partidas|todos os times|todas as equipes|rodada|jogo com o gol mais rapido|multipla)\b/.test(text)) return fail('VARIOS_JOGOS','agregado/comparação entre jogos');
+  const combined=compound(text,teams);
+  if (combined) return {ok:true,conditions:combined};
+  const cada=cadaEquipe(text);
+  if (cada) return {ok:true,conditions:cada};
+  const direct=single(text,teams);
+  if (direct) return { ok:true,conditions:[direct] };
+  // Consome toda a entrada. Rotulo após seleção só é unido se a gramática
+  // completa do mercado o reconhecer; nenhum fragmento desconhecido é ignorado.
+  // "Ambas marcam: Não" é a mesma perna que "Não - Ambas marcam". Exige espaço
+  // depois dos dois-pontos pra não partir horário ("10:00").
+  const parts=text.split(/\s+\/\s+|\s+·\s+/).map(s=>s.trim().replace(/^([^:]+?):\s+(.+)$/,'$2 - $1'));
+  if (parts.length>12 || parts.some(p=>!p)) return fail('MERCADO_NAO_RECONHECIDO','separação inválida');
+  const paths: Condition[][]=[];
+  function visit(i: number, conditions: Condition[]) {
+    if (i===parts.length) { paths.push(conditions); return; }
+    const cada=cadaEquipe(parts[i]);
+    if (cada) { visit(i+1,[...conditions,...cada]); return; }
+    if (i+1<parts.length && isLabel(parts[i+1])) {
+      const c=single(`${parts[i]} - ${parts[i+1]}`,teams);
+      if (c) { visit(i+2,[...conditions,c]); return; }
+    }
+    const c=single(parts[i],teams);
+    if (c) visit(i+1,[...conditions,c]);
   }
-
-  return conditions.length
-    ? { ok: true, conditions }
-    : {
-        ok: false,
-        reason: 'MERCADO_NAO_RECONHECIDO',
-        detail: 'nenhuma condicao extraida',
-      };
+  visit(0,[]);
+  if (paths.length===1 && paths[0].length) return { ok:true,conditions:paths[0] };
+  // Formato real: seleções primeiro, depois respectivos rótulos.
+  if (parts.length>=4 && parts.length%2===0) {
+    const n=parts.length/2;
+    if (parts.slice(n).every(isLabel)) {
+      const cs=parts.slice(0,n).map((s,i)=>single(`${s} - ${parts[n+i]}`,teams));
+      if (cs.every((c): c is Condition=>!!c)) return { ok:true,conditions:cs };
+    }
+  }
+  if (/\se\s/.test(text)) {
+    const frase=clausulas(text,teams);
+    if (frase) return { ok:true,conditions:frase };
+  }
+  if (/\bou\b/.test(text)) return fail('CONDICAO_ALTERNATIVA','alternativa sem gramática inequívoca');
+  if (/\be\b/.test(text) && /mais|menos|resultado|marcam/.test(text)) return fail('COMBINADA_NAO_SEPARADA','condições sem separação inequívoca');
+  if (/gols/.test(text) && (text.includes(normalize(teams.home)) || text.includes(normalize(teams.away))) && /\bx\b/.test(text)) return fail('GOLS_DE_UM_TIME','confronto não identifica lado da seleção');
+  return fail('MERCADO_NAO_RECONHECIDO',`seleção, participante ou rótulo ambíguo: "${market}"`);
 }

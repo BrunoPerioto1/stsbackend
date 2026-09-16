@@ -14,6 +14,7 @@ export default interface BetSettlementSuggestionsTable {
   homeScore: ColumnType<number | null, number | null, number | null>;
   awayScore: ColumnType<number | null, number | null, number | null>;
   computedAt: ColumnType<Date, Date | undefined, Date>;
+  engineVersion: ColumnType<string | null, string | null | undefined, string | null>;
   dismissedAt: ColumnType<Date | null, Date | null, Date | null>;
 }
 

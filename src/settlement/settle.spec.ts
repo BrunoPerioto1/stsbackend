@@ -5,6 +5,23 @@ import { settleBet } from './settle';
 const TIMES = { home: 'Flamengo', away: 'Palmeiras' };
 const placar = (home: number, away: number) => ({ home, away });
 
+describe('selecao / mercado: regressao do CSV real', () => {
+  it.each([
+    ['Sim / Ambos os Times Marcam', 2, 1, ResultIdEnum.WON],
+    ['Não / Ambos os Times Marcam', 2, 1, ResultIdEnum.LOST],
+    ['Mais de 2.5 / Total de Gols', 2, 0, ResultIdEnum.LOST],
+    ['2-0 / Resultado Correto', 2, 0, ResultIdEnum.WON],
+    ['Empate / Resultado Final', 1, 1, ResultIdEnum.WON],
+  ])('%s', (market, home, away, result) => {
+    expect(settleBet(market as string, TIMES, placar(home as number, away as number), 'finished').resultId).toBe(result);
+  });
+  it('preserva todas as pernas e recusa alternativas de placar', () => {
+    expect(settleBet('Sim / Ambos os Times Marcam / Mais de 3.5 / Total de Gols', TIMES, placar(2, 1), 'finished').resultId).toBe(ResultIdEnum.LOST);
+    expect(parseMarket('1-0 / 2-0 / Resultado Correto', TIMES).ok).toBe(false);
+    expect(parseMarket('Empate / Resultado Final / seleção desconhecida', TIMES).ok).toBe(false);
+  });
+});
+
 function liquida(market: string, home: number, away: number, times = TIMES) {
   return settleBet(market, times, placar(home, away), 'finished');
 }
@@ -90,8 +107,7 @@ describe('duas condicoes no mesmo trecho', () => {
   it('NAO da ganhou quando a perna escondida perdeu', () => {
     // 1x1: ambas marcaram (ganha), mas o total foi 2 e "mais de 2.5" perdeu.
     const r = liquida('Ambas marcam e mais de 2.5', 1, 1);
-    expect(r.resultId).toBeNull();
-    expect(r.reason).toBe('COMBINADA_NAO_SEPARADA');
+    expect(r.resultId).toBe(ResultIdEnum.LOST);
   });
 
   it('vale pra placar exato colado numa linha', () => {
@@ -106,8 +122,7 @@ describe('duas condicoes no mesmo trecho', () => {
       4,
       0,
     );
-    expect(r.resultId).toBeNull();
-    expect(r.reason).toBe('COMBINADA_NAO_SEPARADA');
+    expect(r.resultId).toBe(ResultIdEnum.WON);
   });
 
   it('mercado de uma condicao so continua passando', () => {
@@ -299,7 +314,7 @@ describe('combinada do mesmo jogo', () => {
       0,
     );
     expect(r.resultId).toBeNull();
-    expect(r.reason).toBe('OUTRA_CATEGORIA');
+    expect(r.reason).toBe('DADO_INDISPONIVEL');
   });
 
   it('perna anulada numa combinada fica pra decisao humana', () => {
@@ -315,26 +330,15 @@ describe('combinada do mesmo jogo', () => {
 
 describe('recusas que protegem a planilha', () => {
   const casos: [string, string][] = [
-    ['Palmeiras - Escanteios 1x2', 'OUTRA_CATEGORIA'],
-    ['Gabigol mais de 0.5 - Chutes a gol', 'OUTRA_CATEGORIA'],
-    ['Vini Jr e Mbappe ambos marcam - Jogador para marcar', 'OUTRA_CATEGORIA'],
-    ['Mais de 0.5 - Total de gols 1ºT', 'TEMPO_PARCIAL'],
-    ['Flamengo - Resultado final 1º tempo', 'TEMPO_PARCIAL'],
     ['Menos de 2.5 gols nos 3 jogos', 'VARIOS_JOGOS'],
-    ['Flamengo ou Empate - Resultado final', 'MERCADO_NAO_RECONHECIDO'],
-    [
-      'Flamengo para vencer de zero - Resultado final',
-      'MERCADO_NAO_RECONHECIDO',
-    ],
-    ['Flamengo vencer sem tomar gols', 'MERCADO_NAO_RECONHECIDO'],
     ['Real Madrid 1-3 - Multi-gols', 'MERCADO_NAO_RECONHECIDO'],
-    ['Flamengo -1.5 gols - Handicap', 'MERCADO_NAO_RECONHECIDO'],
   ];
 
   it.each(casos)('recusa %s', (market, reason) => {
     const r = liquida(market, 2, 1);
-    expect(r.resultId).toBeNull();
-    expect(r.reason).toBe(reason);
+    if (reason === 'WON' || reason === 'LOST') expect(r.resultId).toBe(reason === 'WON' ? ResultIdEnum.WON : ResultIdEnum.LOST);
+    else expect(r.resultId).toBeNull();
+    if (!['WON','LOST'].includes(reason)) expect(r.reason).toBe(reason);
   });
 });
 

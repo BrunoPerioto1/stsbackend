@@ -449,6 +449,38 @@ function matchLados(lados: Lados, preparo: Preparo): EventMatch | null {
   };
 }
 
+export interface ConfrontoMatch {
+  confronto: string;
+  /** Ordem em extractConfrontos: e' a posicao que bet_events grava. */
+  position: number;
+  match: EventMatch | null;
+}
+
+/**
+ * Um resultado por confronto, na ordem de extractConfrontos. Confronto sem
+ * match confiavel vem com `match: null` — nunca um jogo chutado.
+ *
+ * E' o que a multipla de varios jogos precisa guardar pra liquidar: cada perna
+ * olha o placar do proprio jogo, e perna com jogo casado ainda pode decidir
+ * PERDEU mesmo que outro confronto nao tenha casado.
+ */
+export function matchEvents(
+  game: string,
+  market: string,
+  candidatos: CandidateEvent[],
+  sport?: string,
+  cache?: MatchCache,
+): ConfrontoMatch[] {
+  if (!game || !candidatos.length) return [];
+  const preparo = preparar(candidatos, sport, cache);
+  if (!preparo) return [];
+  return extractConfrontos(game, market ?? '').map((confronto, position) => ({
+    confronto,
+    position,
+    match: matchConfronto(confronto, preparo),
+  }));
+}
+
 /**
  * Retorna o evento correspondente a aposta, ou null quando nao ha confianca
  * suficiente. Nunca lanca e nunca chuta uma data.
@@ -464,8 +496,23 @@ export function matchEvent(
   sport?: string,
   cache?: MatchCache,
 ): EventMatch | null {
-  if (!game || !candidatos.length) return null;
+  const confrontos = matchEvents(game, market, candidatos, sport, cache);
+  if (!confrontos.length || confrontos.some((c) => !c.match)) return null;
 
+  const casados = confrontos
+    .map((c) => c.match!)
+    .sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
+  return {
+    ...casados[0],
+    confidence: Math.min(...casados.map((m) => m.confidence)),
+  };
+}
+
+function preparar(
+  candidatos: CandidateEvent[],
+  sport: string | undefined,
+  cache: MatchCache | undefined,
+): Preparo | null {
   const esporte = SPORTS[normalizeSport(sport)];
   // Chave por esporte porque e' o que muda o conjunto elegivel; '*' e' o caso
   // sem esporte reconhecido, em que todo candidato entra.
@@ -478,21 +525,5 @@ export function matchEvent(
     preparo = buildPreparo(elegiveis);
     cache?.set(chave, preparo);
   }
-  if (!preparo.elegiveis.length) return null;
-
-  const confrontos = extractConfrontos(game, market ?? '');
-  if (!confrontos.length) return null;
-
-  const casados: EventMatch[] = [];
-  for (const confronto of confrontos) {
-    const match = matchConfronto(confronto, preparo);
-    if (!match) return null;
-    casados.push(match);
-  }
-
-  casados.sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
-  return {
-    ...casados[0],
-    confidence: Math.min(...casados.map((m) => m.confidence)),
-  };
+  return preparo.elegiveis.length ? preparo : null;
 }

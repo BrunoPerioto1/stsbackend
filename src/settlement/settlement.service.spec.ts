@@ -8,17 +8,23 @@ import { ResultIdEnum } from '../bet/dto/result-id.enum';
 function makeService(
   overrides: {
     settleable?: any[];
+    legs?: any[];
     pending?: any[];
     dismissed?: number;
+    queue?: any;
   } = {},
 ) {
   const repository = {
     findSettleable: jest.fn().mockResolvedValue(overrides.settleable ?? []),
+    findLegs: jest.fn().mockResolvedValue(overrides.legs ?? []),
     saveSuggestions: jest.fn().mockResolvedValue(undefined),
     findPendingSuggestions: jest
       .fn()
       .mockResolvedValue(overrides.pending ?? []),
     dismiss: jest.fn().mockResolvedValue(overrides.dismissed ?? 0),
+    queue: jest.fn().mockResolvedValue(
+      overrides.queue ?? { pending: 0, settleable: 0, suggestions: 0, undecided: 0 },
+    ),
   };
   const betService = { finalizeMany: jest.fn().mockResolvedValue(undefined) };
   const service = new SettlementService(repository as any, betService as any);
@@ -74,7 +80,33 @@ describe('computeSuggestions', () => {
     expect(repository.saveSuggestions).toHaveBeenCalledWith([
       expect.objectContaining({
         suggestedResultId: null,
-        reason: 'OUTRA_CATEGORIA',
+        reason: 'DADO_INDISPONIVEL',
+      }),
+    ]);
+  });
+
+  it('multipla de varios jogos liquida cada perna no proprio jogo', async () => {
+    const perna = (position: number, homeName: string, awayName: string, home: number, away: number) => ({
+      betId: 5, position, homeName, awayName, homeScore: home, awayScore: away,
+      eventStatus: 'finished', eventSport: 'Football', scoreScope: 'REGULATION', facts: null,
+    });
+    const { service, repository } = makeService({
+      settleable: [{
+        ...aposta(5, 'Boca Juniors e São Paulo vencerem - Resultado final', 0, 2),
+        game: 'CD Recoleta x Boca Juniors / São Paulo x Bolívar',
+      }],
+      legs: [perna(0, 'CD Recoleta', 'Boca Juniors', 0, 2), perna(1, 'São Paulo', 'Bolívar', 2, 0)],
+    });
+
+    await service.computeSuggestions(10 as any);
+
+    expect(repository.findLegs).toHaveBeenCalledWith([5]);
+    expect(repository.saveSuggestions).toHaveBeenCalledWith([
+      expect.objectContaining({
+        betId: 5,
+        suggestedResultId: ResultIdEnum.WON,
+        homeScore: null,
+        awayScore: null,
       }),
     ]);
   });
@@ -146,5 +178,29 @@ describe('dismiss', () => {
     expect(await service.dismiss([1, 2] as any, 10 as any)).toEqual({
       dismissed: 1,
     });
+  });
+});
+
+describe('queue', () => {
+  it('sinaliza lote restante quando ainda ha candidato', async () => {
+    const { service } = makeService({
+      queue: { pending: 40, settleable: 18, suggestions: 12, undecided: 3 },
+    });
+
+    await expect(service.queue(1 as any)).resolves.toEqual({
+      pending: 40,
+      settleable: 18,
+      suggestions: 12,
+      undecided: 3,
+      hasMore: true,
+    });
+  });
+
+  it('fila drenada nao oferece proximo lote', async () => {
+    const { service } = makeService({
+      queue: { pending: 5, settleable: 0, suggestions: 0, undecided: 2 },
+    });
+
+    await expect(service.queue(1 as any)).resolves.toMatchObject({ hasMore: false });
   });
 });

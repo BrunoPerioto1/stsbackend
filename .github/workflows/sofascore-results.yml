@@ -17,11 +17,23 @@ on:
     # sai em segundos.
     - cron: '0 1,14,23 * * *'
   workflow_dispatch:
+    inputs:
+      max_eventos:
+        description: 'Teto do lote (10 faz uma rodada curta de conferencia)'
+        required: false
+        default: '300'
+      fatos:
+        description: 'Coletar estatisticas/incidentes/escalacao (0 = so placar)'
+        required: false
+        default: '1'
 
 jobs:
   collect-results:
     runs-on: self-hosted
-    timeout-minutes: 25
+    # Com a coleta de estatisticas sao 4 requests por evento, nao 1: o lote
+    # cheio passa de 80 minutos no intervalo de 3-5s entre requests. Com 25
+    # o job era cortado no meio e metade do lote ficava sem placar.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -33,3 +45,6 @@ jobs:
       - run: python jobs/sofascore/results.py
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # Nos disparos por cron os inputs vem vazios e o job usa os padroes.
+          MAX_EVENTOS: ${{ inputs.max_eventos }}
+          FATOS: ${{ inputs.fatos }}

@@ -18,8 +18,10 @@ import { User } from '../common/decorators/user.decorator';
 import { UserId } from '../db_types/Users';
 import { BetId } from '../db_types/Bet';
 import { SettlementService } from './settlement.service';
+import { MARKET_REGISTRY } from './market-registry';
 import {
   ConfirmSettlementDto,
+  SettlementQueueDto,
   SettlementSuggestionDto,
 } from './dto/settlement.dto';
 
@@ -29,6 +31,31 @@ import {
 @Controller('settlement')
 export class SettlementController {
   constructor(private readonly settlementService: SettlementService) {}
+
+  @Get('support')
+  @ApiOperation({ summary: 'Capacidades, dados exigidos e limitações dos mercados' })
+  support() {
+    return MARKET_REGISTRY.map(({ parser, evaluator, ...support }) => support);
+  }
+
+  @Get('queue')
+  @ApiOperation({
+    summary: 'Contadores da fila de conferência',
+    description:
+      'Pendentes, quantas entrariam no próximo lote, quantas propostas ' +
+      'aguardam confirmação e quantas o bot não soube resolver. A tela usa ' +
+      'isso no load, sem depender da resposta do último compute.',
+  })
+  @ApiResponse({ status: HttpStatus.OK, type: SettlementQueueDto })
+  queue(@User('userId') userId: number) {
+    return this.settlementService.queue(userId as UserId);
+  }
+
+  @Get('review')
+  @ApiOperation({ summary: 'Apostas indefinidas e motivos para revisão manual' })
+  review(@User('userId') userId: number) {
+    return this.settlementService.listReview(userId as UserId);
+  }
 
   @Post('compute')
   @HttpCode(HttpStatus.OK)

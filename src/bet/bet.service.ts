@@ -20,7 +20,8 @@ import {
   type FilterGetBets,
 } from '../infra/repository/bet.repository';
 import { SportEventRepository } from '../infra/repository/sport-event.repository';
-import { matchEvent } from './event-matching';
+import { createMatchCache, matchEvent, matchEvents } from './event-matching';
+import type { NewBetEvent } from '../db_types/BetEvents';
 import { calculateProfit } from '../common/utils/bet.utils';
 import { BetFilterDto } from './dto/bet-filter.dto';
 import type { BetId, NewBet, UpdateBet } from '../db_types/Bet';
@@ -45,28 +46,59 @@ export class BetService {
     betTime: Date,
   ) {
     const vazio = {
-      eventExternalId: null,
-      eventProvider: null,
-      eventStartAt: null,
-      eventMatchConfidence: null,
+      evento: {
+        eventExternalId: null,
+        eventProvider: null,
+        eventStartAt: null,
+        eventMatchConfidence: null,
+      },
+      pernas: [] as Omit<NewBetEvent, 'betId'>[],
     };
     try {
       const candidatos =
         await this.sportEventRepository.findCandidates(betTime);
-      const match = matchEvent(game, market, candidatos, sport);
+      const cache = createMatchCache();
+
+      // Multipla de varios jogos: guarda cada confronto que casou, mesmo que
+      // outro nao tenha casado — e' o que deixa liquidar perna por perna depois
+      // que sport_events ja' apagou o jogo. Confronto sem match nao vira linha.
+      const confrontos = matchEvents(game, market, candidatos, sport, cache);
+      const pernas =
+        confrontos.length > 1
+          ? confrontos.flatMap(({ confronto, position, match }) =>
+              match
+                ? [
+                    {
+                      position,
+                      confronto,
+                      provider: match.provider,
+                      externalId: match.externalId,
+                      startAt: match.startAt,
+                      matchConfidence: match.confidence,
+                    },
+                  ]
+                : [],
+            )
+          : [];
+
+      const match = matchEvent(game, market, candidatos, sport, cache);
       if (!match) {
-        console.info('[EVENT_MATCH] result=no_match');
-        return vazio;
+        console.info('[EVENT_MATCH] result=no_match legs=%d', pernas.length);
+        return { ...vazio, pernas };
       }
       console.info(
-        '[EVENT_MATCH] result=matched confidence=%s',
+        '[EVENT_MATCH] result=matched confidence=%s legs=%d',
         match.confidence.toFixed(3),
+        pernas.length,
       );
       return {
-        eventExternalId: match.externalId,
-        eventProvider: match.provider,
-        eventStartAt: match.startAt,
-        eventMatchConfidence: match.confidence,
+        evento: {
+          eventExternalId: match.externalId,
+          eventProvider: match.provider,
+          eventStartAt: match.startAt,
+          eventMatchConfidence: match.confidence,
+        },
+        pernas,
       };
     } catch (error) {
       console.warn('[EVENT_MATCH] result=error', (error as Error).message);
@@ -117,15 +149,13 @@ export class BetService {
 
     // betTime segue sendo quando a aposta foi criada — o evento so acrescenta
     // quando o jogo comeca, sem substituir nada.
-    Object.assign(
-      newBet,
-      await this.resolveEvent(
-        betData.game,
-        betData.market,
-        betData.sport,
-        newBet.betTime ?? new Date(),
-      ),
+    const { evento, pernas } = await this.resolveEvent(
+      betData.game,
+      betData.market,
+      betData.sport,
+      newBet.betTime ?? new Date(),
     );
+    Object.assign(newBet, evento);
 
     const now = new Date();
     const candidates =
@@ -146,6 +176,16 @@ export class BetService {
 
     if (!result) {
       throw new InternalServerErrorException();
+    }
+
+    // Consultivo como o evento: a aposta ja' existe, falha aqui so' deixa a
+    // multipla sem liquidacao automatica.
+    if (pernas.length) {
+      try {
+        await this.betRepository.saveBetEvents(result.id, pernas);
+      } catch (error) {
+        console.warn('[EVENT_MATCH] result=legs_error', (error as Error).message);
+      }
     }
 
     const { id, ...createdParams } = result;

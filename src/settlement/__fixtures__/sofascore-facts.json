@@ -1,0 +1,244 @@
+{
+  "incidents": {
+    "complete": true,
+    "items": [
+      {
+        "elapsedSeconds": 1080,
+        "scope": "REGULATION",
+        "sequence": 1,
+        "side": "HOME",
+        "type": "GOAL"
+      },
+      {
+        "elapsedSeconds": 1080,
+        "scope": "FIRST_HALF",
+        "sequence": 1,
+        "side": "HOME",
+        "type": "GOAL"
+      },
+      {
+        "elapsedSeconds": 1980,
+        "scope": "REGULATION",
+        "sequence": 2,
+        "side": "AWAY",
+        "type": "GOAL"
+      },
+      {
+        "elapsedSeconds": 1980,
+        "scope": "FIRST_HALF",
+        "sequence": 2,
+        "side": "AWAY",
+        "type": "GOAL"
+      },
+      {
+        "elapsedSeconds": 1980,
+        "scope": "REGULATION",
+        "sequence": 2,
+        "side": "AWAY",
+        "type": "PENALTY_AWARDED"
+      },
+      {
+        "elapsedSeconds": 1980,
+        "scope": "FIRST_HALF",
+        "sequence": 2,
+        "side": "AWAY",
+        "type": "PENALTY_AWARDED"
+      },
+      {
+        "elapsedSeconds": 4260,
+        "scope": "REGULATION",
+        "sequence": 3,
+        "side": "HOME",
+        "type": "GOAL"
+      },
+      {
+        "elapsedSeconds": 4260,
+        "scope": "SECOND_HALF",
+        "sequence": 3,
+        "side": "HOME",
+        "type": "GOAL"
+      },
+      {
+        "elapsedSeconds": 4800,
+        "scope": "REGULATION",
+        "sequence": 4,
+        "side": "AWAY",
+        "type": "RED_CARD"
+      },
+      {
+        "elapsedSeconds": 4800,
+        "scope": "SECOND_HALF",
+        "sequence": 4,
+        "side": "AWAY",
+        "type": "RED_CARD"
+      }
+    ]
+  },
+  "periods": {
+    "FIRST_HALF": {
+      "away": 1,
+      "home": 1
+    },
+    "SECOND_HALF": {
+      "away": 0,
+      "home": 1
+    }
+  },
+  "playerStats": {
+    "complete": true,
+    "items": [
+      {
+        "metric": "goals",
+        "name": "Pedro",
+        "participantId": "7",
+        "played": true,
+        "scope": "REGULATION",
+        "value": 2
+      },
+      {
+        "metric": "assists",
+        "name": "Pedro",
+        "participantId": "7",
+        "played": true,
+        "scope": "REGULATION",
+        "value": 0
+      },
+      {
+        "metric": "shots",
+        "name": "Pedro",
+        "participantId": "7",
+        "played": true,
+        "scope": "REGULATION",
+        "value": 5
+      },
+      {
+        "metric": "shotsOnTarget",
+        "name": "Pedro",
+        "participantId": "7",
+        "played": true,
+        "scope": "REGULATION",
+        "value": 3
+      },
+      {
+        "metric": "goals",
+        "name": "Arrascaeta",
+        "participantId": "9",
+        "played": true,
+        "scope": "REGULATION",
+        "value": 0
+      },
+      {
+        "metric": "assists",
+        "name": "Arrascaeta",
+        "participantId": "9",
+        "played": true,
+        "scope": "REGULATION",
+        "value": 2
+      },
+      {
+        "metric": "shots",
+        "name": "Arrascaeta",
+        "participantId": "9",
+        "played": true,
+        "scope": "REGULATION",
+        "value": 2
+      },
+      {
+        "metric": "shotsOnTarget",
+        "name": "Arrascaeta",
+        "participantId": "9",
+        "played": true,
+        "scope": "REGULATION",
+        "value": 1
+      },
+      {
+        "metric": "goals",
+        "name": "Rony",
+        "participantId": "11",
+        "played": true,
+        "scope": "REGULATION",
+        "value": 1
+      },
+      {
+        "metric": "assists",
+        "name": "Rony",
+        "participantId": "11",
+        "played": true,
+        "scope": "REGULATION",
+        "value": 0
+      },
+      {
+        "metric": "shots",
+        "name": "Rony",
+        "participantId": "11",
+        "played": true,
+        "scope": "REGULATION",
+        "value": 3
+      },
+      {
+        "metric": "shotsOnTarget",
+        "name": "Rony",
+        "participantId": "11",
+        "played": true,
+        "scope": "REGULATION",
+        "value": 1
+      }
+    ]
+  },
+  "teamStats": [
+    {
+      "away": 3,
+      "home": 6,
+      "metric": "corners",
+      "scope": "REGULATION"
+    },
+    {
+      "away": 2,
+      "home": 5,
+      "metric": "shotsOnTarget",
+      "scope": "REGULATION"
+    },
+    {
+      "away": 8,
+      "home": 14,
+      "metric": "shots",
+      "scope": "REGULATION"
+    },
+    {
+      "away": 13,
+      "home": 11,
+      "metric": "fouls",
+      "scope": "REGULATION"
+    },
+    {
+      "away": 2,
+      "home": 2,
+      "metric": "yellowCards",
+      "scope": "REGULATION"
+    },
+    {
+      "away": 1,
+      "home": 4,
+      "metric": "corners",
+      "scope": "FIRST_HALF"
+    },
+    {
+      "away": 4,
+      "home": 2,
+      "metric": "cardPoints",
+      "scope": "REGULATION"
+    },
+    {
+      "away": 0,
+      "home": 1,
+      "metric": "cardPoints",
+      "scope": "FIRST_HALF"
+    },
+    {
+      "away": 4,
+      "home": 1,
+      "metric": "cardPoints",
+      "scope": "SECOND_HALF"
+    }
+  ]
+}
