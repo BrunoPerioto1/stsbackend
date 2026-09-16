@@ -13,10 +13,9 @@ name: sofascore-results
 
 on:
   schedule:
-    # 3x ao dia, cobrindo os fins de jogo de tarde, noite e madrugada (BRT).
-    # O job so' busca evento com aposta pendente, entao rodada sem jogo novo
-    # sai em segundos.
-    - cron: '0 1,14,23 * * *'
+    # 1x ao dia, 06:00 BRT: pega todos os jogos do dia anterior ja' encerrados,
+    # inclusive os de madrugada. Menos execucoes = menos trafego no proxy.
+    - cron: '0 9 * * *'
   workflow_dispatch:
     inputs:
       max_eventos:
