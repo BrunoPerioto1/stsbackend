@@ -1,6 +1,7 @@
 import asyncio
 import unittest
 from settlement_adapter import (
+    contar_gols_contra,
     normalize_card_points,
     SofascoreFactsCollector,
     UnverifiedFactsCollector,
@@ -257,6 +258,27 @@ class MapaDeChavesTests(unittest.TestCase):
         # Placar diz 3 gols e a súmula só credita 1 (gol contra, por exemplo):
         # o snapshot não prova nada sobre quem marcou.
         self.assertFalse(normalize_lineups(um_gol, 3)['complete'])
+
+    def test_own_goals_are_discounted_from_the_expected_total(self):
+        # Elche 2x3 Real Madrid (evento 16416342): 5 gols no placar, 4 creditados
+        # a jogadores — o quinto foi contra. Sem descontar, a escalação inteira
+        # era recusada e "Mbappé marcar gol" ficava sem proposta.
+        self.assertEqual(contar_gols_contra({'incidents': [gol(25, False, 'ownGoal'), gol(33, False)]}), 1)
+        # Gol contra na prorrogação não conta: o placar de referência é o tempo normal.
+        self.assertEqual(contar_gols_contra({'incidents': [gol(105, True, 'ownGoal')]}), 0)
+        self.assertEqual(contar_gols_contra(None), 0)
+
+    def test_collector_reconciles_lineups_using_own_goals(self):
+        async def fetch(path):
+            if path.endswith('/incidents'):
+                return {'incidents': [gol(25, False, 'ownGoal'), gol(33, False)]}
+            if path.endswith('/lineups'):
+                return {'confirmed': True, 'away': {'players': []},
+                        'home': {'players': [jogador('Mbappe', 7, goals=1)]}}
+            return None
+
+        facts = asyncio.run(SofascoreFactsCollector(fetch).collect('1', 2))
+        self.assertTrue(facts['playerStats']['complete'])
 
     def test_collector_accumulates_unknown_fields_across_events(self):
         async def fetch(path):
