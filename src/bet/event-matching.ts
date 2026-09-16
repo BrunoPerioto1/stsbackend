@@ -108,6 +108,12 @@ const ALIASES: Record<string, string> = {
   copenhague: 'kobenhavn',
   // Espanha: a casa usa a cidade, o provider o nome oficial.
   'racing santander': 'real racing',
+  // Brasil: a casa abrevia o estado, o provider escreve por extenso.
+  'atletico mg': 'atletico mineiro',
+  // Franca: a casa usa o nome em portugues/curto, o provider o nome completo.
+  marselha: 'olympique marseille',
+  marseille: 'olympique marseille',
+  'atletico mineiro': 'atletico mineiro',
   'athletic bilbao': 'athletic',
 };
 

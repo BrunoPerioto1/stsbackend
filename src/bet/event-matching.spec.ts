@@ -116,7 +116,7 @@ describe('normalizeTeamName', () => {
     ['São Paulo', 'sao paulo'],
     ['Liverpool FC', 'liverpool'],
     ['Al-Nassr', 'al nassr'],
-    ['Atlético-MG', 'atletico mg'],
+    ['Atlético-MG', 'atletico mineiro'],
     ['Clube De Regatas Brasil', 'brasil'],
     ['Inter de Milão', 'inter'],
     ['FC København', 'kobenhavn'],
@@ -128,6 +128,9 @@ describe('normalizeTeamName', () => {
     ['Real Racing Club', 'real racing'],
     ['Athletic Bilbao', 'athletic'],
     ['Athletic Club', 'athletic'],
+    ['Atlético MG', 'atletico mineiro'],
+    ['Marselha', 'olympique marseille'],
+    ['Olympique de Marseille', 'olympique marseille'],
   ])('normaliza %s', (entrada, esperado) => {
     expect(normalizeTeamName(entrada)).toBe(esperado);
   });
