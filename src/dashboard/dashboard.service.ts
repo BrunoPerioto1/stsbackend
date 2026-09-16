@@ -15,6 +15,11 @@ export class DashboardService {
     return this.dashboardRepository.findMonthlySummary({ ...filter, userId });
   }
 
+  async getProfitByHouse(userId: UserId, filter: DashboardQueryDto) {
+    const rows = await this.dashboardRepository.findProfitByHouse({ ...filter, userId });
+    return rows.map((r) => ({ house: r.house, profit: Number(r.profit) }));
+  }
+
   async getBetDateRange(userId: UserId) {
     const range = await this.dashboardRepository.findBetDateRange(userId);
     return {

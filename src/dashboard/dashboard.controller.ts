@@ -21,6 +21,16 @@ export class DashboardController {
     return this.dashboardService.getBetDateRange(userId);
   }
 
+  @Get('by-house')
+  @ApiOperation({ summary: 'Obtém o lucro por casa no período' })
+  @ApiResponse({ status: 200, description: 'Lucro por casa retornado com sucesso.' })
+  async getProfitByHouse(
+    @Query() query: DashboardQueryDto,
+    @User('userId') userId: UserId,
+  ) {
+    return this.dashboardService.getProfitByHouse(userId, query);
+  }
+
   @Get('metrics')
   @ApiOperation({ summary: 'Obtém métricas do dashboard' })
   @ApiResponse({ status: 200, description: 'Métricas retornadas com sucesso.' })

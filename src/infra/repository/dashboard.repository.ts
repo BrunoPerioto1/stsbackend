@@ -86,6 +86,29 @@ async findMonthlySummary(filters: FilterDashboard) {
     .orderBy(betCalendarMonthBr, "asc")
     .execute();
 }
+// Lucro por casa no periodo. Casa sem lucro/prejuizo (so pendentes) fica de fora.
+async findProfitByHouse(filters: FilterDashboard) {
+  const { startDate, endDate, userId } = filters;
+
+  return this.dbRead
+    .selectFrom("bets as b")
+    .leftJoin("bettingHouses as bh", "bh.id", "b.houseId")
+    .where("b.userId", "=", userId!)
+    .$if(isNotEmpty(startDate), (qb) =>
+      qb.where(betDate, ">=", startOfDay(new Date(startDate!))),
+    )
+    .$if(isNotEmpty(endDate), (qb) =>
+      qb.where(betDate, "<", endOfDay(new Date(endDate!))),
+    )
+    .select(({ fn }) => [
+      sql<string>`coalesce(${sql.ref("bh.name")}, 'Sem casa')`.as("house"),
+      fn.sum<string>("b.profit").as("profit"),
+    ])
+    .groupBy("bh.name")
+    .having(({ fn }) => fn("coalesce", [fn.sum("b.profit"), sql.lit(0)]), "!=", 0)
+    .orderBy("profit", "desc")
+    .execute();
+}
 async findBetDateRange(userId: UserId) {
   return this.dbRead
     .selectFrom("bets as b")
