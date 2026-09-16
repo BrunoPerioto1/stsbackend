@@ -3,25 +3,29 @@
 # Nao roda no Vercel: o plano Hobby tem teto de 60s por funcao e 1 cron/dia, e o
 # coletor precisa do fingerprint TLS do wreq pra passar pelo Cloudflare.
 #
-# Nem em runner hospedado: o fingerprint resolve o "parece um browser", mas o
-# Cloudflare tambem pontua reputacao de IP, e as faixas do GitHub (Azure) tomam
-# 403 em todo request. Daí o self-hosted — precisa de IP residencial.
+# Runner hospedado, sem depender de maquina ligada. O fingerprint resolve o
+# "parece um browser", mas o Cloudflare tambem pontua reputacao de IP e a faixa
+# da Azure toma 403. Por isso o trafego sai pelo secret PROXY_URL (proxy
+# residencial) ou, sem ele, pelo Cloudflare WARP.
 name: sofascore
 
 on:
   schedule:
     # Seg e qui, 11:00 BRT. A coleta pega os proximos 30 dias, entao 2x por
-    # semana ja cobre. Horario de maquina ligada, nao de madrugada: execucao
-    # agendada com o runner offline fica na fila e so roda quando ele voltar.
+    # semana ja cobre.
     - cron: '0 14 * * 1,4'
   workflow_dispatch:
 
 jobs:
   collect:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
+    env:
+      PROXY_URL: ${{ secrets.PROXY_URL }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - if: env.PROXY_URL == ''
+        uses: ./.github/actions/warp
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

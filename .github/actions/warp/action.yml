@@ -1,0 +1,20 @@
+# Liga o Cloudflare WARP no runner hospedado pra sair por um IP que nao seja da
+# faixa da Azure, que o Cloudflare do SofaScore bloqueia com 403.
+name: warp
+description: Conecta o runner ao Cloudflare WARP (modo consumidor, gratis)
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor -o /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+        echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+        sudo apt-get update -q && sudo apt-get install -yq cloudflare-warp
+        warp-cli --accept-tos registration new
+        warp-cli --accept-tos connect
+        for i in $(seq 30); do
+          warp-cli --accept-tos status | grep -q Connected && break
+          sleep 2
+        done
+        # warp=on confirma que o trafego ja' sai pelo WARP.
+        curl -s https://www.cloudflare.com/cdn-cgi/trace | grep -E '^(ip|warp)='

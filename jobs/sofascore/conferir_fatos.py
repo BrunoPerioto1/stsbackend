@@ -16,9 +16,8 @@ from __future__ import annotations
 import asyncio
 import sys
 
-from wreq import Client, Emulation
 
-from results import EMULATION, fetch
+from results import fetch, novo_client
 from settlement_adapter import (
     normalize_event,
     normalize_incidents,
@@ -38,7 +37,7 @@ for fluxo in (sys.stdout, sys.stderr):
 
 
 async def main(external_id: str) -> int:
-    client = Client(emulation=getattr(Emulation, EMULATION))
+    client = novo_client()
 
     evento = (await fetch(client, f"/event/{external_id}") or {}).get("event")
     if not evento:

@@ -21,7 +21,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import psycopg
-from wreq import Client, Emulation
+from wreq import Client, Emulation, Proxy
 
 # ---------------- config ----------------
 EMULATION = "Chrome149"
@@ -141,6 +141,17 @@ def _status(resp: Any) -> int:
         except Exception:  # noqa: BLE001
             continue
     raise RuntimeError(f"status ilegivel: {s!r}")
+
+
+def novo_client() -> Client:
+    """Client com fingerprint de browser; sai pelo PROXY_URL quando existir.
+
+    No runner hospedado do GitHub o IP (Azure) toma 403 do Cloudflare. Sem
+    PROXY_URL o workflow liga o WARP e o trafego ja' sai por ele.
+    """
+    proxy = os.environ.get("PROXY_URL")
+    extra = {"proxies": [Proxy.all(proxy)]} if proxy else {}
+    return Client(emulation=getattr(Emulation, EMULATION), **extra)
 
 
 async def fetch(client: Client, path: str) -> dict | None:
@@ -294,7 +305,7 @@ async def main() -> None:
     limite_ts = int(
         (datetime.now(timezone.utc) + timedelta(days=JANELA_DIAS)).timestamp()
     )
-    client = Client(emulation=getattr(Emulation, EMULATION))
+    client = novo_client()
     linhas = await coleta(client, limite_ts)
     log(f"{len(linhas)} eventos coletados em {requests_feitos} requests")
 

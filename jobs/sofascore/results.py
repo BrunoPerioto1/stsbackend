@@ -43,7 +43,7 @@ from pathlib import Path
 from typing import Any
 
 import psycopg
-from wreq import Client, Emulation
+from wreq import Client, Emulation, Proxy
 from psycopg.types.json import Jsonb
 from settlement_adapter import SofascoreFactsCollector, UnverifiedFactsCollector, normalize_event
 
@@ -97,6 +97,17 @@ def _status(resp: Any) -> int:
         except Exception:  # noqa: BLE001
             continue
     raise RuntimeError(f"status ilegivel: {s!r}")
+
+
+def novo_client() -> Client:
+    """Client com fingerprint de browser; sai pelo PROXY_URL quando existir.
+
+    No runner hospedado do GitHub o IP (Azure) toma 403 do Cloudflare. Sem
+    PROXY_URL o workflow liga o WARP e o trafego ja' sai por ele.
+    """
+    proxy = os.environ.get("PROXY_URL")
+    extra = {"proxies": [Proxy.all(proxy)]} if proxy else {}
+    return Client(emulation=getattr(Emulation, EMULATION), **extra)
 
 
 async def fetch(client: Client, path: str) -> dict | None:
@@ -286,7 +297,7 @@ async def main() -> None:
         if not ids:
             return
 
-        client = Client(emulation=getattr(Emulation, EMULATION))
+        client = novo_client()
 
         async def busca(path: str) -> Any:
             return await fetch(client, path)
