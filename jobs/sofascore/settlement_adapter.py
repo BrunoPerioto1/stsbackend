@@ -239,6 +239,28 @@ def normalize_card_points(payload: Any) -> list[dict]:
             for escopo, (casa, fora) in pontos.items()]
 
 
+def contar_gols_contra(payload: Any) -> int:
+    """Gols contra do tempo normal, pra reconciliar escalação com o placar.
+
+    Gol contra entra no placar mas não é creditado a nenhum jogador na súmula,
+    então sem descontá-lo a trava de reconciliação do normalize_lineups recusa
+    o jogo inteiro (visto em Elche 2x3 Real Madrid: 5 no placar, 4 na súmula).
+    """
+    lances = block(payload).get('incidents')
+    if not isinstance(lances, list):
+        return 0
+    total = 0
+    for lance in lances:
+        if not isinstance(lance, dict) or str(lance.get('incidentType', '')).lower() != 'goal':
+            continue
+        if str(lance.get('incidentClass', '')).lower() != 'owngoal':
+            continue
+        minuto = count(lance.get('time'))
+        if minuto is not None and _incident_scope(minuto) is not None:
+            total += 1
+    return total
+
+
 def normalize_incidents(payload: Any, desconhecidos: set | None = None) -> dict:
     """-> {'complete': bool, 'items': [...]}.
 
@@ -441,7 +463,12 @@ class SofascoreFactsCollector:
             if pontos:
                 facts.setdefault('teamStats', []).extend(pontos)
 
-        jogadores = normalize_lineups(await self._get(f'/event/{external_id}/lineups'), gols)
+        # Gol contra não aparece na súmula de nenhum jogador: descontar antes de
+        # reconciliar. Só com o feed íntegro — feed suspeito não afrouxa a trava.
+        esperados = gols
+        if esperados is not None and incidentes['complete']:
+            esperados -= contar_gols_contra(feed)
+        jogadores = normalize_lineups(await self._get(f'/event/{external_id}/lineups'), esperados)
         if jogadores['complete']:
             facts['playerStats'] = jogadores
         elif self._log is not None and jogadores['items']:

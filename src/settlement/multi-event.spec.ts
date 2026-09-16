@@ -145,3 +145,32 @@ describe('sem dado pra decidir, nada de chute', () => {
     expect(isMultiEvent('Flamengo x Cruzeiro', 'Flamengo - Resultado final / Flamengo - Mais escanteios')).toBe(false);
   });
 });
+
+// Bilhete real (2026-09-15) que o bot não reconheceu: os confrontos vêm
+// separados por vírgula e "&" em vez de " / ", e a frase traz "vencem suas
+// partidas" em vez de "vencerem".
+describe('confrontos separados por vírgula e "&"', () => {
+  const game = 'FC Barcelona x Racing Santander, Atlético Madrid x Osasuna & Levante x Athletic Bilbao';
+  const market = 'Barcelona, Atletico de Madrid e Athletic Bilbao vencem suas partidas - Resultado final';
+
+  it('reconhece os três jogos', () => {
+    expect(isMultiEvent(game, market)).toBe(true);
+  });
+
+  it('uma seleção por time', () => {
+    expect(selecoesDaMultipla(game, market)).toEqual([
+      'Barcelona - Resultado final',
+      'Atletico de Madrid - Resultado final',
+      'Athletic Bilbao - Resultado final',
+    ]);
+  });
+
+  it('todos venceram: ganhou', () => {
+    const r = settleMultiEvent(game, market, [
+      leg(0, 'FC Barcelona', 'Racing Santander', { home: 3, away: 1 }),
+      leg(1, 'Atlético Madrid', 'Osasuna', { home: 2, away: 0 }),
+      leg(2, 'Levante', 'Athletic Bilbao', { home: 0, away: 1 }),
+    ]);
+    expect(r.resultId).toBe(R.WON);
+  });
+});

@@ -78,6 +78,10 @@ LIGAS = {
     480: "CONMEBOL Sudamericana",
     242: "MLS",
     955: "Saudi Pro League",
+    # Asia: aposta em Al-Qadsiah x Al Wasl (2026-09-15) ficou sem evento porque
+    # o continental asiatico nao estava aqui. Elite e' a divisao de cima.
+    463: "AFC Champions League Elite",
+    668: "AFC Champions League Two",
     # Liga MX parte a temporada em dois torneios com id proprio; os dois
     # precisam estar aqui ou metade do ano fica sem jogo.
     11621: "Liga MX, Apertura",

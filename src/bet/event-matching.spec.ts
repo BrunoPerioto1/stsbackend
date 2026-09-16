@@ -116,12 +116,35 @@ describe('normalizeTeamName', () => {
     ['São Paulo', 'sao paulo'],
     ['Liverpool FC', 'liverpool'],
     ['Al-Nassr', 'al nassr'],
-    ['Atlético-MG', 'atletico mg'],
+    ['Atlético-MG', 'atletico mineiro'],
     ['Clube De Regatas Brasil', 'brasil'],
     ['Inter de Milão', 'inter'],
     ['FC København', 'kobenhavn'],
     ['FC Copenhagen', 'kobenhavn'],
     ['Brøndby IF', 'brondby if'],
+    // Nomes que as casas usam e o provider nao: apostas de 2026-09-15 que
+    // ficaram sem evento por causa deles.
+    ['Racing Santander', 'real racing'],
+    ['Real Racing Club', 'real racing'],
+    ['Athletic Bilbao', 'athletic'],
+    ['Athletic Club', 'athletic'],
+    ['Atlético MG', 'atletico mineiro'],
+    ['Marselha', 'olympique marseille'],
+    ['Olympique de Marseille', 'olympique marseille'],
+    ['Man United', 'manchester united'],
+    ['Botafogo-RJ', 'botafogo'],
+    ['KC Chiefs', 'kansas city chiefs'],
+    // Selecoes: a casa escreve em portugues, o provider em ingles.
+    ['Alemanha', 'germany'],
+    ['Países Baixos', 'netherlands'],
+    ['Holanda', 'netherlands'],
+    ['Costa do Marfim', 'cote d ivoire'],
+    ['África do Sul', 'south africa'],
+    ['Coreia do Sul', 'south korea'],
+    ['Turquia', 'turkiye'],
+    // Nao viram alias: o provider ja escreve igual, ou colidiria com clube.
+    ['Peru', 'peru'],
+    ['Clube De Regatas Brasil', 'brasil'],
   ])('normaliza %s', (entrada, esperado) => {
     expect(normalizeTeamName(entrada)).toBe(esperado);
   });

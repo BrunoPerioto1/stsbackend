@@ -106,6 +106,76 @@ const ALIASES: Record<string, string> = {
   // Dinamarca: a casa escreve o nome em ingles, o provider em danes.
   copenhagen: 'kobenhavn',
   copenhague: 'kobenhavn',
+  // Espanha: a casa usa a cidade, o provider o nome oficial.
+  'racing santander': 'real racing',
+  // Brasil: a casa abrevia o estado, o provider escreve por extenso.
+  'atletico mg': 'atletico mineiro',
+  // Franca: a casa usa o nome em portugues/curto, o provider o nome completo.
+  marselha: 'olympique marseille',
+  lyon: 'olympique lyonnais',
+  marseille: 'olympique marseille',
+  'athletic bilbao': 'athletic',
+  'man united': 'manchester united',
+  'man city': 'manchester city',
+  // Tres Botafogos disputam o mesmo texto: sem o estado explicito a margem de
+  // desempate derruba os tres, e a aposta fica sem evento.
+  'botafogo rj': 'botafogo',
+  // NFL: a casa abrevia a cidade, e a sigla nao lembra o nome inteiro.
+  'kc chiefs': 'kansas city chiefs',
+  'phi eagles': 'philadelphia eagles',
+  'den broncos': 'denver broncos',
+  'la chargers': 'los angeles chargers',
+  // Selecoes: a casa escreve em portugues e o provider em ingles — nao ha
+  // similaridade nem contencao que resolva "Alemanha" contra "Germany". Cada
+  // nome do lado direito foi conferido contra a busca do provider em
+  // 2026-09-15; os que ja coincidem (Peru, Chile, Senegal, Mexico) ficam fora,
+  // e "Brasil" tambem: colide com o Clube de Regatas Brasil.
+  alemanha: 'germany',
+  espanha: 'spain',
+  inglaterra: 'england',
+  escocia: 'scotland',
+  gales: 'wales',
+  irlanda: 'ireland',
+  franca: 'france',
+  italia: 'italy',
+  holanda: 'netherlands',
+  'paises baixos': 'netherlands',
+  belgica: 'belgium',
+  suica: 'switzerland',
+  suecia: 'sweden',
+  noruega: 'norway',
+  dinamarca: 'denmark',
+  finlandia: 'finland',
+  islandia: 'iceland',
+  polonia: 'poland',
+  croacia: 'croatia',
+  servia: 'serbia',
+  grecia: 'greece',
+  hungria: 'hungary',
+  turquia: 'turkiye',
+  ucrania: 'ukraine',
+  romenia: 'romania',
+  'republica tcheca': 'czechia',
+  eslovaquia: 'slovakia',
+  eslovenia: 'slovenia',
+  marrocos: 'morocco',
+  argelia: 'algeria',
+  egito: 'egypt',
+  camaroes: 'cameroon',
+  gana: 'ghana',
+  // O apostrofo cai na limpeza, entao a forma canonica tem espaco.
+  'costa marfim': 'cote d ivoire',
+  'africa sul': 'south africa',
+  japao: 'japan',
+  'coreia sul': 'south korea',
+  ira: 'iran',
+  catar: 'qatar',
+  'arabia saudita': 'saudi arabia',
+  'estados unidos': 'usa',
+  uruguai: 'uruguay',
+  paraguai: 'paraguay',
+  equador: 'ecuador',
+  'nova zelandia': 'new zealand',
 };
 
 // NFD so separa acento de letra base. Estas sao letras proprias do alfabeto —
@@ -211,9 +281,14 @@ export function splitConfronto(texto: string): Lados | null {
 //
 // No segundo o normalizador anexa a selecao depois de " · ", porque a IA
 // devolveu o mercado sem prefixar cada confronto. Corta nos dois separadores.
+// Alem do " / " canonico, casas escrevem a multipla com virgula e "&"
+// ("A x B, C x D & E x F"). Fragmento que nao e' confronto e' descartado pelo
+// filtro de quem chama, entao virgula dentro de nome de time nao quebra nada.
+export const SEPARADOR_DE_CONFRONTOS = /\s+\/\s+|\s+&\s+|,\s+/;
+
 function fragmentos(texto: string): string[] {
   return texto
-    .split(' / ')
+    .split(SEPARADOR_DE_CONFRONTOS)
     .map((parte) => parte.split(' · ')[0].split(' - ')[0].trim())
     .filter(Boolean);
 }
@@ -227,7 +302,7 @@ export function extractConfrontos(game: string, market: string): string[] {
   // que o split aceita mais de dois pedacos, "A x B / C x D" tambem "divide",
   // e sem esta ordem viraria um confronto de "A" contra "B / C x D".
   for (const fonte of fontes) {
-    if (!fonte.includes(' / ')) continue;
+    if (!SEPARADOR_DE_CONFRONTOS.test(fonte)) continue;
     const achados = porFragmento(fonte);
     if (achados.length) return achados;
   }

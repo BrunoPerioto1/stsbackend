@@ -64,7 +64,7 @@ export function selecoesDaMultipla(game: string, market: string): string[] {
   partes = partes.map((p) => p.trim()).filter(Boolean);
 
   if (partes.length === 1) {
-    const lista = /^(.+?)\s+(?:vencem|vencerem|vence|vencer|ganham|ganharem)(?:\s+-\s+(.+))?$/i.exec(partes[0]);
+    const lista = /^(.+?)\s+(?:vencem|vencerem|vence|vencer|ganham|ganharem)(?:\s+(?:as\s+)?(?:suas\s+partidas|seus\s+jogos|suas\s+partidas?))?(?:\s+-\s+(.+))?$/i.exec(partes[0]);
     if (lista && (!lista[2] || labels.result.test(normalize(lista[2])))) {
       const nomes = lista[1].split(/\s*,\s*|\s+e\s+/).map((n) => n.trim()).filter(Boolean);
       if (nomes.length > 1) return nomes.map((nome) => `${nome} - Resultado final`);

@@ -22,8 +22,8 @@ function compare(value: number, c: Condition, text: string): Evaluation {
 }
 export function evaluateScore(c: Condition, ctx: EvaluationContext): Evaluation {
   const s = scoreFor(c.scope, ctx);
-  if (!s) return unknown(`placar indisponível para ${c.scope}`);
-  const text = `${s.home}x${s.away} (${c.scope})`;
+  if (!s) return unknown(`placar indisponível${ESCOPO_PT[c.scope]}`);
+  const text = `${s.home}x${s.away}${ESCOPO_PT[c.scope]}`;
   switch (c.normalizedMarket) {
     case 'TOTAL_GOLS': case 'TOTAL_GOLS_HT': return compare(s.home+s.away,c,`${s.home+s.away} gols no jogo, ${text}`);
     case 'TIME_TOTAL_GOLS': {
@@ -67,7 +67,7 @@ export function evaluatePeriods(c: Condition, ctx: EvaluationContext): Evaluatio
 }
 export function evaluateTeamStat(c: Condition, ctx: EvaluationContext): Evaluation {
   const rows = ctx.teamStats?.filter(s=>s.scope===c.scope && s.metric===c.metric) ?? [];
-  if (rows.length!==1 || !validCount(rows[0].home) || !validCount(rows[0].away)) return unknown(`${c.metric} indisponível/duplicado em ${c.scope}`);
+  if (rows.length!==1 || !validCount(rows[0].home) || !validCount(rows[0].away)) return unknown(`${METRICA_PT[c.metric!] ?? c.metric} indisponível/duplicado${ESCOPO_PT[c.scope]}`);
   if (c.metric==='cardPoints' && ctx.cardCounting!=='RED_COUNTS_TWO') return unknown('contagem de cartões da casa não confirmada','REGRA_NAO_SUPORTADA');
   const s=rows[0];
   // Empate na estatística perde pra quem apostou num time: "maior número de"
