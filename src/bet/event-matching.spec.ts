@@ -122,6 +122,12 @@ describe('normalizeTeamName', () => {
     ['FC København', 'kobenhavn'],
     ['FC Copenhagen', 'kobenhavn'],
     ['Brøndby IF', 'brondby if'],
+    // Nomes que as casas usam e o provider nao: apostas de 2026-09-15 que
+    // ficaram sem evento por causa deles.
+    ['Racing Santander', 'real racing'],
+    ['Real Racing Club', 'real racing'],
+    ['Athletic Bilbao', 'athletic'],
+    ['Athletic Club', 'athletic'],
   ])('normaliza %s', (entrada, esperado) => {
     expect(normalizeTeamName(entrada)).toBe(esperado);
   });

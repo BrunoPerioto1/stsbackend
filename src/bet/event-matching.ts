@@ -106,6 +106,9 @@ const ALIASES: Record<string, string> = {
   // Dinamarca: a casa escreve o nome em ingles, o provider em danes.
   copenhagen: 'kobenhavn',
   copenhague: 'kobenhavn',
+  // Espanha: a casa usa a cidade, o provider o nome oficial.
+  'racing santander': 'real racing',
+  'athletic bilbao': 'athletic',
 };
 
 // NFD so separa acento de letra base. Estas sao letras proprias do alfabeto —
@@ -211,9 +214,14 @@ export function splitConfronto(texto: string): Lados | null {
 //
 // No segundo o normalizador anexa a selecao depois de " · ", porque a IA
 // devolveu o mercado sem prefixar cada confronto. Corta nos dois separadores.
+// Alem do " / " canonico, casas escrevem a multipla com virgula e "&"
+// ("A x B, C x D & E x F"). Fragmento que nao e' confronto e' descartado pelo
+// filtro de quem chama, entao virgula dentro de nome de time nao quebra nada.
+export const SEPARADOR_DE_CONFRONTOS = /\s+\/\s+|\s+&\s+|,\s+/;
+
 function fragmentos(texto: string): string[] {
   return texto
-    .split(' / ')
+    .split(SEPARADOR_DE_CONFRONTOS)
     .map((parte) => parte.split(' · ')[0].split(' - ')[0].trim())
     .filter(Boolean);
 }
@@ -227,7 +235,7 @@ export function extractConfrontos(game: string, market: string): string[] {
   // que o split aceita mais de dois pedacos, "A x B / C x D" tambem "divide",
   // e sem esta ordem viraria um confronto de "A" contra "B / C x D".
   for (const fonte of fontes) {
-    if (!fonte.includes(' / ')) continue;
+    if (!SEPARADOR_DE_CONFRONTOS.test(fonte)) continue;
     const achados = porFragmento(fonte);
     if (achados.length) return achados;
   }
