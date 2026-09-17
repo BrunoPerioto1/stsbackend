@@ -340,6 +340,13 @@ PLAYER_KEYS = {
     'totalShots': 'shots',
     'totalScoringAttempt': 'shots',  # nome antigo, visto em payloads mais velhos
     'onTargetScoringAttempt': 'shotsOnTarget',
+    # Mercados de jogador do grupo: "comete 2+ faltas", "sofre 3+ faltas",
+    # "goleiro 3+ defesas", "1+ desarmes". Chaves conferidas no /lineups real
+    # em 2026-09-16; jogador sem a chave vale zero só se ela apareceu em alguém.
+    'fouls': 'fouls',
+    'wasFouled': 'foulsSuffered',
+    'saves': 'saves',
+    'totalTackle': 'tackles',
 }
 
 

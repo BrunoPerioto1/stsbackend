@@ -140,6 +140,12 @@ export function parseScoreMarket(text: string, teams: Teams): Condition | null {
     }
     if (/^(empate|draw)$/.test(sel)) return c('RESULTADO_FINAL', { pick: 'DRAW' });
   }
+  // "Haiti para marcar gol": o mesmo rótulo do jogador, mas com time. É o time
+  // marcar pelo menos um gol.
+  if (label === 'marcar a qualquer momento') {
+    const side = teamPick(sel, teams);
+    return side ? c('TIME_TOTAL_GOLS', { side, operator: 'OVER', line: 0.5 }) : null;
+  }
   if (labels.goals.test(label) || (!label && /\bgols?$/.test(sel))) {
     let line = lineSelection(sel), side: Side | null = null;
     if (!line) {
@@ -267,7 +273,10 @@ export function parsePlayer(text: string, teams?: Teams): Condition | null {
     // a gol", "Clay Holstad 1+ - Chutes a gol"). É o mesmo rótulo do mercado de
     // time; quem desempata é a trava de time logo abaixo.
     'chutes a gol': ['JOGADOR_CHUTE_A_GOL','shotsOnTarget'], 'chutes ao gol': ['JOGADOR_CHUTE_A_GOL','shotsOnTarget'], 'chutes no gol': ['JOGADOR_CHUTE_A_GOL','shotsOnTarget'],
-    'total de chutes do jogador': ['TOTAL_CHUTES_JOGADOR','shots'], 'cartoes do jogador': ['CARTAO_JOGADOR','cards'],
+    'total de chutes do jogador': ['TOTAL_CHUTES_JOGADOR','shots'], 'chutes': ['TOTAL_CHUTES_JOGADOR','shots'],
+    'faltas cometidas': ['JOGADOR_FALTAS','fouls'], 'faltas sofridas': ['JOGADOR_FALTAS_SOFRIDAS','foulsSuffered'],
+    'defesas do goleiro': ['JOGADOR_DEFESAS','saves'], 'total de defesas': ['JOGADOR_DEFESAS','saves'], 'defesas': ['JOGADOR_DEFESAS','saves'],
+    'desarmes': ['JOGADOR_DESARMES','tackles'], 'desarmes do jogador': ['JOGADOR_DESARMES','tackles'], 'cartoes do jogador': ['CARTAO_JOGADOR','cards'],
   };
   const def = metrics[label]; if (!def) return null;
   const m = /^(.+?)\s+((?:mais|menos|over|under|acima|abaixo)\s+.*|\d+\+)$/.exec(selection);

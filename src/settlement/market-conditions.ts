@@ -131,7 +131,7 @@ export const LIMITE_DO_CANAL = 100;
 // "Argentina HT/FT", "Portugal vence a 0". Só troca texto por sinônimo exato —
 // nenhuma regra decide resultado aqui.
 const NUM = '(\\d+(?:[.,]\\d+)?)';
-const METRICA = '(?:gols?|escanteios|cartoes|chutes)';
+const METRICA = '(?:gols?|escanteios|cartoes|chutes|faltas|defesas|desarmes)';
 export function abreviacoes(text: string): string {
   let t = text
     .replace(/\s*\(incluindo linhas asiaticas\)/g, '')
@@ -144,6 +144,8 @@ export function abreviacoes(text: string): string {
     .replace(/\bbtts\b/g, 'ambas marcam')
     .replace(/^ambas e /, 'ambas marcam e ')
     .replace(/\s+[+&]\s+/g, ' e ')
+    // "2 ou mais faltas" e "2 faltas ou mais" são "2+ faltas".
+    .replace(/\b(\d+) ou mais (faltas|defesas|desarmes|escanteios|cartoes|chutes)\b|\b(\d+) (faltas|defesas|desarmes|escanteios|cartoes|chutes) ou mais\b/g, (_, a, b, c, d) => `${a ?? c}+ ${b ?? d}`)
     .replace(/\b(?:resultado final|resultado)(?: -)? 1x2\b/g, 'resultado final')
     .replace(/\btotal de gols - mais\/menos\b/g, 'total de gols')
     // "o2.5" só com decimal: "vence o 1o tempo" não pode virar linha.
@@ -171,13 +173,50 @@ export function abreviacoes(text: string): string {
     .replace(/^(.+?) dnb$/, '$1 +0 - handicap asiatico')
     .replace(/^(.+?) dc$/, '$1 ou empate')
     .replace(/^(.+?) nao marca$/, '$1 menos de 0.5 gols')
-    .replace(/^(.+?) marca$/, '$1 mais de 0.5 gols')
     .replace(/^(.+?) primeiro a marcar$/, '$1 - primeiro gol')
     .replace(/^ambas nao marcam$/, 'nao - ambas marcam')
     // Handicap com meia linha e sem rótulo: "PSG -1.5". Linha inteira fica de
     // fora — sem "asiático" escrito, o europeu tem três saídas.
     .replace(/^([^/]+?) ([+-]\d+[.,]5)$/, '$1 $2 - handicap');
-  return t.replace(/\s+/g, ' ').trim();
+  return t.split(' / ').map(jogador).join(' / ').replace(/\s+/g, ' ').trim();
+}
+
+// Mercado de jogador sem rótulo, como o tipster escreve: "Mbappé anytime",
+// "Kane para marcar", "Gordon dar assistência", "Endrick mais de 0.5 chutes no
+// gol". Vira "Nome - rótulo". Se o "nome" for um time, o parser de time pega
+// ("Haiti para marcar gol" = Haiti marca pelo menos um gol) e o de jogador
+// recusa — é o teamPick que separa, não esta função.
+// " - " no nome é rótulo que já existia ("Lautaro - A marcar"): não mexe.
+const SUJEITO_COLETIVO = /\b(?:ambos|ambas|equipes?|times?|jogador|proxima|cada|uma das)\b| - /;
+// Rótulo que só repete o que a seleção já diz: "Raphinha marcar ou dar
+// assistência - Jogador para marcar ou dar assistência".
+const ROTULO_REPETIDO = / - (?:jogador(?: (?:para |a )?marcar(?: um gol)?(?: ou dar (?:uma )?assistencia)?)?|gol ou assistencia|especial de jogador)$/;
+function jogador(original: string): string {
+  // "Lautaro +0.5 - Chutes a gol": linha com sinal é "mais de".
+  // Só em chutes: em handicap o "+" é a linha do handicap.
+  const linha = original.replace(new RegExp(`(\\s)\\+${NUM}(?= - (?:chutes|finalizacoes))`), '$1mais de $2');
+  const perna = linha.replace(ROTULO_REPETIDO, '');
+  const marcar = /^(?:anytime (.+)|(.+?) (?:- )?(?:anytime|para marcar(?: gol)?(?: a qualquer (?:momento|altura))?|marcar(?:a|ao)?(?: um)?(?: gol)?(?: (?:a|em) qualquer (?:momento|altura))?|marca(?: gol)?(?: a qualquer (?:momento|altura))?|marcador(?: a qualquer (?:momento|altura))?|qualq\. altura))$/.exec(perna);
+  const quem = marcar && (marcar[1] ?? marcar[2]);
+  if (quem && !SUJEITO_COLETIVO.test(quem)) return `${quem} - marcar a qualquer momento`;
+  const golOuAssist = /^(.+?) (?:- )?(?:jogador )?(?:para |a )?(?:marcar|marca)(?: um)?(?: gol)? ou (?:dar (?:uma )?assistencia|assiste|assistir)$/.exec(perna);
+  if (golOuAssist && !SUJEITO_COLETIVO.test(golOuAssist[1])) return `${golOuAssist[1]} - gol ou assistencia`;
+  const assist = /^(.+?) (?:- )?(?:para )?dar (?:uma )?assistencia$/.exec(perna);
+  if (assist && !SUJEITO_COLETIVO.test(assist[1])) return `${assist[1]} - jogador assistencia`;
+  // Nada reescrito: devolve com o rótulo, que ele é o mercado ("Pedro - Gol ou
+  // assistência").
+  const semRotulo = linha.replace(/\b(?:finalizacoes|chutes) (?:no|ao|a) gol\b|\bchutes gol\b/g, 'chutes a gol');
+  const chutes = new RegExp(`^(.+?) ((?:mais|menos) de ${NUM}) (?:- )?(chutes a gol|chutes|finalizacoes)$`).exec(semRotulo);
+  // "Bontempo comete 2 ou mais faltas", "Vini Jr sofre 3+ faltas" (o "3+" já
+  // virou "mais de 2.5"), "Kobel mais de 3.5 defesas", "Pereira 1+ desarmes".
+  const acao = new RegExp(`^(.+?) (?:(comete|cometer|sofre|sofrer) )?((?:mais|menos) de ${NUM}) (faltas|defesas|desarmes)(?: (cometidas|sofridas))?$`).exec(semRotulo);
+  if (acao && !SUJEITO_COLETIVO.test(acao[1])) {
+    const sofridas = /^sofr/.test(acao[2] ?? '') || acao[6] === 'sofridas';
+    const rotulo = acao[5] === 'faltas' ? (sofridas ? 'faltas sofridas' : 'faltas cometidas') : acao[5] === 'defesas' ? 'defesas do goleiro' : 'desarmes';
+    return `${acao[1]} ${acao[3]} - ${rotulo}`;
+  }
+  if (chutes && !SUJEITO_COLETIVO.test(chutes[1])) return `${chutes[1]} ${chutes[2]} - ${chutes[4] === 'finalizacoes' ? 'chutes' : chutes[4]}`;
+  return semRotulo;
 }
 export function parseMarket(market: string, teams: Teams): ParseResult {
   if ([...(market ?? '')].length === LIMITE_DO_CANAL) return fail('MERCADO_TRUNCADO',`texto no limite de ${LIMITE_DO_CANAL} caracteres do canal; pode faltar perna`);

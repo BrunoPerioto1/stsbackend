@@ -209,4 +209,45 @@ export function detectPotentialDuplicate(
     : { isPotentialDuplicate: false };
 }
 
-export const BET_EXTRACTION_RULES = `Evento contém somente o confronto/participantes; mercado contém seleção, jogador, linha e condição, preservando negações e conectivos. Ignore botões, títulos da tela e promoções em ambos. Esporte só pode ser inferido com contexto forte; participantes ambíguos devem retornar null. Em aposta múltipla de mais de um confronto não existe um jogo: o evento é o rótulo "Múltipla (N jogos)", com N = quantidade de confrontos, e cada seleção no mercado vem prefixada pelo seu confronto, separadas por " / " — "Real Madrid vs Osasuna - vitória / Barcelona vs Getafe - vitória". Vale igual quando o bilhete cita só um time por seleção, sem o adversário ("Liverpool, Arsenal e PSG vencem"): são três confrontos, o evento é "Múltipla (3 jogos)" e o mercado traz cada time como uma seleção — nunca retorne evento null nesse caso. Se todas as seleções forem do mesmo confronto, o evento é esse confronto normalmente. Se as seleções forem de esportes diferentes, esporte é "Vários". Não invente dados ausentes.`;
+// Forma canônica do mercado, uma por tipo, no exemplo "Flamengo x Palmeiras".
+// É o que o liquidador (src/settlement) lê: a IA reescreve a abreviação do
+// tipster ("Flamengo ML e o2.5", "BTTS", "cantos") pra estas formas em vez de
+// copiar o texto. O teste garante que cada exemplo aqui é entendido pelo
+// liquidador — se o parser mudar, o prompt não fica mentindo.
+export const FORMATOS_DE_MERCADO: readonly (readonly [string, string])[] = [
+  ['vitória / empate', 'Flamengo - Resultado final'],
+  ['empate', 'Empate - Resultado final'],
+  ['dupla chance', 'Flamengo ou Empate - Dupla chance'],
+  ['empate anula (DNB)', 'Flamengo +0 - Handicap asiático'],
+  ['handicap', 'Flamengo -1.5 - Handicap'],
+  ['total de gols do jogo', 'Mais de 2.5 - Total de gols'],
+  ['gols de um time', 'Flamengo mais de 1.5 - Total de gols'],
+  ['ambas marcam', 'Sim - Ambas marcam'],
+  ['placar exato', '2-1 - Resultado correto'],
+  ['vencer sem sofrer gol', 'Flamengo vencer sem sofrer gols'],
+  ['não sofrer gol', 'Flamengo não sofre gols - Sim'],
+  ['resultado do 1º tempo', 'Flamengo - Resultado do 1º tempo'],
+  ['gols do 1º tempo', 'Mais de 0.5 - Total de gols 1º tempo'],
+  ['intervalo/final', 'Flamengo/Flamengo - Intervalo/final'],
+  ['vencer um dos tempos', 'Flamengo vencer um dos tempos - Sim'],
+  ['marcar em ambos os tempos', 'Flamengo marcar em ambos os tempos - Sim'],
+  ['primeiro gol', 'Flamengo - Primeiro gol'],
+  ['escanteios do jogo', 'Mais de 9.5 - Escanteios'],
+  ['escanteios de um time', 'Flamengo mais de 4.5 - Escanteios'],
+  ['time com mais escanteios', 'Flamengo - Maior número de escanteios'],
+  ['cartões do jogo', 'Mais de 4.5 - Total de cartões'],
+  ['chutes a gol do jogo', 'Mais de 8.5 - Chutes a gol'],
+  ['jogador marca', 'Pedro - Marcar a qualquer momento'],
+  ['jogador gol ou assistência', 'Pedro - Gol ou assistência'],
+  ['chutes a gol de jogador', 'Pedro mais de 0.5 - Chutes a gol'],
+  ['assistência de jogador', 'Pedro - Jogador assistência'],
+  ['faltas de jogador', 'Pedro mais de 1.5 - Faltas cometidas'],
+  ['faltas sofridas por jogador', 'Pedro mais de 2.5 - Faltas sofridas'],
+  ['defesas do goleiro', 'Weverton mais de 2.5 - Defesas do goleiro'],
+  ['resultado e total juntos', 'Flamengo e Mais de 2.5 - Resultado final e total de gols'],
+];
+
+export const BET_EXTRACTION_RULES = `Evento contém somente o confronto/participantes; mercado contém seleção, jogador, linha e condição, preservando negações e conectivos.
+Escreva o mercado na forma canônica "Seleção - Rótulo", uma seleção por perna separada por " / ", expandindo abreviações: ML = vitória, o2.5/over 2.5/+2.5 = Mais de 2.5, u2.5/under 2.5 = Menos de 2.5, 3+ = Mais de 2.5, BTTS = Ambas marcam, cantos/esc = escanteios, HT = 1º tempo, FT = tempo normal, DC = dupla chance, DNB = empate anula, "vence a 0" = vencer sem sofrer gols. Use o nome do time como aparece no evento. Formas (exemplo em Flamengo x Palmeiras):
+${FORMATOS_DE_MERCADO.map(([tipo, exemplo]) => `- ${tipo}: ${exemplo}`).join('\n')}
+Mercado que não se encaixe em nenhuma forma: mantenha o texto original. Nunca mude linha, lado, período ou sentido (sim/não) ao reescrever. Ignore botões, títulos da tela e promoções em ambos. Esporte só pode ser inferido com contexto forte; participantes ambíguos devem retornar null. Em aposta múltipla de mais de um confronto não existe um jogo: o evento é o rótulo "Múltipla (N jogos)", com N = quantidade de confrontos, e cada seleção no mercado vem prefixada pelo seu confronto, separadas por " / " — "Real Madrid vs Osasuna - vitória / Barcelona vs Getafe - vitória". Vale igual quando o bilhete cita só um time por seleção, sem o adversário ("Liverpool, Arsenal e PSG vencem"): são três confrontos, o evento é "Múltipla (3 jogos)" e o mercado traz cada time como uma seleção — nunca retorne evento null nesse caso. Se todas as seleções forem do mesmo confronto, o evento é esse confronto normalmente. Se as seleções forem de esportes diferentes, esporte é "Vários". Não invente dados ausentes.`;

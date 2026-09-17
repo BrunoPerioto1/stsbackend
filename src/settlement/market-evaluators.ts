@@ -113,6 +113,6 @@ export function evaluatePlayer(c: Condition, ctx: EvaluationContext): Evaluation
 }
 const METRICA_PT: Record<string,string> = {
   corners:'escanteios', shots:'chutes', shotsOnTarget:'chutes a gol', fouls:'faltas', offsides:'impedimentos',
-  saves:'defesas', cards:'cartões', cardPoints:'cartões (vermelho vale 2)', yellowCards:'cartões amarelos', goals:'gols', assists:'assistências', goalsAssists:'gols + assistências',
+  saves:'defesas', cards:'cartões', cardPoints:'cartões (vermelho vale 2)', yellowCards:'cartões amarelos', goals:'gols', assists:'assistências', foulsSuffered:'faltas sofridas', tackles:'desarmes', goalsAssists:'gols + assistências',
 };
 const ESCOPO_PT: Record<Scope,string> = { REGULATION:'', FIRST_HALF:' no 1º tempo', SECOND_HALF:' no 2º tempo' };

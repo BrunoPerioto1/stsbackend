@@ -21,7 +21,7 @@ export const MARKET_REGISTRY: readonly MarketDefinition[] = [
   ...definitions(['TOTAL_ESCANTEIOS','TIME_TOTAL_ESCANTEIOS','EQUIPE_MAIS_ESCANTEIOS','EQUIPE_MAIS_CARTOES','EQUIPE_MAIS_CHUTES','EQUIPE_MAIS_CHUTES_A_GOL','TOTAL_CARTOES','TIME_TOTAL_CARTOES','TOTAL_CHUTES','TOTAL_CHUTES_A_GOL','FALTAS','IMPEDIMENTOS','DEFESAS'],['TEAM_STATS'],parseTeamStat,evaluateTeamStat,'PARCIAL'),
   ...definitions(['PRIMEIRO_GOL','PROXIMO_GOL','ULTIMO_GOL'],['INCIDENTS','SCORE_FULL_TIME'],parseIncidents,evaluateIncidents,'PARCIAL'),
   ...definitions(['PENALTI_NO_JOGO','CARTAO_VERMELHO'],['INCIDENTS'],parseIncidents,evaluateIncidents,'PARCIAL'),
-  ...definitions(['JOGADOR_MARCA','JOGADOR_ASSISTENCIA','JOGADOR_GOL_OU_ASSISTENCIA','JOGADOR_CHUTE_A_GOL','TOTAL_CHUTES_JOGADOR','CARTAO_JOGADOR'],['PLAYER_STATS'],parsePlayer,evaluatePlayer,'PARCIAL'),
+  ...definitions(['JOGADOR_MARCA','JOGADOR_ASSISTENCIA','JOGADOR_GOL_OU_ASSISTENCIA','JOGADOR_CHUTE_A_GOL','TOTAL_CHUTES_JOGADOR','CARTAO_JOGADOR','JOGADOR_FALTAS','JOGADOR_FALTAS_SOFRIDAS','JOGADOR_DEFESAS','JOGADOR_DESARMES'],['PLAYER_STATS'],parsePlayer,evaluatePlayer,'PARCIAL'),
   { normalizedMarket:'GOL_MAIS_RAPIDO', aliases:['jogo com o gol mais rapido'], requiredData:['INCIDENTS'], confidence:'HIGH', unsupportedReason:'VARIOS_JOGOS', status:'INDEFINIDO', parser:()=>null, evaluator:()=>unknown('comparação entre jogos exige todos os eventos','VARIOS_JOGOS') },
 ];
 export function requiredDataFor(c: import('./settlement.types').Condition): readonly Capability[] {

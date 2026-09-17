@@ -174,6 +174,16 @@ class LineupsTests(unittest.TestCase):
         rony = {i['metric']: i['value'] for i in normalize_lineups(self.base())['items'] if i['name'] == 'Rony'}
         self.assertEqual(rony, {'goals': 0, 'assists': 0, 'shots': 0, 'shotsOnTarget': 0})
 
+    def test_fouls_saves_and_tackles(self):
+        payload = self.base()
+        payload['home']['players'][0]['statistics'].update(fouls=2, wasFouled=3, totalTackle=1)
+        payload['away']['players'][0]['statistics'].update(saves=4)
+        items = normalize_lineups(payload)['items']
+        pedro = {i['metric']: i['value'] for i in items if i['name'] == 'Pedro'}
+        rony = {i['metric']: i['value'] for i in items if i['name'] == 'Rony'}
+        self.assertEqual((pedro['fouls'], pedro['foulsSuffered'], pedro['tackles'], pedro['saves']), (2, 3, 1, 0))
+        self.assertEqual((rony['fouls'], rony['saves']), (0, 4))
+
     def test_unconfirmed_lineup_proves_nothing(self):
         feed = normalize_lineups(self.base(confirmed=False))
         self.assertEqual(feed, {'complete': False, 'items': []})

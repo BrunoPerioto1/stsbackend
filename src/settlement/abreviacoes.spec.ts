@@ -125,3 +125,59 @@ describe('múltipla de vitórias com rótulo à parte', () => {
     expect(settleMultiEvent(game, market, [leg(0, 'Brasil', 'Haiti', 3, 0), leg(1, 'Scotland', 'Greece', 0, 1)]).resultId).toBe(R.LOST);
   });
 });
+
+describe('jogador sem rótulo', () => {
+  const stats = (valores: Record<string, number>) => ({
+    sport: 'football',
+    scoreScope: 'REGULATION' as const,
+    playerStats: {
+      complete: true,
+      items: Object.entries(valores).map(([metric, value]) => ({
+        scope: 'REGULATION', name: 'Kylian Mbappé', participantId: '1', played: true, metric, value,
+      })),
+    },
+  });
+  const TIMES_JOGADOR = { home: 'Real Madrid', away: 'Getafe' };
+  const com = (market: string, valores: Record<string, number>) =>
+    settleBet(market, TIMES_JOGADOR, { home: 2, away: 0 }, 'finished', stats(valores) as never).resultId;
+
+  it.each([
+    'Kylian Mbappé anytime',
+    'Anytime Kylian Mbappé',
+    'Kylian Mbappé para marcar',
+    'Kylian Mbappé marcar',
+    'Kylian Mbappé marcará a qualquer momento',
+    'Kylian Mbappé - Marcador a qualquer altura',
+  ])('%s', (market) => {
+    expect(com(market, { goals: 1 })).toBe(R.WON);
+    expect(com(market, { goals: 0 })).toBe(R.LOST);
+  });
+
+  it('assistência e gol ou assistência', () => {
+    expect(com('Kylian Mbappé dar assistência', { assists: 0 })).toBe(R.LOST);
+    expect(com('Kylian Mbappé marcar ou dar assistência - Jogador para marcar ou dar assistência', { goals: 0, assists: 1 })).toBe(R.WON);
+    expect(com('Kylian Mbappé marca ou assiste', { goals: 0, assists: 0 })).toBe(R.LOST);
+  });
+
+  it('chutes e chutes a gol', () => {
+    expect(com('Kylian Mbappé mais de 0.5 chutes no gol', { shotsOnTarget: 1 })).toBe(R.WON);
+    expect(com('Kylian Mbappé +0.5 - Finalizações no gol', { shotsOnTarget: 0 })).toBe(R.LOST);
+    expect(com('Kylian Mbappé mais de 2.5 chutes', { shots: 3 })).toBe(R.WON);
+  });
+
+  it('faltas, defesas e desarmes', () => {
+    expect(com('Kylian Mbappé comete 2 ou mais faltas', { fouls: 2 })).toBe(R.WON);
+    expect(com('Kylian Mbappé sofre 3+ faltas', { foulsSuffered: 2 })).toBe(R.LOST);
+    expect(com('Kylian Mbappé mais de 3.5 defesas', { saves: 4 })).toBe(R.WON);
+    expect(com('Kylian Mbappé 1+ - Desarmes', { tackles: 0 })).toBe(R.LOST);
+  });
+
+  it('time com rótulo de jogador é gol do time', () => {
+    expect(com('Getafe para marcar gol', {})).toBe(R.LOST);
+    expect(com('Real Madrid para marcar', {})).toBe(R.WON);
+  });
+
+  it('sujeito coletivo não vira jogador', () => {
+    expect(abreviacoes(normalize('Ambos times marcarem'))).not.toContain('marcar a qualquer momento');
+  });
+});

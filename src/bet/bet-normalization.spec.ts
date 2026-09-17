@@ -156,3 +156,19 @@ describe('potential duplicates', () => {
     ).toEqual({ isPotentialDuplicate: false });
   });
 });
+
+// O prompt das três extrações (mensagem, áudio, imagem) ensina estas formas.
+// Se o liquidador deixar de ler alguma, o prompt passaria a produzir aposta
+// que nunca é liquidada.
+describe('FORMATOS_DE_MERCADO', () => {
+  const { FORMATOS_DE_MERCADO, BET_EXTRACTION_RULES } = jest.requireActual('./bet-normalization');
+  const { parseMarket } = jest.requireActual('../settlement/market-conditions');
+
+  it.each(FORMATOS_DE_MERCADO as [string, string][])('%s: "%s" é lido pelo liquidador', (_, exemplo) => {
+    expect(parseMarket(exemplo, { home: 'Flamengo', away: 'Palmeiras' })).toMatchObject({ ok: true });
+  });
+
+  it('vai no prompt', () => {
+    expect(BET_EXTRACTION_RULES).toContain('Pedro - Marcar a qualquer momento');
+  });
+});
