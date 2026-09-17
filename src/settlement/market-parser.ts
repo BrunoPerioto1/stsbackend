@@ -77,7 +77,7 @@ export const labels = {
   // "total" sozinho: "Mais de 0.5 - Total 1ºT". A trava de linha até 9.5 em
   // parseScoreMarket segura o total de pontos de outro esporte.
   goals: /^(total de gols(?: acima\/abaixo)?|total gols|gols|total|total de gols mais\/menos)$/,
-  both: /^(amb[ao]s\s+(?:(?:os\s+)?times|(?:as\s+)?equipes)?\s*marcam|ambas marcam|btts|both teams to score)$/,
+  both: /^(amb[ao]s\s+(?:(?:os\s+)?times|(?:as\s+)?equipes)?\s*marcam|ambas marcam|btts|both teams to score)(?: gols)?$/,
   exact: /^(resultado correto|placar exato|correct score)$/,
 };
 export function parseScoreMarket(text: string, teams: Teams): Condition | null {
@@ -95,7 +95,7 @@ export function parseScoreMarket(text: string, teams: Teams): Condition | null {
     const expected = labels.both.test(label) ? yesNo(sel) ?? (labels.both.test(sel) ? true : null) : label ? yesNo(label) : true;
     return expected === null ? null : c('AMBAS_MARCAM', { expected });
   }
-  if (/^(dupla chance|chance dupla|double chance)$/.test(label) || ((!label || labels.result.test(label)) && / ou /.test(sel))) {
+  if (/^(dupla chance|chance dupla|double chance|dupla hipotese)$/.test(label) || ((!label || labels.result.test(label)) && / ou /.test(sel))) {
     const codes: Record<string, SelectionPick[]> = { '1x': ['HOME','DRAW'], 'x2': ['DRAW','AWAY'], '12': ['HOME','AWAY'] };
     const parts = sel.split(' ou ');
     const picks = codes[sel] ?? (parts.length === 2 ? parts.map(p => resultPick(p, teams)) : []);

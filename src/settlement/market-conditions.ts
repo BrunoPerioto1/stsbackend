@@ -8,8 +8,11 @@ function compound(text: string, teams: Teams): Condition[] | null {
   const { selection, label } = splitLabel(text.replace(/\s+\/\s+/g, ' - '));
   const scope = scoped(text)?.scope;
   if (scope !== 'REGULATION') return null;
-  if (/^(resultado final e total de gols|resultado da partida \+ total de gols)$/.test(label)) {
-    const m = /^(.+?)\s+e\s+(.+)$/.exec(selection);
+  // " + " já chega como " e " (ver abreviacoes). "1x2 e total" é o mesmo mercado.
+  // Linha às vezes repetida no rótulo ("total de gols 2.5") e "e" omitido na
+  // seleção ("Espanha mais de 2.5 - 1x2 e total").
+  if (/^(?:resultado final|resultado da partida|resultado|1x2|vencedor do encontro) e total(?: de gols)?(?: \d+(?:[.,]\d+)?)?$/.test(label)) {
+    const m = /^(.+?)\s+e\s+(.+)$/.exec(selection) ?? /^(.+?)\s+((?:mais|menos) de .+)$/.exec(selection);
     if (!m) return null;
     const pick = resultPick(m[1].replace(/\s+para ganhar$/, ''), teams);
     const total = parseScoreMarket(`${m[2]} - total de gols`, teams);
@@ -29,11 +32,16 @@ function compound(text: string, teams: Teams): Condition[] | null {
 }
 function single(text: string, teams: Teams): Condition | null {
   const matches=MARKET_REGISTRY.map(d=>d.parser(text,teams)).filter((c): c is Condition=>!!c);
-  return matches.length===1 ? matches[0] : null;
+  if (matches.length===1) return matches[0];
+  // Formato em lista junta seleção e rótulo com a métrica repetida: "Mais de
+  // 2.5 Gols / Total de Gols" vira "mais de 2.5 gols - total de gols". Tira a
+  // métrica da seleção e tenta de novo — o rótulo continua dizendo qual é.
+  const repetida = /^(.*\d)\s+(?:gols?|escanteios|cartoes|chutes(?: no gol| a gol| ao gol)?|finalizacoes)( - .+)$/.exec(text);
+  return !matches.length && repetida ? single(repetida[1] + repetida[2], teams) : null;
 }
 function isLabel(text: string): boolean {
   const s=scoped(text)?.text ?? text;
-  return Object.values(labels).some(p=>p.test(s)) || /^(?:total de |total |totais )?(?:escanteios|corners|cartoes(?: amarelos)?|cards|chutes(?: a gol| ao gol| no gol)?|faltas|impedimentos|defesas)(?: mais\/menos)?$/.test(s) || /^(?:dupla chance|chance dupla|double chance|handicap(?: asiatico)?|clean sheet|sem sofrer gols|mais escanteios|equipe com mais escanteios|escanteios 1x2|(?:maior numero de|equipe com mais|time com mais) (?:escanteios|cartoes|chutes ao gol|chutes a gol|chutes no gol|chutes)|(?:ganhar|vencer) sem (?:sofrer|tomar|levar) gols?|primeiro gol|ultimo gol|proximo gol (?:\(gol )?\d+\)?|penalti no jogo|cartao vermelho|marcar a qualquer momento|marcar em qualquer momento|marcador a qualquer momento|para marcar a qualquer momento|a marcar a qualquer momento|a marcar|marcar gol|1o gol|(?:vencer|ganhar) (?:cada tempo|ambos os tempos)|jogador para marcar|jogador assistencia|assistencias do jogador|gol ou assistencia|jogador marcar ou dar assistencia|marcar gol ou dar assistencia|chutes a gol do jogador|total de chutes do jogador|cartoes do jogador)$/.test(s);
+  return Object.values(labels).some(p=>p.test(s)) || /^(?:total de |total |totais )?(?:escanteios|corners|cartoes(?: amarelos)?|cards|chutes(?: a gol| ao gol| no gol)?|faltas|impedimentos|defesas)(?: mais\/menos)?$/.test(s) || /^(?:dupla chance|chance dupla|double chance|dupla hipotese|handicap(?: asiatico)?|clean sheet|sem sofrer gols|mais escanteios|equipe com mais escanteios|escanteios 1x2|(?:maior numero de|equipe com mais|time com mais) (?:escanteios|cartoes|chutes ao gol|chutes a gol|chutes no gol|chutes)|(?:ganhar|vencer) sem (?:sofrer|tomar|levar) gols?|primeiro gol|ultimo gol|proximo gol (?:\(gol )?\d+\)?|penalti no jogo|cartao vermelho|marcar a qualquer momento|marcar em qualquer momento|marcador a qualquer momento|para marcar a qualquer momento|a marcar a qualquer momento|a marcar|marcar gol|1o gol|(?:vencer|ganhar) (?:cada tempo|ambos os tempos)|jogador para marcar|jogador assistencia|assistencias do jogador|gol ou assistencia|jogador marcar ou dar assistencia|marcar gol ou dar assistencia|chutes a gol do jogador|total de chutes do jogador|cartoes do jogador)$/.test(s);
 }
 // Combinada do mesmo jogo escrita como frase, do jeito que o canal manda:
 // "Palmeiras vence e tem mais escanteios - Resultado final e escanteios",
@@ -73,6 +81,9 @@ function clausulas(text: string, teams: Teams): Condition[] | null {
     if (over) return `mais de ${over[1]} - total de gols`;
     const under = /^(?:-|u|menos de )\s*(\d+(?:[.,]\d+)?) gols?$/.exec(frase);
     if (under) return `menos de ${under[1]} - total de gols`;
+    // "mais de 9.5 escanteios", "menos de 4.5 cartoes": total do jogo.
+    const estatistica = /^(mais|menos) de (\d+(?:[.,]\d+)?) (escanteios|cartoes|chutes ao gol|chutes a gol|chutes no gol|chutes)$/.exec(frase);
+    if (estatistica) return `${estatistica[1]} de ${estatistica[2]} - total de ${estatistica[3]}`;
     const placar1T = /^(\d{1,2})\s*[-x]\s*(\d{1,2}) (?:ht|no intervalo|1o tempo)$/.exec(frase);
     if (placar1T) return `${placar1T[1]}-${placar1T[2]} - resultado correto 1o tempo`;
     const marca = /^(.+?) (?:marca|marcar|para marcar) (?:a|em) qualquer momento$/.exec(frase);
@@ -114,9 +125,63 @@ function cadaEquipe(text: string): Condition[] | null {
 // como ganha sem a perna que ficou de fora. Em code points, como o length() do
 // Postgres, que foi onde o pico de 697 apostas em 100 apareceu.
 export const LIMITE_DO_CANAL = 100;
+// Abreviações de tipster reescritas pra forma que o resto do parser já lê.
+// Levantadas da planilha do grupo (2026-09-16, 41 mil apostas de futebol):
+// "Colômbia ML e o2.5", "Flamengo under 4.5 cantos", "Paderborn DNB",
+// "Argentina HT/FT", "Portugal vence a 0". Só troca texto por sinônimo exato —
+// nenhuma regra decide resultado aqui.
+const NUM = '(\\d+(?:[.,]\\d+)?)';
+const METRICA = '(?:gols?|escanteios|cartoes|chutes)';
+export function abreviacoes(text: string): string {
+  let t = text
+    .replace(/\s*\(incluindo linhas asiaticas\)/g, '')
+    .replace(/\((\do tempo)\)/g, '$1')
+    .replace(/\s*\(1x2\)/g, '')
+    .replace(/\b1o tempo 1x2\b/g, 'resultado do 1o tempo')
+    .replace(/\bdupla possibilidade\b/g, 'dupla chance')
+    .replace(/\bambos marcam gol\b/g, 'ambos marcam')
+    .replace(/\bcantos?\b|\besc\b/g, 'escanteios')
+    .replace(/\bbtts\b/g, 'ambas marcam')
+    .replace(/^ambas e /, 'ambas marcam e ')
+    .replace(/\s+[+&]\s+/g, ' e ')
+    .replace(/\b(?:resultado final|resultado)(?: -)? 1x2\b/g, 'resultado final')
+    .replace(/\btotal de gols - mais\/menos\b/g, 'total de gols')
+    // "o2.5" só com decimal: "vence o 1o tempo" não pode virar linha.
+    .replace(new RegExp(`\\bover\\s*${NUM}|\\bo${NUM}(?=\\s|$)`, 'g'), (_, a, b) => `mais de ${a ?? b}`)
+    .replace(new RegExp(`\\bunder\\s*${NUM}|\\bu${NUM}(?=\\s|$)`, 'g'), (_, a, b) => `menos de ${a ?? b}`)
+    .replace(new RegExp(`(^|\\s)\\+${NUM}(?=\\s+${METRICA})`, 'g'), '$1mais de $2')
+    .replace(new RegExp(`(^|\\s)-${NUM}(?=\\s+${METRICA})`, 'g'), '$1menos de $2')
+    .replace(new RegExp(`(\\d)\\s+(${METRICA})\\s+(?:na partida|no jogo|ft)\\b`, 'g'), '$1 $2')
+    .replace(/\s+ft\b/g, '')
+    .replace(/\bvence(r)? o (1o tempo|primeiro tempo|ht)\b/g, 'vence $2')
+    .replace(/\bvencer? (?:a|de) (?:0|zero)\b/g, 'vence de zero')
+    .replace(/\bht\b(?!\/)/g, '1o tempo')
+    // "over 2.5 gols e 9.5 cantos": a segunda linha herda o "mais de".
+    .replace(new RegExp(`\\b(mais|menos) de ${NUM} (${METRICA}) e ${NUM} (${METRICA})\\b`, 'g'), '$1 de $2 $3 e $1 de $4 $5');
+  // Linha solta sem métrica ("o3.5", "mais de 2.5 1o tempo") é total de gols.
+  // Só quando a cláusula inteira é a linha ("Colômbia ML e o2.5"): com rótulo,
+  // time ou métrica junto, quem decide é o resto do parser.
+  t = t.replace(new RegExp(`(^| e |\\S )(mais|menos) de ${NUM}(?![\\d.,])(\\s+1o tempo)?(?= e |$)`, 'g'), '$1$2 de $3 gols$4');
+  // "Marrocos 3+ gols" é "mais de 2.5": mesma coisa, na forma que o parser lê.
+  t = t.replace(new RegExp(`(^|\\s)(\\d+)\\+\\s+(${METRICA})`, 'g'), (_, a, n, m) => `${a}mais de ${Number(n) - 0.5} ${m}`);
+  t = t
+    .replace(/^(.+?) ht\/ft$/, '$1/$1 - intervalo/final')
+    .replace(/^ml (.+?)(?= e |$)/, '$1 vence')
+    .replace(/ ml\b/g, ' vence')
+    .replace(/^(.+?) dnb$/, '$1 +0 - handicap asiatico')
+    .replace(/^(.+?) dc$/, '$1 ou empate')
+    .replace(/^(.+?) nao marca$/, '$1 menos de 0.5 gols')
+    .replace(/^(.+?) marca$/, '$1 mais de 0.5 gols')
+    .replace(/^(.+?) primeiro a marcar$/, '$1 - primeiro gol')
+    .replace(/^ambas nao marcam$/, 'nao - ambas marcam')
+    // Handicap com meia linha e sem rótulo: "PSG -1.5". Linha inteira fica de
+    // fora — sem "asiático" escrito, o europeu tem três saídas.
+    .replace(/^([^/]+?) ([+-]\d+[.,]5)$/, '$1 $2 - handicap');
+  return t.replace(/\s+/g, ' ').trim();
+}
 export function parseMarket(market: string, teams: Teams): ParseResult {
   if ([...(market ?? '')].length === LIMITE_DO_CANAL) return fail('MERCADO_TRUNCADO',`texto no limite de ${LIMITE_DO_CANAL} caracteres do canal; pode faltar perna`);
-  const text=normalize(market??'');
+  const text=abreviacoes(normalize(market??''));
   if (!text) return fail('MERCADO_NAO_RECONHECIDO','mercado vazio');
   if (/\b(?:prorrogacao|extra time|penaltis|incluindo|classificar|classificacao)\b/.test(text)) return fail('ESCOPO_NAO_SUPORTADO','escopo além do tempo normal ou qualificação');
   if (/\b(?:nos? \d+ jogos?|nas? \d+ partidas?|cada partida|todos os jogos|todas as partidas|todos os times|todas as equipes|rodada|jogo com o gol mais rapido|multipla)\b/.test(text)) return fail('VARIOS_JOGOS','agregado/comparação entre jogos');

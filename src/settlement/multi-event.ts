@@ -73,6 +73,19 @@ export function selecoesDaMultipla(game: string, market: string): string[] {
   });
   if (expandidas.length !== partes.length) return expandidas;
 
+  // Vitórias com o rótulo como parte própria: "Brasil e Escócia vencem /
+  // Resultado Final", "Portugal vence / Goiás vence / Resultado Final".
+  if (partes.length > 1 && labels.result.test(normalize(partes[partes.length - 1]))) {
+    const frases = partes.slice(0, -1);
+    if (frases.every((f) => /\s(?:vence|vencem|vencerem)$/i.test(f))) partes = frases;
+  }
+  // "Cercle Brugge vence, Nottingham Forest vence, Alverca vence".
+  const porVirgula = partes.length === 1 ? partes[0].replace(/\s+-\s+.+$/, '').split(/\s*,\s*/) : [];
+  const frases = porVirgula.length > 1 ? porVirgula : partes;
+  if (frases.length > 1 && frases.every((f) => /\s(?:vence|vencem)$/i.test(f))) {
+    return frases.map((f) => `${f.replace(/\s+(?:vence|vencem)$/i, '')} - Resultado final`);
+  }
+
   if (partes.length === 1) {
     const lista = /^(.+?)\s+(?:(?:todos|ambos)\s+)?(?:vencem|vencerem|vence|vencer|ganham|ganharem|para ganhar|para vencer)(?:\s+(?:[oa]s\s+)?(?:suas\s+partidas?|seus\s+jogos?))?(?:\s+-\s+(.+))?$/i.exec(partes[0]);
     if (lista && (!lista[2] || labels.result.test(normalize(lista[2])))) {
