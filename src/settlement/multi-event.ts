@@ -63,14 +63,66 @@ export function selecoesDaMultipla(game: string, market: string): string[] {
   }
   partes = partes.map((p) => p.trim()).filter(Boolean);
 
+  // Seleção distributiva ("mais de 1.5 gols em cada partida") vira uma por jogo,
+  // com o confronto entre parênteses: é a dica que liga cada cópia ao seu jogo
+  // mesmo quando há mais de uma frase assim ou seleções comuns junto.
+  const confrontos = extractConfrontos(game, market);
+  const expandidas = partes.flatMap((parte) => {
+    const selecao = condicaoPorJogo(parte, confrontos.length);
+    return selecao ? confrontos.map((confronto) => `${selecao} (${confronto})`) : [parte];
+  });
+  if (expandidas.length !== partes.length) return expandidas;
+
   if (partes.length === 1) {
-    const lista = /^(.+?)\s+(?:vencem|vencerem|vence|vencer|ganham|ganharem)(?:\s+(?:as\s+)?(?:suas\s+partidas|seus\s+jogos|suas\s+partidas?))?(?:\s+-\s+(.+))?$/i.exec(partes[0]);
+    const lista = /^(.+?)\s+(?:(?:todos|ambos)\s+)?(?:vencem|vencerem|vence|vencer|ganham|ganharem|para ganhar|para vencer)(?:\s+(?:[oa]s\s+)?(?:suas\s+partidas?|seus\s+jogos?))?(?:\s+-\s+(.+))?$/i.exec(partes[0]);
     if (lista && (!lista[2] || labels.result.test(normalize(lista[2])))) {
-      const nomes = lista[1].split(/\s*,\s*|\s+e\s+/).map((n) => n.trim()).filter(Boolean);
+      const nomes = lista[1]
+        .replace(/\s+(?:todos|ambos)$/i, '')
+        .split(/\s*,\s*|\s+e\s+/)
+        .map((n) => n.trim())
+        .filter(Boolean);
       if (nomes.length > 1) return nomes.map((nome) => `${nome} - Resultado final`);
     }
   }
   return partes;
+}
+
+// Condição que vale pra cada jogo separadamente: "Mais de 1.5 gols em cada
+// partida - Total de gols" vira "mais de 1.5 gols - total de gols" aplicada a
+// cada confronto. Variações reais do grupo, com erros de escrita incluídos
+// ("em todos jogo", "ambas jogos"). Só pega quando a expressão fala de JOGO ou
+// PARTIDA no plural/distributivo: "no jogo", "cada equipe" e "ambos os tempos"
+// são de um confronto só.
+const NUMERO = '(?:\\d+|dois|duas|tres|quatro|cinco|seis|sete|oito|nove|dez)';
+const JOGOS = '(?:jogos?|partidas?)';
+const POR_JOGO = new RegExp(
+  '\\s*\\b(?:(?:em|de|n[oa]s?)\\s+)?(?:' +
+    [
+      `cada\\s+uma?\\s+d[oa]s\\s+(?:(${NUMERO})\\s+)?${JOGOS}`,
+      `cada\\s+${JOGOS}`,
+      `tod[oa]s\\s+(?:[oa]s\\s+)?(?:(${NUMERO})\\s+)?${JOGOS}(?:\\s+cada)?`,
+      `amb[oa]s\\s+(?:[oa]s\\s+)?${JOGOS}`,
+      // "nos 3 jogos" sozinho pode ser estatística de jogos anteriores: só vale
+      // com o N batendo com os confrontos, conferido abaixo.
+      `(${NUMERO})\\s+${JOGOS}`,
+    ].join('|') +
+    ')\\b',
+);
+const EXTENSO: Record<string, number> = { dois: 2, duas: 2, tres: 3, quatro: 4, cinco: 5, seis: 6, sete: 7, oito: 8, nove: 9, dez: 10 };
+
+export function condicaoPorJogo(texto: string, confrontos: number): string | null {
+  const t = normalize(texto);
+  // Soma entre jogos não é condição por jogo.
+  if (/\b(?:somad[oa]s?|combinad[oa]s?|soma)\b/.test(t)) return null;
+  const m = POR_JOGO.exec(t);
+  if (!m) return null;
+  const n = m.slice(1).find(Boolean);
+  if (n !== undefined && (EXTENSO[n] ?? Number(n)) !== confrontos) return null;
+  // Número sem "cada/todos/ambos" só vale como "nos 3 jogos"/"nas duas
+  // partidas": "em 3 jogos seguidos" ou "3 jogos" solto é outra frase.
+  if (!/\b(?:cada|tod[oa]s|amb[oa]s)\b/.test(m[0]) && !/^\s*n[oa]s\s/.test(m[0])) return null;
+  const selecao = (t.slice(0, m.index) + t.slice(m.index + m[0].length)).replace(/\s+/g, ' ').trim();
+  return selecao && confrontos > 1 ? selecao : null;
 }
 
 // Condição que só faz sentido num jogo específico: cita um dos times.

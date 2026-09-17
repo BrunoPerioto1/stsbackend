@@ -367,3 +367,13 @@ describe('parseMarket', () => {
     expect(parseMarket('', TIMES).ok).toBe(false);
   });
 });
+
+// Aposta 12024 (2026-09-15): rótulo e nome em português que a casa usa.
+describe('intervalo/final "Intervalo/Tempo Completo"', () => {
+  it('reconhece o mercado com o nome da casa', () => {
+    const r = parseMarket('Florentina/Florentina - Intervalo/Tempo Completo', { home: 'Fiorentina', away: 'Pisa' });
+    expect(r.ok && r.conditions).toEqual([
+      { normalizedMarket: 'INTERVALO_FINAL', scope: 'REGULATION', picks: ['HOME', 'HOME'] },
+    ]);
+  });
+});

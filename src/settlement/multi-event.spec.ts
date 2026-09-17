@@ -2,7 +2,7 @@
 // (2026-08-18 e 2026-09-15). Os placares são inventados pra cada caso; o que
 // importa é o formato do texto e a ligação de cada seleção ao seu jogo.
 
-import { EventLeg, isMultiEvent, selecoesDaMultipla, settleMultiEvent } from './multi-event';
+import { condicaoPorJogo, EventLeg, isMultiEvent, selecoesDaMultipla, settleMultiEvent } from './multi-event';
 import { FinalScore } from './settlement.types';
 import { ResultIdEnum as R } from '../bet/dto/result-id.enum';
 
@@ -172,5 +172,155 @@ describe('confrontos separados por vírgula e "&"', () => {
       leg(2, 'Levante', 'Athletic Bilbao', { home: 0, away: 1 }),
     ]);
     expect(r.resultId).toBe(R.WON);
+  });
+});
+
+// Aposta 12041 (2026-09-15): uma frase só vale pra todos os jogos.
+describe('mesma seleção "em cada partida"', () => {
+  const game = 'Londrina x Ponte Preta, Náutico x Operário & CRB x Sport Recife';
+  const market = 'Mais de 1.5 gols em cada partida - Total de gols';
+  const jogos = (terceiro: FinalScore) => [
+    leg(0, 'Londrina', 'Ponte Preta', { home: 6, away: 0 }),
+    leg(1, 'Náutico', 'Operário-PR', { home: 2, away: 1 }),
+    leg(2, 'CRB', 'Sport Recife', terceiro),
+  ];
+
+  it('vira uma seleção por jogo', () => {
+    expect(selecoesDaMultipla(game, market)).toEqual([
+      'mais de 1.5 gols - total de gols (Londrina x Ponte Preta)',
+      'mais de 1.5 gols - total de gols (Náutico x Operário)',
+      'mais de 1.5 gols - total de gols (CRB x Sport Recife)',
+    ]);
+  });
+
+  it('todos passaram da linha: ganhou', () => {
+    expect(settleMultiEvent(game, market, jogos({ home: 1, away: 1 })).resultId).toBe(R.WON);
+  });
+
+  it('um jogo abaixo da linha: perdeu', () => {
+    const r = settleMultiEvent(game, market, jogos({ home: 1, away: 0 }));
+    expect(r.resultId).toBe(R.LOST);
+    expect(r.explanation).toMatch(/^CRB x Sport Recife: /);
+  });
+
+  it('perde mesmo com outro jogo sem placar', () => {
+    const r = settleMultiEvent(game, market, [leg(0, 'Londrina', 'Ponte Preta', { home: 1, away: 0 })]);
+    expect(r.resultId).toBe(R.LOST);
+  });
+});
+
+
+describe('condicaoPorJogo', () => {
+  it.each([
+    ['Mais de 1.5 gols em cada jogo', 2],
+    ['Mais de 1.5 gols cada partida', 2],
+    ['Mais de 1.5 gols de cada jogo', 2],
+    ['Mais de 1.5 gols em todos os jogos', 3],
+    ['Mais de 1.5 gols em todos jogos', 3],
+    ['Mais de 1.5 gols todos jogos', 3],
+    ['Mais de 1.5 gols em todas as partidas', 3],
+    ['Mais de 1.5 gols todas partidas', 3],
+    ['Mais de 1.5 gols em todos os jogos cada', 3],
+    ['Mais de 1.5 gols todos jogos cada', 3],
+    ['Mais de 1.5 gols em ambos os jogos', 2],
+    ['Mais de 1.5 gols ambos jogos', 2],
+    ['Mais de 1.5 gols em ambas as partidas', 2],
+    ['Mais de 1.5 gols em cada um dos jogos', 2],
+    ['Mais de 1.5 gols em cada um dos 3 jogos', 3],
+    ['Mais de 1.5 gols em cada uma das três partidas', 3],
+    ['Mais de 1.5 gols nos 2 jogos', 2],
+    ['Mais de 1.5 gols nas duas partidas', 2],
+    ['Mais de 1.5 gols em todos os 4 jogos', 4],
+    // Erros de escrita do grupo.
+    ['Mais de 1.5 gols em todos jogo', 2],
+    ['Mais de 1.5 gols em todas partida cada', 2],
+    ['Mais de 1.5 gols ambas jogos', 2],
+    ['MAIS DE 1.5 GOLS EM CADA PARTIDA', 2],
+  ])('"%s" vira condição por jogo', (texto, n) => {
+    expect(condicaoPorJogo(texto, n)).toBe('mais de 1.5 gols');
+  });
+
+  it('preserva mercado, linha e período', () => {
+    expect(condicaoPorJogo('Mais de 4.5 escanteios no 1º tempo em cada partida - Escanteios', 2)).toBe(
+      'mais de 4.5 escanteios no 1o tempo - escanteios',
+    );
+  });
+
+  it.each([
+    ['Mais de 1.5 gols na partida', 2],
+    ['Mais de 1.5 gols no jogo', 2],
+    ['Cada equipe leva mais de 1.5 cartões', 2],
+    ['Sim - Ambas marcam', 2],
+    ['Flamengo marca em ambos os tempos', 2],
+    ['Mais de 4.5 gols somados em todos os jogos', 3],
+    ['Total combinado de gols mais de 4.5 em todos os jogos', 3],
+    // N diferente dos confrontos identificados.
+    ['Mais de 1.5 gols em cada um dos 3 jogos', 2],
+    ['Mais de 1.5 gols nos 3 jogos', 2],
+    // Número solto, sem preposição: pode ser outra estatística.
+    ['Marcou em 3 jogos seguidos', 3],
+    // Um jogo só não é múltipla.
+    ['Mais de 1.5 gols em cada partida', 1],
+  ])('"%s" não é condição por jogo', (texto, n) => {
+    expect(condicaoPorJogo(texto, n)).toBeNull();
+  });
+});
+
+describe('vitória de todos os times listados', () => {
+  it.each([
+    'Flamengo e Palmeiras vencerem seus jogos',
+    'Flamengo e Palmeiras vencerem suas partidas',
+    'Flamengo e Palmeiras todos para ganhar',
+    'Flamengo e Palmeiras todos para vencer',
+    'Flamengo e Palmeiras todos vencerem',
+    'Flamengo e Palmeiras todos ganham',
+    'Flamengo e Palmeiras ambos vencem',
+    'Flamengo e Palmeiras ambos vencerem',
+  ])('%s', (market) => {
+    expect(selecoesDaMultipla('Flamengo x Bahia / Palmeiras x Santos', market)).toEqual([
+      'Flamengo - Resultado final',
+      'Palmeiras - Resultado final',
+    ]);
+  });
+});
+
+
+describe('mais de uma seleção distributiva', () => {
+  const game = 'Flamengo x Bahia / Palmeiras x Santos';
+  it('expande cada frase pra cada jogo', () => {
+    expect(
+      selecoesDaMultipla(game, 'Mais de 1.5 gols em cada partida / Mais de 8.5 escanteios em cada partida'),
+    ).toHaveLength(4);
+  });
+
+  it('mistura com seleção comum', () => {
+    expect(
+      selecoesDaMultipla(game, 'Mais de 1.5 gols em cada partida / Flamengo - Resultado final'),
+    ).toEqual([
+      'mais de 1.5 gols (Flamengo x Bahia)',
+      'mais de 1.5 gols (Palmeiras x Santos)',
+      'Flamengo - Resultado final',
+    ]);
+  });
+
+  it('gols e vitória: ganhou quando tudo bate, perdeu quando um jogo falha', () => {
+    const market = 'Mais de 1.5 gols em cada partida - Total de gols / Flamengo - Resultado final';
+    expect(
+      settleMultiEvent(game, market, [leg(0, 'Flamengo', 'Bahia', { home: 2, away: 1 }), leg(1, 'Palmeiras', 'Santos', { home: 1, away: 1 })]).resultId,
+    ).toBe(R.WON);
+    const perdeu = settleMultiEvent(game, market, [
+      leg(0, 'Flamengo', 'Bahia', { home: 2, away: 1 }),
+      leg(1, 'Palmeiras', 'Santos', { home: 1, away: 0 }),
+    ]);
+    expect(perdeu.resultId).toBe(R.LOST);
+    expect(perdeu.explanation).toMatch(/^Palmeiras x Santos: /);
+  });
+
+  it('duas frases distributivas', () => {
+    const market = 'Mais de 1.5 gols em cada partida - Total de gols / Menos de 3.5 gols em todas as partidas - Total de gols';
+    const com = (b: FinalScore) => settleMultiEvent(game, market, [leg(0, 'Flamengo', 'Bahia', { home: 2, away: 1 }), leg(1, 'Palmeiras', 'Santos', b)]);
+    expect(com({ home: 1, away: 1 }).resultId).toBe(R.WON);
+    expect(com({ home: 3, away: 1 }).resultId).toBe(R.LOST);
+    expect(com({ home: 1, away: 0 }).resultId).toBe(R.LOST);
   });
 });

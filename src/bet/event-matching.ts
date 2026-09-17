@@ -97,6 +97,7 @@ const ALIASES: Record<string, string> = {
   internazionale: 'inter',
   'bayern munique': 'bayern munchen',
   napoles: 'napoli',
+  florentina: 'fiorentina',
   sevilha: 'sevilla',
   colonia: 'koln',
   'juventus turim': 'juventus',

@@ -187,7 +187,7 @@ export function parseTeamStat(text: string, teams: Teams): Condition | null {
 }
 export function parsePeriods(text: string, teams: Teams): Condition | null {
   const { selection, label } = splitLabel(text);
-  if (/^(intervalo[ /-]final|intervalo\/final|primeiro tempo e partida)$/.test(label)) {
+  if (/^(intervalo[ /-]final|intervalo\/final|intervalo\/tempo completo|primeiro tempo e partida)$/.test(label)) {
     const parts = selection.split(/\s*\/\s*/);
     const picks = parts.map(p => resultPick(p, teams));
     return picks.length === 2 && picks.every(Boolean) ? { normalizedMarket: 'INTERVALO_FINAL', scope: 'REGULATION', picks: picks as SelectionPick[] } : null;
