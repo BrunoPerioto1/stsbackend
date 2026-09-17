@@ -105,3 +105,17 @@ describe('mercados por capacidades',()=>{
     expect(parsed.ok && requiredDataFor(parsed.conditions[0])).toEqual(['SCORE_PERIODS']);
   });
 });
+
+describe('escopo de classificacao', () => {
+  it.each([
+    'Corinthians se classifica & Corinthians mais de 0.5 gols no 1º tempo',
+    'Corinthians classificado - Classificação',
+    'Corinthians para classificar - Classificação',
+  ])('recusa "%s" por escopo, nao por separacao', (market) => {
+    const r = parseMarket(market, {
+      home: 'Corinthians',
+      away: 'Estudiantes de La Plata',
+    });
+    expect(r).toMatchObject({ ok: false, reason: 'ESCOPO_NAO_SUPORTADO' });
+  });
+});

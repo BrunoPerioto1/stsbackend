@@ -145,7 +145,8 @@ function citaTime(c: Condition): boolean {
 }
 
 export function settleMultiEvent(game: string, market: string, legs: readonly EventLeg[]): Settlement {
-  if (/\b(?:prorrogacao|classificar|qualificar|classificacao)\b/.test(normalize(market))) {
+  // Mesma conjugacao solta de parseMarket: "se classifica", "classificado".
+  if (/\b(?:prorrogacao|classifica\w*|qualifica\w*)\b/.test(normalize(market))) {
     return undecided('ESCOPO_NAO_SUPORTADO', 'escopo além do tempo normal ou qualificação');
   }
   const confrontos = extractConfrontos(game, market);

@@ -222,7 +222,10 @@ export function parseMarket(market: string, teams: Teams): ParseResult {
   if ([...(market ?? '')].length === LIMITE_DO_CANAL) return fail('MERCADO_TRUNCADO',`texto no limite de ${LIMITE_DO_CANAL} caracteres do canal; pode faltar perna`);
   const text=abreviacoes(normalize(market??''));
   if (!text) return fail('MERCADO_NAO_RECONHECIDO','mercado vazio');
-  if (/\b(?:prorrogacao|extra time|penaltis|incluindo|classificar|classificacao)\b/.test(text)) return fail('ESCOPO_NAO_SUPORTADO','escopo além do tempo normal ou qualificação');
+  // Conjugacao solta: o bilhete escreve "se classifica", "classificado",
+  // "classificar". Listar so' o infinitivo deixava "classifica" escapar daqui e
+  // cair no fallback generico, com motivo errado na tela.
+  if (/\b(?:prorrogacao|extra time|penaltis|incluindo|classifica\w*)\b/.test(text)) return fail('ESCOPO_NAO_SUPORTADO','escopo além do tempo normal ou qualificação');
   if (/\b(?:nos? \d+ jogos?|nas? \d+ partidas?|cada partida|todos os jogos|todas as partidas|todos os times|todas as equipes|rodada|jogo com o gol mais rapido|multipla)\b/.test(text)) return fail('VARIOS_JOGOS','agregado/comparação entre jogos');
   const combined=compound(text,teams);
   if (combined) return {ok:true,conditions:combined};
