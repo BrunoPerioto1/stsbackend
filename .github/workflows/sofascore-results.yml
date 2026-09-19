@@ -13,9 +13,9 @@ name: sofascore-results
 
 on:
   schedule:
-    # 1x ao dia, 06:00 BRT: pega todos os jogos do dia anterior ja' encerrados,
-    # inclusive os de madrugada. Menos execucoes = menos trafego no proxy.
-    - cron: '0 9 * * *'
+    # 3x ao dia (06h, 16h, 22h BRT) pra liquidar jogos encerrados mais cedo.
+    - cron: '0 9,19 * * *'   # 06h e 16h BRT
+    - cron: '0 1 * * *'      # 22h BRT
   workflow_dispatch:
     inputs:
       max_eventos:
