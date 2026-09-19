@@ -14,8 +14,10 @@ name: sofascore-results
 on:
   schedule:
     # 3x ao dia (06h, 16h, 22h BRT) pra liquidar jogos encerrados mais cedo.
-    - cron: '0 9,19 * * *'   # 06h e 16h BRT
-    - cron: '0 1 * * *'      # 22h BRT
+    # Minuto 17 de proposito: no minuto 0 a fila do GitHub lota e o disparo
+    # chegou a atrasar 3-4h. Cron do Actions e' sempre UTC (BRT = UTC-3).
+    - cron: '17 9,19 * * *'  # 06h e 16h BRT
+    - cron: '17 1 * * *'     # 22h BRT
   workflow_dispatch:
     inputs:
       max_eventos:
