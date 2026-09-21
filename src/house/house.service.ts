@@ -51,13 +51,17 @@ export class HouseService {
   async getHouseMetrics(userId: number, filter: HouseFilterRequestDto = {}) {
     const houses = await this.getAllHousesBalanceWithFilter(filter, userId);
 
+    // `totalBalance` soma o saldo clampado: casa nao fica devendo, saldo real
+    // negativo e sinal de lancamento faltando, nao de dinheiro. O tamanho do
+    // buraco vai em `negativeAmount` (valor negativo) pro detalhe de "a conferir".
     return houses.reduce(
       (acc, h) => ({
-        totalBalance: acc.totalBalance + h.realHouseBalance,
+        totalBalance: acc.totalBalance + h.houseBalance,
         totalDeposit: acc.totalDeposit + h.totalDeposit,
         totalWithdrawal: acc.totalWithdrawal + h.totalWithdrawal,
         consolidatedProfit: acc.consolidatedProfit + h.totalBetProfit,
         negativeHouses: acc.negativeHouses + (h.realHouseBalance < 0 ? 1 : 0),
+        negativeAmount: acc.negativeAmount + Math.min(0, h.realHouseBalance),
         totalHousesUsed: acc.totalHousesUsed + 1,
       }),
       {
@@ -66,6 +70,7 @@ export class HouseService {
         totalWithdrawal: 0,
         consolidatedProfit: 0,
         negativeHouses: 0,
+        negativeAmount: 0,
         totalHousesUsed: 0,
       },
     );

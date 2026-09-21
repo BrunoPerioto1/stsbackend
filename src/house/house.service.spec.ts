@@ -2,7 +2,7 @@ import { HouseService } from './house.service';
 import { HouseRepository } from '../infra/repository/house.repository';
 
 describe('house balances', () => {
-  it('includes transaction-only houses and keeps negative balances in consolidated totals', async () => {
+  it('includes transaction-only houses and clamps negative balance out of the total, keeping the gap in negativeAmount', async () => {
     const findAllHousesBalance = jest.fn().mockResolvedValue([
       { houseId: 1, houseName: 'Deposit only', totalBets: 0, settledBets: 0, totalStake: 0,
         totalBetProfit: 0, pendingBets: 0, wonBets: 0, lostBets: 0,
@@ -15,7 +15,8 @@ describe('house balances', () => {
     const houses = await service.getAllHousesBalanceWithFilter({}, 7);
     expect(houses[0]).toMatchObject({ realHouseBalance: 100, totalBetProfit: 0, totalBets: 0 });
     expect(houses[1]).toMatchObject({ realHouseBalance: -55, totalBetProfit: -50, pendingBets: 1 });
-    expect(await service.getHouseMetrics(7)).toEqual({ totalBalance: 45, totalDeposit: 100,
-      totalWithdrawal: 10, consolidatedProfit: -50, negativeHouses: 1, totalHousesUsed: 2 });
+    expect(await service.getHouseMetrics(7)).toEqual({ totalBalance: 100, totalDeposit: 100,
+      totalWithdrawal: 10, consolidatedProfit: -50, negativeHouses: 1, negativeAmount: -55,
+      totalHousesUsed: 2 });
   });
 });
