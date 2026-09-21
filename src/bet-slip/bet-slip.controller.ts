@@ -5,11 +5,11 @@ import {
   HttpCode,
   HttpStatus,
   Post,
-  UploadedFile,
+  UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { AnyFilesInterceptor } from '@nestjs/platform-express';
 import { AuthGuard } from '@nestjs/passport';
 import {
   ApiBearerAuth,
@@ -20,13 +20,18 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { User } from '../common/decorators/user.decorator';
-import { BetSlipService, MAX_IMAGE_BYTES } from './bet-slip.service';
+import {
+  BetSlipService,
+  MAX_IMAGE_BYTES,
+  MAX_IMAGES_PER_SLIP,
+} from './bet-slip.service';
 import { ParsedBetSlipDto, ParseImageBodyDto } from './dto/parse-image.dto';
 
 // Só o que esta rota usa do arquivo enviado — evita depender de @types/multer
 // só para tipar um campo.
 interface UploadedImage {
   buffer?: Buffer;
+  fieldname?: string;
 }
 
 // Controller separado, com o mesmo prefixo do BetController: evita que o
@@ -43,13 +48,19 @@ export class BetSlipController {
   @ApiConsumes('multipart/form-data')
   @ApiOperation({
     summary: 'Lê um print de bilhete e devolve os campos da aposta (não salva)',
+    description:
+      'Aceita mais de uma imagem quando o bilhete não cabe num print só: todas as partes enviadas são lidas como UMA aposta. Lote (várias apostas) é uma chamada por bilhete.',
   })
   @ApiBody({
     schema: {
       type: 'object',
-      required: ['image'],
       properties: {
         image: { type: 'string', format: 'binary' },
+        images: {
+          type: 'array',
+          items: { type: 'string', format: 'binary' },
+          description: 'Partes do mesmo bilhete, na ordem.',
+        },
         houseHint: { type: 'string' },
       },
     },
@@ -58,19 +69,28 @@ export class BetSlipController {
   // O limite real em produção é o do body da serverless function do Vercel
   // (~4.5 MB), abaixo destes 5 MB — o app comprime antes de enviar, então na
   // prática o payload fica na casa das centenas de KB.
+  // AnyFilesInterceptor no lugar do FileInterceptor: o app manda o bilhete
+  // inteiro em "image" ou dividido em "images[]", e a rota aceita os dois sem
+  // duplicar endpoint.
   @UseInterceptors(
-    FileInterceptor('image', { limits: { fileSize: MAX_IMAGE_BYTES } }),
+    AnyFilesInterceptor({
+      limits: { fileSize: MAX_IMAGE_BYTES, files: MAX_IMAGES_PER_SLIP },
+    }),
   )
   async parseImage(
-    @UploadedFile() image: UploadedImage | undefined,
+    @UploadedFiles() files: UploadedImage[] | undefined,
     @Body() body: ParseImageBodyDto,
     @User('userId') userId: number,
   ): Promise<ParsedBetSlipDto> {
-    if (!image?.buffer?.length)
+    const buffers = (files ?? [])
+      .filter((f) => f.fieldname === 'image' || f.fieldname === 'images')
+      .map((f) => f.buffer)
+      .filter((b): b is Buffer => !!b?.length);
+    if (!buffers.length)
       throw new BadRequestException('Envie uma imagem no campo "image".');
     return this.betSlipService.parseImage({
       userId,
-      buffer: image.buffer,
+      buffers,
       houseHint: body.houseHint,
     });
   }

@@ -44,6 +44,18 @@ export class ParsedBetSlipDto {
   originalOdd!: number | null;
   @ApiProperty({ nullable: true }) stake!: number | null;
   @ApiProperty({
+    type: [String],
+    description:
+      'Campos que a IA não conseguiu identificar no print. A tela mostra isso em vez de deixar o usuário adivinhar.',
+    example: ['Odd', 'Stake'],
+  })
+  missing!: string[];
+  @ApiProperty({
+    description:
+      'Odd não impressa no bilhete, deduzida do produto das seleções (ou retorno/stake). Pede conferência.',
+  })
+  oddFromSelections!: boolean;
+  @ApiProperty({
     description:
       'Heurística de 0 a 1 por campo — não é probabilidade do modelo. Só orienta o que o app marca para conferência.',
     example: { event: 0.9, market: 0.55 },

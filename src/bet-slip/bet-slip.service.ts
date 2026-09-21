@@ -8,9 +8,14 @@ import { BetSlipParserService } from './bet-slip-parser.service';
 import { PendingMatchService } from './pending-match.service';
 import { GrokService } from '../telegram/grok.service';
 import { HouseService } from '../house/house.service';
+import { missingBetFields } from '../telegram/utils/bet-preview.util';
 import type { ParsedBetSlipDto } from './dto/parse-image.dto';
 
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+// Bilhete dividido em partes. Mais que isso e print errado, nao bilhete
+// comprido — e cada imagem extra custa tokens e segundos dentro dos 60s da
+// function.
+export const MAX_IMAGES_PER_SLIP = 4;
 
 // Mimetype do multipart vem do cliente e mente fácil; os magic bytes não.
 const SIGNATURES: { mime: string; test: (b: Buffer) => boolean }[] = [
@@ -44,6 +49,20 @@ export function detectImageMime(buffer: Buffer): string | null {
 const SURE = 0.9;
 const CHECK = 0.55;
 
+// Erro cru da OpenAI/SDK não diz nada pra quem está olhando a tela; estes
+// dizem. Qualquer coisa fora da lista volta como veio — é melhor mostrar um
+// texto feio do que esconder a causa.
+function describeAiFailure(reason: string): string {
+  if (/timeout|timed out|ETIMEDOUT|aborted/i.test(reason))
+    return 'a IA demorou demais para responder';
+  if (/IA_JSON_INVALIDO|IA_SEM_RESPOSTA/.test(reason))
+    return 'a IA respondeu num formato que não consegui interpretar';
+  if (/rate.?limit|429/i.test(reason)) return 'limite de uso da IA atingido';
+  if (/ENOTFOUND|ECONNRESET|ECONNREFUSED|fetch failed|socket/i.test(reason))
+    return 'falha de conexão com a IA';
+  return reason;
+}
+
 @Injectable()
 export class BetSlipService {
   constructor(
@@ -55,20 +74,31 @@ export class BetSlipService {
 
   async parseImage({
     userId,
-    buffer,
+    buffers,
     houseHint,
   }: {
     userId: number;
-    buffer: Buffer;
+    // Uma ou mais partes do MESMO bilhete, na ordem em que o usuário mandou.
+    buffers: Buffer[];
     houseHint?: string;
   }): Promise<ParsedBetSlipDto> {
-    const mimeType = detectImageMime(buffer);
-    if (!mimeType)
+    if (!buffers.length)
+      throw new BadRequestException('Envie uma imagem no campo "image".');
+    if (buffers.length > MAX_IMAGES_PER_SLIP)
       throw new BadRequestException(
-        'Formato não suportado. Envie um print em PNG, JPG ou WebP.',
+        `Envie no máximo ${MAX_IMAGES_PER_SLIP} imagens por bilhete.`,
       );
-    if (buffer.length > MAX_IMAGE_BYTES)
-      throw new BadRequestException('Imagem acima de 5 MB.');
+
+    const parts = buffers.map((buffer, index) => {
+      const mimeType = detectImageMime(buffer);
+      if (!mimeType)
+        throw new BadRequestException(
+          `Formato não suportado na imagem ${index + 1}. Envie um print em PNG, JPG ou WebP.`,
+        );
+      if (buffer.length > MAX_IMAGE_BYTES)
+        throw new BadRequestException(`Imagem ${index + 1} acima de 5 MB.`);
+      return { buffer, mimeType };
+    });
 
     // Só pede a casa ao modelo quando o app não sabe qual é — a casa escolhida
     // no select é sempre mais confiável que a logo lida do print.
@@ -77,17 +107,21 @@ export class BetSlipService {
     >;
     try {
       extracted = await this.parser.extractBetFromImage({
-        imageBuffer: buffer,
-        mimeType,
+        imageBuffer: parts[0].buffer,
+        mimeType: parts[0].mimeType,
+        extraImages: parts.slice(1),
         withHouse: !houseHint,
       });
     } catch (err) {
       const reason = (err as Error).message;
       console.error('[BET_SLIP_PARSE] status=error reason=%s', reason);
+      // O motivo vai junto de propósito: sem ele a tela só sabe dizer "não
+      // consegui" e o usuário não tem o que fazer com isso — timeout pede
+      // outra tentativa, chave ausente é problema do servidor.
       throw new BadGatewayException(
         reason === 'OPENAI_API_KEY_AUSENTE'
           ? 'Leitura por imagem não está configurada no servidor.'
-          : 'Não consegui ler esse print agora. Tente de novo em instantes.',
+          : `Não consegui ler esse print agora (${describeAiFailure(reason)}). Tente de novo em instantes.`,
       );
     }
 
@@ -143,6 +177,8 @@ export class BetSlipService {
       odd: extracted.odd,
       originalOdd: extracted.oddOriginal,
       stake: extracted.stake,
+      missing: missingBetFields(extracted),
+      oddFromSelections: extracted.oddCalculada ?? false,
       confidence: {
         event: extracted.evento ? SURE : 0,
         // Múltipla é onde o modelo mais erra seleção — o app pede conferência.
@@ -154,7 +190,9 @@ export class BetSlipService {
         // Casa vinda do select do usuário é certeza; lida da logo, não.
         house: !house ? 0 : houseHint ? 1 : CHECK,
         sport: extracted.esporte ? SURE : 0,
-        odd: extracted.odd === null ? 0 : SURE,
+        // Odd que saiu de conta nossa (bilhete sem odd total) nunca é certeza:
+        // basta uma seleção cortada no print pro produto sair errado.
+        odd: extracted.odd === null ? 0 : extracted.oddCalculada ? CHECK : SURE,
         stake: extracted.stake === null ? 0 : SURE,
       },
       matchedTips,

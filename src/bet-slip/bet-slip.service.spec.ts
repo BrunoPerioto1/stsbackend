@@ -77,3 +77,51 @@ describe('normalizeExtraction · odd com boost', () => {
     ).toBeNull();
   });
 });
+
+// Múltipla grande (5+ seleções) não imprime a odd total no bilhete — só
+// aposta e retorno. Sem isto a tela pedia a odd na mão justamente no bilhete
+// mais chato de digitar.
+describe('normalizeExtraction · odd deduzida do bilhete', () => {
+  const base = {
+    evento: 'Múltipla (5 jogos)',
+    esporte: 'Futebol',
+    mercado: 'Criciúma - vitória / Cuiabá EC vs Náutico - empate',
+    odd: null,
+    oddOriginal: null,
+    stake: 10,
+  };
+
+  it('multiplica as odds das seleções quando a total não aparece', () => {
+    const r = normalizeExtraction({
+      ...base,
+      oddsSelecoes: [1.95, 3.3, 2.3, 2.4, 1.65],
+    });
+    expect(r.odd).toBe(58.61);
+    expect(r.oddCalculada).toBe(true);
+  });
+
+  it('usa retorno/stake quando não há odds de seleção', () => {
+    const r = normalizeExtraction({ ...base, retornoTotal: 58.61 });
+    expect(r.odd).toBe(5.86);
+    expect(r.oddCalculada).toBe(true);
+  });
+
+  // Bilhete perdido tem retorno 0: dividir por stake daria odd 0 e entraria
+  // no formulário como um número válido.
+  it('ignora retorno zerado e seleção sem odd', () => {
+    expect(normalizeExtraction({ ...base, retornoTotal: 0 }).odd).toBeNull();
+    expect(
+      normalizeExtraction({ ...base, oddsSelecoes: [1.95, null] }).odd,
+    ).toBeNull();
+  });
+
+  it('não mexe na odd que o bilhete mostra', () => {
+    const r = normalizeExtraction({
+      ...base,
+      odd: 58.0,
+      oddsSelecoes: [1.95, 3.3],
+    });
+    expect(r.odd).toBe(58);
+    expect(r.oddCalculada).toBeUndefined();
+  });
+});
