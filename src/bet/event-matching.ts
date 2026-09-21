@@ -35,6 +35,9 @@ export const MATCH_THRESHOLD = 0.8;
 // Se o segundo colocado chega perto do primeiro, os dois sao plausiveis e a
 // escolha seria chute. Descarta.
 export const AMBIGUITY_MARGIN = 0.03;
+// Desconto do confronto com mando invertido. Maior que AMBIGUITY_MARGIN de
+// proposito: o mando escrito no texto desempata sem ficar ambiguo.
+export const PENALIDADE_MANDO = 0.05;
 
 // Sufixo de clube e preposicao que casa de aposta e provider escrevem
 // diferente. "Liverpool FC" e "Liverpool" tem que colidir.
@@ -111,6 +114,9 @@ const ALIASES: Record<string, string> = {
   'racing santander': 'real racing',
   // Brasil: a casa abrevia o estado, o provider escreve por extenso.
   'atletico mg': 'atletico mineiro',
+  // "Operario Ferroviario EC" — a casa corta o comeco e sobra so o sufixo. Nao
+  // colide com a Ferroviaria de Araraquara, que normaliza "ferroviaria".
+  ferroviario: 'operario pr',
   // Franca: a casa usa o nome em portugues/curto, o provider o nome completo.
   marselha: 'olympique marseille',
   lyon: 'olympique lyonnais',
@@ -496,19 +502,26 @@ function scoreEvent(
 ): number {
   // Os dois lados precisam casar. E' o que impede "Botafogo-PB" de virar
   // "Botafogo-SP": o adversario nao bate.
-  const scoreHome = scoreTeam(
-    home,
-    teamKeys(evento.homeName, evento.homeShort, evento.homeCode),
-    teamId(evento, 'home'),
-    index,
+  const chavesHome = teamKeys(evento.homeName, evento.homeShort, evento.homeCode);
+  const chavesAway = teamKeys(evento.awayName, evento.awayShort, evento.awayCode);
+  const idHome = teamId(evento, 'home');
+  const idAway = teamId(evento, 'away');
+
+  const direto = Math.min(
+    scoreTeam(home, chavesHome, idHome, index),
+    scoreTeam(away, chavesAway, idAway, index),
   );
-  const scoreAway = scoreTeam(
-    away,
-    teamKeys(evento.awayName, evento.awayShort, evento.awayCode),
-    teamId(evento, 'away'),
-    index,
-  );
-  return Math.min(scoreHome, scoreAway);
+  // A casa nem sempre respeita o mando ("Palmeiras x Gremio" pra um jogo que o
+  // provider tem como Gremio x Palmeiras). A penalidade e' maior que a margem
+  // de desempate, entao quando o jogo existe no mando certo ele ganha sozinho —
+  // ida e volta na mesma janela continua indo pro jogo com o mando do texto.
+  const invertido =
+    Math.min(
+      scoreTeam(home, chavesAway, idAway, index),
+      scoreTeam(away, chavesHome, idHome, index),
+    ) - PENALIDADE_MANDO;
+
+  return Math.max(direto, invertido);
 }
 
 function matchConfronto(

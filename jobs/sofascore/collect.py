@@ -33,7 +33,7 @@ DELAY_MIN, DELAY_MAX = 3.0, 5.0
 RETRIES = 3
 JANELA_DIAS = 30
 MAX_PAGINAS = 5
-RETENCAO_DIAS = 2  # jogo que ja aconteceu sai da tabela
+RETENCAO_DIAS = 5  # jogo que ja aconteceu sai da tabela (cobre tip vista dias depois)
 
 PROVIDER = "sofascore"
 

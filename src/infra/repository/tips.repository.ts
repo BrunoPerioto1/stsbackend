@@ -88,6 +88,10 @@ export class TipsRepository {
         't.entities',
         't.createdAt',
         'b.id as betId',
+        // A aposta ja casou o evento quando foi criada, com a janela cheia. A
+        // lista reaproveita esse valor em vez de recasar contra uma janela que
+        // pode ja ter perdido o jogo.
+        'b.eventStartAt as betEventStartAt',
         'd.id as dismissalId',
         'td.text as deliveryText',
       ])

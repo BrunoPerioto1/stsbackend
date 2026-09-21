@@ -13,10 +13,10 @@ const DIAS_DEPOIS = 30;
 
 // A LISTA de tips quer o contrario da criacao de aposta: mostrar tambem o
 // horario de jogo que ja aconteceu. O teto e' o proprio job, que apaga o evento
-// 2 dias depois do apito (RETENCAO_DIAS em jobs/sofascore/collect.py) — olhar
+// 5 dias depois do apito (RETENCAO_DIAS em jobs/sofascore/collect.py) — olhar
 // mais pra tras nao acha nada, porque a linha nao existe mais. Tip mais velha
 // que isso fica sem horario, e so persistindo na tip pra resolver.
-export const DIAS_ANTES_RETIDOS = 2;
+export const DIAS_ANTES_RETIDOS = 5;
 
 const DIA_MS = 24 * 60 * 60 * 1000;
 

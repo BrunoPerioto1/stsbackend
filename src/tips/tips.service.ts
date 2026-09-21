@@ -208,9 +208,10 @@ export class TipsService {
             : null),
         link: extractLinkFromText(row.text),
         calcLink: extractCalcLinkFromEntities(row.text, row.entities),
-        // Preenchido só pra página devolvida, lá embaixo: o casamento é caro
-        // demais pra rodar no histórico inteiro.
-        eventStartAt: null,
+        // Tip já planilhada carrega o horário que a aposta gravou na criação.
+        // Só quem não tem aposta precisa do casamento, e ele roda lá embaixo,
+        // sobre a página devolvida: é caro demais pro histórico inteiro.
+        eventStartAt: row.betEventStartAt ?? null,
         isAviso: row.isAviso,
         // A cópia entregue é a que o usuário reconhece (é a que ele leu na DM,
         // com a recomendação no fim). Sem entrega, mostra a do canal.
@@ -258,13 +259,9 @@ export class TipsService {
     const cache = createMatchCache();
     const data = pagina.map((item) => ({
       ...item,
-      eventStartAt: resolveEventStartAt(
-        item.game,
-        item.market,
-        item.sport,
-        candidatos,
-        cache,
-      ),
+      eventStartAt:
+        item.eventStartAt ??
+        resolveEventStartAt(item.game, item.market, item.sport, candidatos, cache),
     }));
 
     return {

@@ -110,6 +110,15 @@ describe('tips: horário do jogo', () => {
     expect(res.data[0].eventStartAt).toBeNull();
   });
 
+  it('tip planilhada usa o horário que a aposta gravou, sem depender do cache', async () => {
+    // Producao: jogo de 2 dias atras ja tinha saido da janela de candidatos, e
+    // a tip planilhada aparecia sem horario mesmo com a aposta guardando ele.
+    const row = { ...tipRow(1, 'Bet365'), betId: 7, betEventStartAt: JOGO };
+    const service = makeService([row], [evento('Santos', 'Corinthians')]);
+    const res = await service.listForUser(1, { page: 1, perPage: 30 });
+    expect(res.data[0].eventStartAt).toEqual(JOGO);
+  });
+
   it('cache indisponível não derruba a lista', async () => {
     const service = makeService([tipRow(1, 'Bet365')]);
     (service as any).sportEventRepository.findCandidates = jest

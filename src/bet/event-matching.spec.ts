@@ -356,6 +356,23 @@ describe('matchEvent', () => {
 // O canal troca por " x " tambem o hifen de dentro do nome do time, entao o
 // confronto chega com um pedaco a mais e nao da pra saber pelo texto de que
 // lado estava o hifen. Casos vistos em producao.
+describe('mando invertido', () => {
+  it('casa o jogo mesmo com os times na ordem trocada', () => {
+    // Provider tem Gremio x Bragantino; a casa escreveu ao contrario.
+    expect(matchEvent('Red Bull Bragantino x Grêmio', '', CANDIDATOS)?.externalId).toBe(
+      '2',
+    );
+  });
+
+  it('prefere o mando do texto quando ida e volta estao na janela', () => {
+    const ida = evento('i', 'Palmeiras', 'Grêmio', '2026-09-20T17:00:00Z');
+    const volta = evento('v', 'Grêmio', 'Palmeiras', '2026-09-27T17:00:00Z');
+    const lista = [ida, volta];
+    expect(matchEvent('Palmeiras x Grêmio', '', lista)?.externalId).toBe('i');
+    expect(matchEvent('Grêmio x Palmeiras', '', lista)?.externalId).toBe('v');
+  });
+});
+
 describe('confronto com pedaco a mais (hifen virou " x ")', () => {
   const CANDIDATOS_HIFEN: CandidateEvent[] = [
     evento('10', 'Brest', 'Paris Saint-Germain', '2026-09-13T19:00:00Z', {
