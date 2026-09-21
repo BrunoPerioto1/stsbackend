@@ -47,6 +47,14 @@ export class TipsRepository {
       .executeTakeFirst();
   }
 
+  // Tip que ninguém encostou envelhece: o jogo já aconteceu e ela só engorda a
+  // lista. Fora desta janela só entra tip já planilhada ou marcada como
+  // "caiu" — essas são histórico e não somem nunca.
+  //
+  // É isto que impede o baque ao mexer na % do filtro: baixar o mínimo
+  // ressuscitava toda tip do passado que passou a caber no novo corte.
+  static readonly UNTOUCHED_WINDOW_MS = 48 * 60 * 60 * 1000;
+
   // Todas as tips relevantes pro filtro de % do usuário, com o id da aposta
   // (se já planilhou) e o id do dismissal (se marcou "aposta caiu") — quem
   // chama decide o que é "pendente" a partir desses dois campos.
@@ -54,10 +62,13 @@ export class TipsRepository {
     userId: UserId,
     minPercentFilter: number | null,
     // Só o matching de print usa: ele já descarta candidato de mais de 24h,
-    // então não faz sentido varrer o histórico inteiro de tips por isso. O
-    // /pendentes continua sem janela (uma tip antiga não pode sumir da lista).
+    // então não faz sentido varrer o histórico inteiro de tips por isso —
+    // janela própria, mais apertada, no lugar da de 48h.
     since?: Date,
   ) {
+    const untouchedSince = new Date(
+      Date.now() - TipsRepository.UNTOUCHED_WINDOW_MS,
+    );
     // Writer, nao a replica: a lista e reconstruida no mesmo clique que criou
     // a aposta, e com lag de replicacao o item recem-planilhado reaparecia.
     // E um comando manual, entao o custo extra no writer e desprezivel.
@@ -97,6 +108,17 @@ export class TipsRepository {
       ])
       .where('t.percent', 'is not', null)
       .$if(since !== undefined, (qb) => qb.where('t.createdAt', '>=', since!))
+      // Sem janela explícita do chamador vale a de 48h — mas só pra tip que o
+      // usuário nunca tocou.
+      .$if(since === undefined, (qb) =>
+        qb.where((eb) =>
+          eb.or([
+            eb('t.createdAt', '>=', untouchedSince),
+            eb('b.id', 'is not', null),
+            eb('d.id', 'is not', null),
+          ]),
+        ),
+      )
       .$if(minPercentFilter !== null, (qb) =>
         qb.where('t.percent', '>=', minPercentFilter as number),
       )
