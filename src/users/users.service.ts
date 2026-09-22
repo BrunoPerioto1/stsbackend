@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { UsersRepository } from '../infra/repository/users.repository';
 import { UserDto } from './dto/user.dto';
@@ -96,13 +96,20 @@ export class UsersService {
     params: UpdateUserRequestDTO,
   ): Promise<Omit<UserDto, 'passwordHash'>> {
     const fields: UpdateUser = {};
+    if (params.email) {
+      const current = await this.usersRepository.findById(userId as UserId);
+      if (current && params.email !== current.email) {
+        const ok =
+          !!params.currentPassword &&
+          (await bcrypt.compare(params.currentPassword, current.passwordHash));
+        if (!ok) throw new UnauthorizedException('Senha atual incorreta');
+      }
+    }
     if (params.dashboardPreferences !== undefined)
       fields.dashboardPreferences = params.dashboardPreferences;
     if (params.username) fields.username = params.username;
     if (params.email) fields.email = params.email;
     if (params.fullName !== undefined) fields.fullName = params.fullName;
-    if (params.password)
-      fields.passwordHash = await bcrypt.hash(params.password, 10);
     if (params.stake !== undefined) fields.stake = params.stake;
     if (params.minPercentFilter !== undefined)
       fields.minPercentFilter = params.minPercentFilter;
@@ -116,6 +123,31 @@ export class UsersService {
     const { passwordHash, ...safe } = updated as any;
     return safe;
   }
+  /**
+   * Confirma o código gerado no app. Só o bot chama, com o `ctx.from.id` que o
+   * próprio Telegram garante — por isso não existe mais rota HTTP pra isto: ela
+   * aceitava qualquer telegramUserId e deixava chutar os 10^6 códigos.
+   */
+  async confirmTelegramLink(code: string, telegramUserId: number) {
+    const owner = await this.usersRepository.findByTelegramLinkCode(code.trim());
+    const expiresAt = owner?.telegramLinkExpiresAt ? new Date(owner.telegramLinkExpiresAt) : null;
+    if (!owner || !expiresAt || expiresAt.getTime() < Date.now()) {
+      throw new BadRequestException('Código inválido ou expirado.');
+    }
+
+    if (await this.usersRepository.findByTelegramUserId(telegramUserId)) {
+      throw new BadRequestException('Este ID do Telegram já está vinculado a outra conta.');
+    }
+
+    await this.usersRepository.linkTelegram(owner.id, telegramUserId);
+  }
+
+  async setPassword(userId: number, password: string) {
+    await this.usersRepository.updateUser(userId as UserId, {
+      passwordHash: await bcrypt.hash(password, 10),
+    });
+  }
+
   async vincularTelegram(userId: number, telegramUserId: number) {
     await this.usersRepository.linkTelegram(userId as UserId, telegramUserId);
   }

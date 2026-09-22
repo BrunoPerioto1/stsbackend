@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { PendentesService } from './pendentes.service';
 import { UNLINKED_INSTRUCTIONS } from './messages.const';
@@ -135,25 +135,14 @@ export class BotCommandsService {
       return;
     }
 
-    const code = args[1];
-    const telegramUserId = ctx.from.id;
-
     try {
-      const url = `${process.env.API_URL || 'http://localhost:4000'}/auth/link-telegram/confirm`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, telegramUserId }),
-      });
-
-      const result: any = await response.json();
-
-      if (result.success) {
-        await ctx.reply('✅ Conta vinculada com sucesso!');
-      } else {
-        await ctx.reply('❌ Erro: ' + result.message);
-      }
+      await this.usersService.confirmTelegramLink(args[1], ctx.from.id);
+      await ctx.reply('✅ Conta vinculada com sucesso!');
     } catch (error) {
+      if (error instanceof BadRequestException) {
+        await ctx.reply('❌ Erro: ' + error.message);
+        return;
+      }
       console.error('Erro ao confirmar vinculação:', error);
       await ctx.reply('❌ Erro ao processar solicitação. Tente mais tarde.');
     }

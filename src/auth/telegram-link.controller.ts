@@ -1,53 +1,10 @@
-import { Body, Controller, Post, Req, UseGuards, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Req, UseGuards, NotFoundException } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { randomInt } from 'crypto';
 import { Request } from 'express';
 import { UsersRepository } from '../infra/repository/users.repository';
 import type { UserId } from '../db_types/Users';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
-import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsNotEmpty, IsString } from 'class-validator';
-
-class TelegramLinkRequest {
-  @ApiProperty({
-    description: 'Código de vinculação gerado',
-    example: '481906'
-  })
-  @IsString()
-  @IsNotEmpty()
-  code!: string;
-
-  @ApiProperty({
-    description: 'ID do usuário no Telegram',
-    example: 123456789
-  })
-  @IsInt()
-  telegramUserId!: number;
-}
-
-class TelegramLinkResponse {
-  @ApiProperty({
-    description: 'Indica se a operação foi bem sucedida'
-  })
-  success!: boolean;
-
-  @ApiProperty({
-    description: 'Mensagem descritiva do resultado'
-  })
-  message!: string;
-
-  @ApiProperty({
-    description: 'ID do usuário no sistema',
-    required: false
-  })
-  userId?: number;
-
-  @ApiProperty({
-    description: 'ID do usuário no Telegram',
-    required: false
-  })
-  telegramUserId?: number;
-}
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 
 // O código vale por cinco minutos — tempo de abrir o Telegram e colar a linha,
 // não de deixar aberto num navegador emprestado.
@@ -102,38 +59,5 @@ export class TelegramLinkController {
     });
 
     return { code, expiresAt: expiresAt.toISOString() };
-  }
-
-  @ApiOperation({ summary: 'Confirma a vinculação de uma conta do Telegram' })
-  @ApiResponse({
-    status: 201,
-    description: 'Vinculação realizada com sucesso',
-    type: TelegramLinkResponse
-  })
-  @ApiResponse({ status: 400, description: 'Código inválido ou conta já vinculada' })
-  @ApiBody({ type: TelegramLinkRequest })
-  @Post('link-telegram/confirm')
-  async confirmLink(@Body() body: TelegramLinkRequest): Promise<TelegramLinkResponse> {
-    const { code, telegramUserId } = body;
-    const owner = await this.usersRepository.findByTelegramLinkCode(code.trim());
-
-    const expiresAt = owner?.telegramLinkExpiresAt ? new Date(owner.telegramLinkExpiresAt) : null;
-    if (!owner || !expiresAt || expiresAt.getTime() < Date.now()) {
-      throw new BadRequestException('Código inválido ou expirado.');
-    }
-
-    const existingUser = await this.usersRepository.findByTelegramUserId(telegramUserId);
-    if (existingUser) {
-      throw new BadRequestException('Este ID do Telegram já está vinculado a outra conta.');
-    }
-
-    await this.usersRepository.linkTelegram(owner.id, telegramUserId);
-
-    return {
-      success: true,
-      message: 'Telegram vinculado com sucesso!',
-      userId: owner.id,
-      telegramUserId,
-    };
   }
 }

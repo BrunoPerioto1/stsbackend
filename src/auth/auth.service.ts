@@ -18,9 +18,8 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  // Trocar a senha pede a senha atual: o PATCH /users/me aceita `password` e
-  // só exige o token, então quem pegasse a sessão aberta trocaria a senha sem
-  // saber a antiga e tomaria a conta.
+  // Único caminho pra trocar a senha, e pede a atual: com só o token, quem
+  // pegasse a sessão aberta trocaria a senha e tomaria a conta.
   async changePassword(userId: number, dto: ChangePasswordDTO) {
     const user = await this.usersService.findById(userId);
     if (!user) throw new UnauthorizedException('Usuário não encontrado');
@@ -28,7 +27,7 @@ export class AuthService {
     const isMatch = await bcrypt.compare(dto.currentPassword, user.passwordHash);
     if (!isMatch) throw new UnauthorizedException('Senha atual incorreta');
 
-    await this.usersService.updateMe(userId, { password: dto.newPassword });
+    await this.usersService.setPassword(userId, dto.newPassword);
     return { success: true };
   }
 
@@ -80,7 +79,7 @@ export class AuthService {
 
     await this.usersService.registerSuccessfulLogin(user.id);
 
-    // roleId no payload pro AdminGuard decidir sem ir ao banco a cada request.
+    // roleId no payload só pra UI; quem decide acesso é o AdminGuard, pelo banco.
     // O preço é a defasagem: quem for promovido/rebaixado carrega o papel
     // antigo até o token expirar (1d) ou relogar.
     const payload = {
