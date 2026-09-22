@@ -5,7 +5,6 @@ import {
   IsObject,
   ValidateNested,
   IsEmail,
-  IsInt,
   IsNumber,
   IsOptional,
   IsString,
@@ -27,10 +26,6 @@ export class CreateUserRequestDTO {
   @IsString()
   @MinLength(6)
   password!: string;
-
-  @ApiProperty()
-  @IsInt()
-  roleId!: number;
 
   @ApiProperty({ required: false })
   @IsOptional()

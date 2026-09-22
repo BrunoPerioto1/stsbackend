@@ -7,6 +7,11 @@ import { CreateUserResponseDTO } from './dto/response.dto';
 import type { UserId, UpdateUser } from '../db_types/Users';
 import type { RoleId } from '../db_types/Roles';
 
+// Papel de quem se cadastra. Vem fixo do servidor: enquanto o roleId saía do
+// corpo da requisição, qualquer um criava (ou promovia) a própria conta como
+// admin — por isso os 12 usuários existentes estavam todos em role 1.
+const DEFAULT_ROLE_ID = 3 as RoleId; // roles.name = 'user'
+
 @Injectable()
 export class UsersService {
   constructor(private readonly usersRepository: UsersRepository) {}
@@ -70,7 +75,7 @@ export class UsersService {
       username: params.username,
       email: params.email,
       passwordHash,
-      roleId: params.roleId as RoleId,
+      roleId: DEFAULT_ROLE_ID,
       fullName: params.fullName ?? null,
     });
 
@@ -96,7 +101,6 @@ export class UsersService {
     if (params.username) fields.username = params.username;
     if (params.email) fields.email = params.email;
     if (params.fullName !== undefined) fields.fullName = params.fullName;
-    if (params.roleId !== undefined) fields.roleId = params.roleId as RoleId;
     if (params.password)
       fields.passwordHash = await bcrypt.hash(params.password, 10);
     if (params.stake !== undefined) fields.stake = params.stake;
