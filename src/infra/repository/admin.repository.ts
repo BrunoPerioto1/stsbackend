@@ -196,7 +196,7 @@ export class AdminRepository {
     const by = (roleId: number) =>
       Number(rows.find((r) => Number(r.roleId) === roleId)?.total ?? 0);
 
-    return { admin: by(1), moderator: by(2), user: by(3) };
+    return { admin: by(1), user: by(3) };
   }
 
   /**

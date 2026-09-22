@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { HouseRepository } from '../infra/repository/house.repository';
-import { CreateHouseDto, FindAllHousesDTO } from './dto/house.dto';
+import { FindAllHousesDTO } from './dto/house.dto';
 import { HouseFilterRequestDto } from './dto/house.filter.dto';
 import type { UserId } from '../db_types/Users';
 import type { BettingHouseId } from '../db_types/BettingHouse';
@@ -109,7 +109,4 @@ export class HouseService {
       .filter((h) => h.settledBets >= minBets);
   }
 
-  async createHouse(dto: CreateHouseDto) {
-    return this.houseRepository.createHouse(dto.houseName);
-  }
 }

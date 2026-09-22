@@ -27,12 +27,42 @@ export class HouseRepository {
       .execute();
   }
 
-  createHouse(name: string) {
+  createHouse(name: string, aliases: string[] = []) {
     return this.dbWrite
       .insertInto('bettingHouses')
-      .values({ name, isActive: true })
+      .values({ name, aliases, isActive: true })
       .returningAll()
       .executeTakeFirstOrThrow();
+  }
+
+  /**
+   * Lista da tela de admin: inclui as inativas (`findAllHouses` esconde, e daí
+   * não haveria como reativar uma) e traz quantas apostas cada casa tem — é o
+   * que denuncia duplicata, "Bet365" com 300 apostas ao lado de "Bet 365" com 2.
+   */
+  findAllHousesForAdmin() {
+    return this.dbRead
+      .selectFrom('bettingHouses as h')
+      .leftJoin('bets as b', 'b.houseId', 'h.id')
+      .select((eb) => [
+        'h.id as id',
+        'h.name as name',
+        'h.isActive as isActive',
+        'h.aliases as aliases',
+        eb.fn.count<string>('b.id').as('betCount'),
+      ])
+      .groupBy(['h.id', 'h.name', 'h.isActive', 'h.aliases'])
+      .orderBy('h.name', 'asc')
+      .execute();
+  }
+
+  updateHouse(id: BettingHouseId, update: { name?: string; aliases?: string[]; isActive?: boolean }) {
+    return this.dbWrite
+      .updateTable('bettingHouses')
+      .set({ ...update, updatedAt: new Date() })
+      .where('id', '=', id)
+      .returningAll()
+      .executeTakeFirst();
   }
 
   findById(id: BettingHouseId) {

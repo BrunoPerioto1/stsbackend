@@ -6,6 +6,6 @@ import { HouseRepository } from '../infra/repository/house.repository';
 @Module({
   controllers: [HouseController],
   providers: [HouseService, HouseRepository],
-  exports: [HouseService],
+  exports: [HouseService, HouseRepository],
 })
 export class HouseModule {}

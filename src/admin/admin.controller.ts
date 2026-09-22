@@ -1,8 +1,8 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { AdminService } from './admin.service';
-import { UpdateAdminUserDTO } from './dto/admin.dto';
+import { CreateAdminHouseDTO, UpdateAdminHouseDTO, UpdateAdminUserDTO } from './dto/admin.dto';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { User } from '../common/decorators/user.decorator';
 
@@ -26,6 +26,24 @@ export class AdminController {
   @ApiOperation({ summary: 'Lista todos os usuários com papel, bloqueio e contagem de apostas' })
   listUsers() {
     return this.adminService.listUsers();
+  }
+
+  @Get('houses')
+  @ApiOperation({ summary: 'Casas de aposta com apelidos e contagem de apostas (inclui inativas)' })
+  listHouses() {
+    return this.adminService.listHouses();
+  }
+
+  @Post('houses')
+  @ApiOperation({ summary: 'Cadastra uma casa de aposta com seus apelidos' })
+  createHouse(@Body() dto: CreateAdminHouseDTO) {
+    return this.adminService.createHouse(dto);
+  }
+
+  @Patch('houses/:id')
+  @ApiOperation({ summary: 'Renomeia, troca apelidos ou (des)ativa uma casa' })
+  updateHouse(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateAdminHouseDTO) {
+    return this.adminService.updateHouse(id, dto);
   }
 
   @Patch('users/:id')

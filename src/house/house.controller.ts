@@ -11,7 +11,6 @@ import {
 import { HouseService } from './house.service';
 import { InsufficientBalanceErrorDto } from '../infra/dto/error-response.dto';
 import { HouseFilterRequestDto } from './dto/house.filter.dto';
-import { CreateHouseDto } from './dto/house.dto';
 import { UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { User } from '../common/decorators/user.decorator';
@@ -56,14 +55,10 @@ export class HouseController {
     return this.houseService.getAllHouses();
   }
 
-  @Post()
-  @UseGuards(AuthGuard('jwt'))
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Cadastra uma nova casa de apostas' })
-  @ApiResponse({ status: 201, description: 'Casa criada com sucesso.' })
-  createHouse(@Body() dto: CreateHouseDto) {
-    return this.houseService.createHouse(dto);
-  }
+  // Criar casa saiu daqui pra POST /admin/houses: `bettingHouses` e' global
+  // (nao tem userId), entao a casa que um usuario cadastrava entrava na lista
+  // de todo mundo — e esta rota so' pedia um token. La' a criacao passa pelo
+  // AdminGuard e ainda confere nome/apelido duplicado.
 
   @Get('ranking')
   @UseGuards(AuthGuard('jwt'))
