@@ -80,10 +80,14 @@ export class AuthService {
 
     await this.usersService.registerSuccessfulLogin(user.id);
 
+    // roleId no payload pro AdminGuard decidir sem ir ao banco a cada request.
+    // O preço é a defasagem: quem for promovido/rebaixado carrega o papel
+    // antigo até o token expirar (1d) ou relogar.
     const payload = {
       name: user.username,
       email: user.email,
       userId: user.id,
+      roleId: user.roleId,
     };
 
     return {
