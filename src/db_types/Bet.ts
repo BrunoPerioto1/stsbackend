@@ -36,6 +36,8 @@ export default interface BetsTable {
   eventProvider: ColumnType<string | null, string | null | undefined, string | null>;
   eventStartAt: ColumnType<Date | null, Date | null | undefined, Date | null>;
   eventMatchConfidence: ColumnType<number | null, number | null | undefined, number | null>;
+  // Soft delete: apagar so' preenche isto. Toda leitura filtra `deletedAt is null`.
+  deletedAt: ColumnType<Date | null, Date | null | undefined, Date | null>;
   createdAt: ColumnType<Date, Date | undefined, never>;
   updatedAt: ColumnType<Date, Date | undefined, Date>;
 }

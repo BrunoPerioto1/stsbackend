@@ -75,7 +75,7 @@ export class TipsRepository {
     return this.dbWrite
       .selectFrom('tips as t')
       .leftJoin('bets as b', (join) =>
-        join.onRef('b.tipId', '=', 't.id').on('b.userId', '=', userId),
+        join.onRef('b.tipId', '=', 't.id').on('b.userId', '=', userId).on('b.deletedAt', 'is', null),
       )
       .leftJoin('tipDismissals as d', (join) =>
         join.onRef('d.tipId', '=', 't.id').on('d.userId', '=', userId),

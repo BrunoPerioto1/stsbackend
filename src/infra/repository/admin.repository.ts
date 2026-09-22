@@ -116,6 +116,7 @@ export class AdminRepository {
         eb.exists(
           eb
             .selectFrom('bets as b')
+            .where('b.deletedAt', 'is', null)
             .select('b.id')
             .whereRef('b.eventProvider', '=', 'se.provider')
             .whereRef('b.eventExternalId', '=', 'se.externalId'),
@@ -138,6 +139,7 @@ export class AdminRepository {
   private async pendingBetsWithoutSuggestion(userId: UserId): Promise<number> {
     const row = await this.dbRead
       .selectFrom('bets')
+      .where('deletedAt', 'is', null)
       .innerJoin('betResults', 'betResults.betId', 'bets.id')
       .innerJoin('eventResults as er', (join) =>
         join
@@ -163,7 +165,7 @@ export class AdminRepository {
   private async suggestionCounts(userId: UserId) {
     const row = await this.dbRead
       .selectFrom('betSettlementSuggestions as s')
-      .innerJoin('bets', 'bets.id', 's.betId')
+      .innerJoin('bets', (join) => join.onRef('bets.id', '=', 's.betId').on('bets.deletedAt', 'is', null))
       .innerJoin('betResults', 'betResults.betId', 's.betId')
       .where('bets.userId', '=', userId)
       .where('s.dismissedAt', 'is', null)
@@ -269,7 +271,7 @@ export class AdminRepository {
   async listUsers() {
     return this.dbRead
       .selectFrom('users as u')
-      .leftJoin('bets as b', 'b.userId', 'u.id')
+      .leftJoin('bets as b', (join) => join.onRef('b.userId', '=', 'u.id').on('b.deletedAt', 'is', null))
       .select((eb) => [
         'u.id as id',
         'u.username as username',

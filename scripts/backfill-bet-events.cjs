@@ -47,6 +47,7 @@ async function main() {
         FROM bets b
         JOIN bet_results br ON br.bet_id = b.id
        WHERE br.result_id = 9
+         AND b.deleted_at IS NULL
          ${existe ? 'AND NOT EXISTS (SELECT 1 FROM bet_events be WHERE be.bet_id = b.id)' : ''}
        ORDER BY b.id`);
 

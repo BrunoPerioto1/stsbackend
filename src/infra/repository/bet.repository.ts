@@ -67,6 +67,7 @@ export class BetRepository {
       ])
       .where('userId', '=', userId)
       .where('houseId', '=', houseId)
+      .where('deletedAt', 'is', null)
       .where('createdAt', '>=', since)
       .where('createdAt', '<=', until)
       .orderBy('createdAt', 'desc')
@@ -125,6 +126,7 @@ export class BetRepository {
       })
       .where("id", "=", betId)
       .where("userId", "=", userId)
+      .where("deletedAt", "is", null)
       .returningAll()
       .executeTakeFirst();
   }
@@ -147,6 +149,7 @@ export class BetRepository {
       .whereRef("b.id", "=", "br.betId")
       .where("br.betId", "=", betId)
       .where("b.userId", "=", userId)
+      .where("b.deletedAt", "is", null)
       .returningAll()
       .executeTakeFirst();
 
@@ -197,6 +200,7 @@ export class BetRepository {
         .whereRef("b.id", "=", "br.betId")
         .where("br.betId", "=", betId)
         .where("b.userId", "=", userId)
+        .where("b.deletedAt", "is", null)
         .returningAll()
         .executeTakeFirst();
 
@@ -250,6 +254,7 @@ export class BetRepository {
         "br.resultId",
         "r.name as resultName",
       ])
+      .where("b.deletedAt", "is", null)
       .$if(isNotEmpty(betId), (qb) => qb.where("b.id", "=", betId!))
       .$if(isNotEmpty(userId), (qb) => qb.where("b.userId", "=", userId!))
       .$if(isNotEmpty(startDate), (qb) => qb.where(betDate, ">=", startOfDay(startDate!)))
@@ -281,6 +286,7 @@ export class BetRepository {
       .leftJoin("betResults as br", "br.betId", "b.id")
       .select(["b.id", "b.stake", "b.odd", "b.cashoutValue", "br.resultId"])
       .where("b.id", "=", betId)
+      .where("b.deletedAt", "is", null)
       .executeTakeFirst();
   }
 
@@ -288,6 +294,7 @@ export class BetRepository {
     let query = this.dbRead
       .selectFrom("bets")
       .select(["id", "stake", "odd"])
+      .where("deletedAt", "is", null)
       .$if(betIds.length > 0, (qb) => qb.where("id", "in", betIds));
 
     if (userId !== undefined) {
@@ -305,15 +312,18 @@ export class BetRepository {
       .select(['id', 'game', 'createdAt'])
       .where('tipId', '=', tipId)
       .where('userId', '=', userId)
+      .where('deletedAt', 'is', null)
       .executeTakeFirst();
   }
 
   async delete(betId: BetId, userId: UserId) {
     const result = await this.dbWrite.transaction().execute(async (trx) => {
       const deletedBet = await trx
-        .deleteFrom("bets")
+        .updateTable("bets")
+        .set({ deletedAt: new Date() })
         .where("id", "=", betId)
         .where("userId", "=", userId)
+        .where("deletedAt", "is", null)
         .returningAll()
         .executeTakeFirst();
 
@@ -326,9 +336,11 @@ export class BetRepository {
   async deleteMany(betIds: BetId[], userId: UserId) {
     const result = await this.dbWrite.transaction().execute(async (trx) => {
       const deletedBets = await trx
-        .deleteFrom("bets")
+        .updateTable("bets")
+        .set({ deletedAt: new Date() })
         .where("id", "in", betIds)
         .where("userId", "=", userId)
+        .where("deletedAt", "is", null)
         .returningAll()
         .execute();
 
@@ -355,6 +367,7 @@ export class BetRepository {
           .leftJoin("bettingHouses as bh", "bh.id", "b.houseId")
       .leftJoin("results as r", "r.id", "br.resultId")
       .select(({ fn }) => [fn.count("b.id").as("total")])
+      .where("b.deletedAt", "is", null)
       .$if(isNotEmpty(betId), (qb) => qb.where("b.id", "=", betId!))
       .$if(isNotEmpty(userId), (qb) => qb.where("b.userId", "=", userId!))
       .$if(isNotEmpty(startDate), (qb) => qb.where(betDate, ">=", startOfDay(startDate!)))

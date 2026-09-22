@@ -330,3 +330,6 @@ CREATE INDEX IF NOT EXISTS idx_bet_events_event ON bet_events (provider, externa
 -- (ver bet-date.ts); idx_bets_bet_time não serve pra essa expressão.
 -- A expressão aqui tem que ser idêntica à do betDate pro planner casar.
 CREATE INDEX IF NOT EXISTS idx_bets_user_bet_date ON bets (user_id, (coalesce(event_start_at, bet_time)));
+
+-- Soft delete: apagar aposta so' preenche deleted_at; toda leitura filtra is null.
+ALTER TABLE bets ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;

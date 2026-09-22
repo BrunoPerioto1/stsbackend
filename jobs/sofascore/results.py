@@ -172,6 +172,7 @@ def extrai_placar(evento: dict) -> tuple | None:
 # abre a multipla) e bet_events (cada jogo de uma multipla de varios jogos).
 # Sem o segundo, so' o primeiro jogo da multipla ganhava placar e as outras
 # pernas ficavam sem liquidar pra sempre. Exige a migration 20260915_bet_events.
+# Aposta apagada (soft delete, 20260922) nao pede placar.
 PENDENTES = """
 SELECT ev.external_id
   FROM (
@@ -181,12 +182,15 @@ SELECT ev.external_id
           FROM bets b
           JOIN bet_results br ON br.bet_id = b.id
          WHERE br.result_id = 9
+           AND b.deleted_at IS NULL
            AND b.event_external_id IS NOT NULL
         UNION
         SELECT be.provider, be.external_id, be.start_at
           FROM bet_events be
           JOIN bet_results br ON br.bet_id = be.bet_id
+          JOIN bets b ON b.id = be.bet_id
          WHERE br.result_id = 9
+           AND b.deleted_at IS NULL
        ) ev
   LEFT JOIN event_results er
          ON er.provider = ev.provider

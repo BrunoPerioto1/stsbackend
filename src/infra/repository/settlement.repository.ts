@@ -138,6 +138,7 @@ export class SettlementRepository {
     const [bets, suggestions] = await Promise.all([
       this.dbRead
         .selectFrom('bets')
+        .where('deletedAt', 'is', null)
         .innerJoin('betResults', 'betResults.betId', 'bets.id')
         // left join: aposta pendente sem placar coletado ainda conta em
         // `pending`, so' nao entra em `settleable`.
@@ -184,7 +185,7 @@ export class SettlementRepository {
         .executeTakeFirstOrThrow(),
       this.dbRead
         .selectFrom('betSettlementSuggestions as s')
-        .innerJoin('bets', 'bets.id', 's.betId')
+        .innerJoin('bets', (join) => join.onRef('bets.id', '=', 's.betId').on('bets.deletedAt', 'is', null))
         .innerJoin('betResults', 'betResults.betId', 'bets.id')
         .leftJoin('eventResults as er', (join) =>
           join
@@ -232,6 +233,7 @@ export class SettlementRepository {
   async findSettleable(userId: UserId, limit = 200): Promise<SettleableBet[]> {
     const rows = await this.dbRead
       .selectFrom('bets')
+      .where('deletedAt', 'is', null)
       .innerJoin('betResults', 'betResults.betId', 'bets.id')
       // left join: multipla de varios jogos pode nao ter evento principal e
       // ainda assim ter placar nas pernas (legs).
@@ -362,7 +364,7 @@ export class SettlementRepository {
 
     let query = this.dbRead
       .selectFrom('betSettlementSuggestions as s')
-      .innerJoin('bets', 'bets.id', 's.betId')
+      .innerJoin('bets', (join) => join.onRef('bets.id', '=', 's.betId').on('bets.deletedAt', 'is', null))
       .innerJoin('betResults', 'betResults.betId', 'bets.id')
       .leftJoin('eventResults as er', (join) => join
         .onRef('er.provider', '=', 'bets.eventProvider')

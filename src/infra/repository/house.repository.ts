@@ -43,7 +43,7 @@ export class HouseRepository {
   findAllHousesForAdmin() {
     return this.dbRead
       .selectFrom('bettingHouses as h')
-      .leftJoin('bets as b', 'b.houseId', 'h.id')
+      .leftJoin('bets as b', (join) => join.onRef('b.houseId', '=', 'h.id').on('b.deletedAt', 'is', null))
       .select((eb) => [
         'h.id as id',
         'h.name as name',
@@ -76,6 +76,7 @@ export class HouseRepository {
   private betsAggregate(userId: UserId) {
     return this.dbRead
       .selectFrom('bets as b')
+      .where('b.deletedAt', 'is', null)
       .leftJoin('betResults as br', 'br.betId', 'b.id')
       .where('b.userId', '=', userId)
       .select((eb) => [
@@ -160,7 +161,7 @@ export class HouseRepository {
     return this.dbRead
       .selectFrom('bettingHouses as bh')
       .innerJoin('bets as b', (join) =>
-        join.onRef('bh.id', '=', 'b.houseId').on('b.userId', '=', userId),
+        join.onRef('bh.id', '=', 'b.houseId').on('b.userId', '=', userId).on('b.deletedAt', 'is', null),
       )
       .innerJoin('betResults as br', 'br.betId', 'b.id')
       .where('bh.isActive', '=', true)

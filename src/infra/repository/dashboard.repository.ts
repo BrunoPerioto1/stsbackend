@@ -39,6 +39,7 @@ async findDailySummary(filters: FilterDashboard) {
 
   return this.dbRead
     .selectFrom("bets as b")
+    .where("b.deletedAt", "is", null)
     .$if(isNotEmpty(userId), (qb) =>
       qb.where("b.userId", "=", userId!),
     )
@@ -65,6 +66,7 @@ async findMonthlySummary(filters: FilterDashboard) {
 
   return this.dbRead
     .selectFrom("bets as b")
+    .where("b.deletedAt", "is", null)
     .$if(isNotEmpty(userId), (qb) =>
       qb.where("b.userId", "=", userId!),
     )
@@ -92,6 +94,7 @@ async findProfitByHouse(filters: FilterDashboard) {
 
   return this.dbRead
     .selectFrom("bets as b")
+    .where("b.deletedAt", "is", null)
     .leftJoin("bettingHouses as bh", "bh.id", "b.houseId")
     .where("b.userId", "=", userId!)
     .$if(isNotEmpty(startDate), (qb) =>
@@ -112,6 +115,7 @@ async findProfitByHouse(filters: FilterDashboard) {
 async findBetDateRange(userId: UserId) {
   return this.dbRead
     .selectFrom("bets as b")
+    .where("b.deletedAt", "is", null)
     .where("b.userId", "=", userId)
     .select((eb) => [
       eb.fn.min(betDate).as("firstBetDate"),
@@ -125,6 +129,7 @@ async findDashboardMetrics(filters: FilterDashboard) {
 
   return this.dbRead
     .selectFrom("bets as b")
+    .where("b.deletedAt", "is", null)
     .leftJoin("betResults as br", "br.betId", "b.id")
     .$if(isNotEmpty(userId), (qb) =>
       qb.where("b.userId", "=", userId!),
