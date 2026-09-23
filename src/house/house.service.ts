@@ -91,6 +91,7 @@ export class HouseService {
       .map((row) => {
         const settledBets = Number(row.settledBets);
         const wonBets = Number(row.wonBets);
+        const decided = wonBets + Number(row.lostBets);
         const volume = Number(row.volume);
         const profit = Number(row.profit);
         return {
@@ -98,7 +99,7 @@ export class HouseService {
           houseName: row.houseName,
           settledBets,
           wonBets,
-          hitRate: settledBets > 0 ? wonBets / settledBets : 0,
+          hitRate: decided > 0 ? wonBets / decided : 0,
           avgOdd: Number(row.avgOdd),
           avgStake: Number(row.avgStake),
           volume,

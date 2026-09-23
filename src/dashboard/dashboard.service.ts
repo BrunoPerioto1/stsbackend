@@ -51,7 +51,9 @@ export class DashboardService {
       canceledBets: Number(raw.canceledBets),
       averageStake: Number(raw.averageStake),
       averageOdd:   Number(raw.averageOdd),
-      hitRate: settledBets > 0 ? wonBets / settledBets : 0,
+      // Sobre ganhas + perdidas: settledBets agora inclui CASHOUT, que nao e'
+      // acerto nem erro.
+      hitRate: wonBets + Number(raw.lostBets) > 0 ? wonBets / (wonBets + Number(raw.lostBets)) : 0,
       roi:     totalStaked > 0 ? totalProfit / totalStaked : 0,
     };
   }

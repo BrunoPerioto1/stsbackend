@@ -8,6 +8,12 @@ import type { BettingHouseId } from '../../db_types/BettingHouse';
 import { HouseFilterRequestDto } from '../../house/dto/house.filter.dto';
 import { endOfDay, startOfDay } from '../../common/utils/bet.utils';
 import { betDate } from './bet-date';
+import {
+  LOST_RESULT_IDS,
+  ResultIdEnum,
+  SETTLED_RESULT_IDS,
+  WON_RESULT_IDS,
+} from '../../bet/dto/result-id.enum';
 
 @Injectable()
 export class HouseRepository {
@@ -82,19 +88,19 @@ export class HouseRepository {
       .select((eb) => [
         'b.houseId',
         eb.fn.count('b.id').as('totalBets'),
-        eb.fn<number>('sum', [eb.case().when('br.resultId', 'in', [1, 2, 4, 5] as any).then(1).else(0).end()]).as('settledBets'),
+        eb.fn<number>('sum', [eb.case().when('br.resultId', 'in', SETTLED_RESULT_IDS as any).then(1).else(0).end()]).as('settledBets'),
         eb.fn<number>('coalesce', [eb.fn.sum<number>('b.stake'), sql.lit(0)]).as('totalStake'),
         eb.fn<number>('coalesce', [eb.fn.sum<number>('b.profit'), sql.lit(0)]).as('totalBetProfit'),
         eb.fn<number>('coalesce', [
-          eb.fn.sum<number>(eb.case().when('br.resultId', '=', 9 as any).then(1).else(0).end()),
+          eb.fn.sum<number>(eb.case().when('br.resultId', '=', ResultIdEnum.PENDING as any).then(1).else(0).end()),
           sql.lit(0),
         ]).as('pendingBets'),
         eb.fn<number>('coalesce', [
-          eb.fn.sum<number>(eb.case().when('br.resultId', 'in', [1, 4] as any).then(1).else(0).end()),
+          eb.fn.sum<number>(eb.case().when('br.resultId', 'in', WON_RESULT_IDS as any).then(1).else(0).end()),
           sql.lit(0),
         ]).as('wonBets'),
         eb.fn<number>('coalesce', [
-          eb.fn.sum<number>(eb.case().when('br.resultId', 'in', [2, 5] as any).then(1).else(0).end()),
+          eb.fn.sum<number>(eb.case().when('br.resultId', 'in', LOST_RESULT_IDS as any).then(1).else(0).end()),
           sql.lit(0),
         ]).as('lostBets'),
       ])
@@ -165,7 +171,7 @@ export class HouseRepository {
       )
       .innerJoin('betResults as br', 'br.betId', 'b.id')
       .where('bh.isActive', '=', true)
-      .where('br.resultId', 'in', [1, 2, 4, 5, 6] as any)
+      .where('br.resultId', 'in', SETTLED_RESULT_IDS as any)
       .$if(!!startDate, (qb) => qb.where(betDate, '>=', startOfDay(startDate!)))
       .$if(!!endDate, (qb) => qb.where(betDate, '<', endOfDay(endDate!)))
       .groupBy(['bh.id', 'bh.name'])
@@ -174,9 +180,13 @@ export class HouseRepository {
         'bh.name as houseName',
         eb.fn.count('b.id').as('settledBets'),
         eb.fn<number>('coalesce', [
-          eb.fn.sum<number>(eb.case().when('br.resultId', '=', 1 as any).then(1).else(0).end()),
+          eb.fn.sum<number>(eb.case().when('br.resultId', 'in', WON_RESULT_IDS as any).then(1).else(0).end()),
           sql.lit(0),
         ]).as('wonBets'),
+        eb.fn<number>('coalesce', [
+          eb.fn.sum<number>(eb.case().when('br.resultId', 'in', LOST_RESULT_IDS as any).then(1).else(0).end()),
+          sql.lit(0),
+        ]).as('lostBets'),
         eb.fn<number>('coalesce', [eb.fn.avg<number>('b.odd'), sql.lit(0)]).as('avgOdd'),
         eb.fn<number>('coalesce', [eb.fn.avg<number>('b.stake'), sql.lit(0)]).as('avgStake'),
         eb.fn<number>('coalesce', [eb.fn.sum<number>('b.stake'), sql.lit(0)]).as('volume'),

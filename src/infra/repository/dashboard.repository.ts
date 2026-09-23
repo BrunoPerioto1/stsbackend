@@ -8,6 +8,12 @@ import { UserId } from '../../db_types/Users';
 import { isNotEmpty } from 'class-validator';
 import { endOfDay, startOfDay } from '../../common/utils/bet.utils';
 import { betDate } from './bet-date';
+import {
+  LOST_RESULT_IDS,
+  ResultIdEnum,
+  SETTLED_RESULT_IDS,
+  WON_RESULT_IDS,
+} from '../../bet/dto/result-id.enum';
 
 // A coluna e' TIMESTAMP sem timezone guardando instante UTC, entao a conversao
 // precisa dos dois `AT TIME ZONE`: o primeiro rotula o valor como UTC, o segundo
@@ -145,11 +151,11 @@ async findDashboardMetrics(filters: FilterDashboard) {
     )
     .select((eb) => [
       eb.fn.count("b.id").as("totalBets"),
-      eb.fn<number>("sum", [eb.case().when("br.resultId", "in", [1, 2, 4, 5] as any).then(1).else(0).end()]).as("settledBets"),
+      eb.fn<number>("sum", [eb.case().when("br.resultId", "in", SETTLED_RESULT_IDS as any).then(1).else(0).end()]).as("settledBets"),
       eb.fn<number>("sum", [
         eb
           .case()
-          .when("br.resultId", "in", [1, 4] as any)
+          .when("br.resultId", "in", WON_RESULT_IDS as any)
           .then(1)
           .else(0)
           .end(),
@@ -157,7 +163,7 @@ async findDashboardMetrics(filters: FilterDashboard) {
       eb.fn<number>("sum", [
         eb
           .case()
-          .when("br.resultId", "in", [2, 5] as any)
+          .when("br.resultId", "in", LOST_RESULT_IDS as any)
           .then(1)
           .else(0)
           .end(),
@@ -165,7 +171,7 @@ async findDashboardMetrics(filters: FilterDashboard) {
       eb.fn<number>("sum", [
         eb
           .case()
-          .when("br.resultId", "=", 9 as any)
+          .when("br.resultId", "=", ResultIdEnum.PENDING as any)
           .then(1)
           .else(0)
           .end(),
@@ -173,7 +179,7 @@ async findDashboardMetrics(filters: FilterDashboard) {
       eb.fn<number>("sum", [
         eb
           .case()
-          .when("br.resultId", "=", 3 as any)
+          .when("br.resultId", "=", ResultIdEnum.CANCELED as any)
           .then(1)
           .else(0)
           .end(),
