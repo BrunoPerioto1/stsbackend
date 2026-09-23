@@ -181,6 +181,7 @@ export class TipsService {
       const gameName = extractGameFromText(row.text);
       const marketName = extractMarketFromText(row.text);
       const sportName = extractSportFromText(row.text);
+      const houseId = matchHouseIdByName(houseName, houses ?? []);
 
       return {
         id: Number(row.id),
@@ -192,8 +193,10 @@ export class TipsService {
               ? 'caiu'
               : 'pending',
         betId: row.betId != null ? Number(row.betId) : null,
-        house: houseName,
-        houseId: matchHouseIdByName(houseName, houses ?? []),
+        // Nome cadastrado quando casou: o canal escreve "bet365", a lista de
+        // apostas mostra "BET365" — a mesma casa com duas grafias na tela.
+        house: houses?.find((h) => h.id === houseId)?.name ?? houseName,
+        houseId,
         game: gameName,
         sport: sportName,
         market: marketName,
