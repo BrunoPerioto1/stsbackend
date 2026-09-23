@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/
 import * as bcrypt from 'bcrypt';
 import { UsersRepository } from '../infra/repository/users.repository';
 import { UserDto } from './dto/user.dto';
+import { extendAccess } from './access';
 import { CreateUserRequestDTO, UpdateUserRequestDTO } from './dto/request.dto';
 import { CreateUserResponseDTO } from './dto/response.dto';
 import type { UserId, UpdateUser } from '../db_types/Users';
@@ -77,6 +78,8 @@ export class UsersService {
       passwordHash,
       roleId: DEFAULT_ROLE_ID,
       fullName: params.fullName ?? null,
+      // Conta nova nasce sem acesso (ou com TRIAL_DAYS de teste): libera quando o PIX cair.
+      accessUntil: extendAccess(null, Number(process.env.TRIAL_DAYS ?? 0)),
     });
 
     const { passwordHash: _, ...safe } = created as any;

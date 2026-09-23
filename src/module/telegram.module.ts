@@ -6,6 +6,7 @@ import { HouseModule } from './house.module';
 import { DatabaseModule } from '../infra/db/db.module';
 import { UsersModule } from './users.module';
 import { TelegramController } from '../telegram/telegram.controller';
+import { AccessController } from '../telegram/access.controller';
 import { TipsModule } from './tips.module';
 import {
   TELEGRAM_BOT,
@@ -28,7 +29,7 @@ import { TelegramCallbackService } from '../telegram/telegram-callback.service';
     TipsModule,
     BetSlipModule,
   ],
-  controllers: [TelegramController],
+  controllers: [TelegramController, AccessController],
   providers: [
     { provide: TELEGRAM_BOT, useFactory: createTelegramBot },
     TelegramService,

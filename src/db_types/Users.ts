@@ -28,6 +28,7 @@ export default interface UsersTable {
   telegramLinkCode: ColumnType<string | null, string | null, string | null>;
   telegramLinkExpiresAt: ColumnType<Date | null, Date | null, Date | null>;
   telegramLinkedAt: ColumnType<Date | null, Date | null, Date | null>;
+  accessUntil: ColumnType<Date | null, Date | null | undefined, Date | null>; // NULL = sem prazo
 }
 
 export type User = Selectable<UsersTable>; // SELECT

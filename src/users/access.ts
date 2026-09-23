@@ -1,0 +1,57 @@
+import { ForbiddenException, HttpException, HttpStatus } from '@nestjs/common';
+
+type AccessFields = { isActive: boolean | null; accessUntil: Date | null };
+
+// Cobrança é PIX manual: o admin confere o comprovante e empurra o vencimento.
+// Aqui só se lê a coluna — quem venceu fica de fora até o próximo "+30 dias".
+export function assertAccess(user: AccessFields): void {
+  if (user.isActive === false) {
+    throw new ForbiddenException('Conta desativada');
+  }
+  if (user.accessUntil && new Date(user.accessUntil).getTime() <= Date.now()) {
+    throw new HttpException(
+      {
+        message: 'Seu acesso venceu. Renove pelo PIX para continuar.',
+        code: 'ACCESS_EXPIRED',
+        accessUntil: new Date(user.accessUntil).toISOString(),
+      },
+      HttpStatus.PAYMENT_REQUIRED,
+    );
+  }
+}
+
+export function hasAccess(user: AccessFields): boolean {
+  try {
+    assertAccess(user);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Vencido conta a partir de agora; em dia, soma no vencimento atual — quem paga
+// adiantado não perde os dias que ainda tinha.
+export function extendAccess(current: Date | null, days: number): Date {
+  const base =
+    current && new Date(current).getTime() > Date.now()
+      ? new Date(current)
+      : new Date();
+  return new Date(base.getTime() + days * 86_400_000);
+}
+
+const spDate = (d: Date) =>
+  d.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+
+// Dias de calendário (fuso SP) entre hoje e o vencimento: 0 = vence hoje.
+export function daysUntil(date: Date, now = new Date()): number {
+  return Math.round(
+    (Date.parse(spDate(new Date(date))) - Date.parse(spDate(now))) / 86_400_000,
+  );
+}
+
+export function billingInfo() {
+  return {
+    pixKey: process.env.PIX_KEY ?? null,
+    price: process.env.ACCESS_PRICE ? Number(process.env.ACCESS_PRICE) : null,
+  };
+}

@@ -84,6 +84,9 @@ UPDATE users
  WHERE telegram_user_id IS NOT NULL
    AND telegram_linked_at IS NULL;
 
+-- Acesso pago: vencimento renovado pelo admin a cada PIX. NULL = sem prazo.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS access_until TIMESTAMP;
+
 -- === Bookmakers =========================================================
 
 CREATE TABLE IF NOT EXISTS betting_houses (

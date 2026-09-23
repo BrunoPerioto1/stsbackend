@@ -1,5 +1,5 @@
 import { ApiProperty, PartialType } from '@nestjs/swagger';
-import { IsArray, IsBoolean, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min, MinLength } from 'class-validator';
 
 // Os dois papéis em uso: 1 admin, 3 usuário. O 2 (moderator) continua na tabela
 // `roles` mas ninguém nunca esteve nele e nenhuma regra do sistema o consulta —
@@ -24,6 +24,13 @@ export class UpdateAdminUserDTO {
   @IsOptional()
   @IsBoolean()
   unlinkTelegram?: boolean;
+
+  @ApiProperty({ required: false, description: 'Soma dias ao acesso (a partir de hoje se já venceu)', example: 30 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(366)
+  extendDays?: number;
 }
 
 export class CreateAdminHouseDTO {

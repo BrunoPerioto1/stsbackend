@@ -1,6 +1,7 @@
 import { HttpException, HttpStatus, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
+import { assertAccess } from '../users/access';
 import { ChangePasswordDTO, LoginDTO } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
 
@@ -76,6 +77,9 @@ export class AuthService {
         attemptsLeft: MAX_LOGIN_ATTEMPTS - attempts,
       });
     }
+
+    // Depois da senha: vencimento/desativação só é revelado a quem é dono da conta.
+    assertAccess(user);
 
     await this.usersService.registerSuccessfulLogin(user.id);
 
