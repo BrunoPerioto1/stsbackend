@@ -333,6 +333,7 @@ export class BetService {
       resultId: filters.resultId,
       resultIds: filters.resultIds,
       houseIds: filters.houseIds,
+      sportIds: filters.sportIds,
       q: filters.q,
       page: filters.page ?? 1,
       perPage: filters.perPage ?? 30,
@@ -386,6 +387,10 @@ export class BetService {
       deletedCount: deletedRows.length,
       message: `${deletedRows.length} apostas deletadas com sucesso`,
     };
+  }
+
+  async getSports() {
+    return this.betRepository.sports();
   }
 
   async getResultTypes() {

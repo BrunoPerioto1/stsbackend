@@ -48,6 +48,16 @@ export class BetFilterDto {
   @IsInt({ each: true })
   houseIds?: number[];
 
+  @ApiPropertyOptional({
+    description: 'IDs de esporte (múltipla seleção), separados por vírgula',
+    type: String,
+    example: '1,4',
+  })
+  @IsOptional()
+  @Transform(toNumberArray)
+  @IsInt({ each: true })
+  sportIds?: number[];
+
   @ApiPropertyOptional({ description: 'Busca textual (jogo, mercado ou esporte)', type: String })
   @IsOptional()
   @IsString()

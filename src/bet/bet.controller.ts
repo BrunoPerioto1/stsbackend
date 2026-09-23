@@ -11,6 +11,7 @@ import {
   HttpStatus,
   Query,
   UseGuards,
+  Header,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { User } from '../common/decorators/user.decorator';
@@ -143,6 +144,15 @@ export class BetController {
     @User('userId') userId: number,
   ) {
     return this.betService.deleteManyBets(body.betIds, userId);
+  }
+
+  @Get('sports')
+  // Lista global e estavel: pode ir pro cache da CDN (mesmo caso de /house/all).
+  @Header('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400')
+  @ApiOperation({ summary: 'Lista os esportes normalizados' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Lista de esportes.', type: [Object] })
+  async getSports() {
+    return this.betService.getSports();
   }
 
   @Get('result-types')
