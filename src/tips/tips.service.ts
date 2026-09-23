@@ -168,6 +168,15 @@ export class TipsService {
       this.findEventCandidates(),
     ]);
 
+    // Poucos nomes de casa distintos se repetem em milhares de tips, e o
+    // casamento por similaridade contra todas as casas custava ~600ms por
+    // request. Mesmo nome + mesma lista = mesmo resultado, entao lembra aqui.
+    const houseIdByName = new Map<string | null, number | null>();
+    const houseIdOf = (name: string | null) => {
+      if (!houseIdByName.has(name)) houseIdByName.set(name, matchHouseIdByName(name, houses ?? []));
+      return houseIdByName.get(name)!;
+    };
+
     const items: TipItemDto[] = rows.map((row) => {
       // A entrega tem o número que o usuário já viu na DM, então ela manda.
       // Sem entrega (tip anterior ao vínculo, ou filtrada na hora do fan-out)
@@ -181,7 +190,7 @@ export class TipsService {
       const gameName = extractGameFromText(row.text);
       const marketName = extractMarketFromText(row.text);
       const sportName = extractSportFromText(row.text);
-      const houseId = matchHouseIdByName(houseName, houses ?? []);
+      const houseId = houseIdOf(houseName);
 
       return {
         id: Number(row.id),

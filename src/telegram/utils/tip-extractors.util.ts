@@ -12,9 +12,6 @@ export function extractLimitFromText(text: string): number | null {
     : raw; // Caso internacional
 
   const val = Number(normalized);
-  console.log(
-    `Limite extraído: "${raw}" -> normalizado: "${normalized}" -> valor: ${val}`,
-  );
   return Number.isFinite(val) && val > 0 ? val : null;
 }
 
