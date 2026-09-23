@@ -6,7 +6,6 @@ import type ResultsTable from '../../db_types/Results';
 import RolesTable from '../../db_types/Roles';
 import UsersTable from '../../db_types/Users';
 import TransactionTypesTable from '../../db_types/TransactionsTypes';
-import HouseBalancesTable from '../../db_types/HouseBalances';
 import HouseTransactionsTable from '../../db_types/HouseTransactions';
 import type TipsTable from '../../db_types/Tips';
 import type TipDismissalsTable from '../../db_types/TipDismissals';
@@ -16,6 +15,7 @@ import type EventResultsTable from '../../db_types/EventResults';
 import type EventFactsTable from '../../db_types/EventFacts';
 import type BetSettlementSuggestionsTable from '../../db_types/BetSettlementSuggestions';
 import type BetEventsTable from '../../db_types/BetEvents';
+import type SportsTable from '../../db_types/Sports';
 
 export interface Database {
   bets: BetsTable;
@@ -25,7 +25,6 @@ export interface Database {
   roles: RolesTable;
   users: UsersTable;
   transactionTypes: TransactionTypesTable
-  houseBalances: HouseBalancesTable
   houseTransactions: HouseTransactionsTable
   tips: TipsTable
   tipDismissals: TipDismissalsTable
@@ -35,4 +34,5 @@ export interface Database {
   eventFacts: EventFactsTable
   betSettlementSuggestions: BetSettlementSuggestionsTable
   betEvents: BetEventsTable
+  sports: SportsTable
 }

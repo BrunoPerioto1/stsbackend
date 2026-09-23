@@ -102,7 +102,6 @@ async deleteUserAndData(userId: UserId) {
   await this.dbWrite.transaction().execute(async (trx) => {
     await trx.deleteFrom("bets").where("userId", "=", userId).execute();
     await trx.deleteFrom("houseTransactions").where("userId", "=", userId).execute();
-    await trx.deleteFrom("houseBalances").where("userId", "=", userId).execute();
     await trx.deleteFrom("users").where("id", "=", userId).execute();
   });
 }

@@ -2,6 +2,7 @@ import type { ColumnType, Insertable, Selectable, Updateable } from "kysely";
 import type { BettingHouseId } from "./BettingHouse";
 import type { UserId } from "./Users";
 import type { TipId } from "./Tips";
+import type { SportId } from "./Sports";
 
 export type BetId = number & { __type: "BetId" };
 
@@ -25,6 +26,8 @@ export default interface BetsTable {
   houseId: ColumnType<BettingHouseId | null, BettingHouseId | null, BettingHouseId | null>;
   market: ColumnType<string, string, string>;
   sport: ColumnType<string, string, string>;
+  // Preenchido pelo trigger bets_normalize_sport a partir de `sport`.
+  sportId: ColumnType<SportId | null, never, never>;
   profit: ColumnType<number | null, number | null, number | null>;
   cashoutValue: ColumnType<number | null, number | null, number | null>;
   userId: ColumnType<UserId | null, UserId | null | undefined, UserId | null>;

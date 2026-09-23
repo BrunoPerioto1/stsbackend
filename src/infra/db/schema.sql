@@ -99,14 +99,6 @@ CREATE TABLE IF NOT EXISTS betting_houses (
 -- como candidato extra no fuzzy-match do GrokService além do próprio name.
 ALTER TABLE betting_houses ADD COLUMN IF NOT EXISTS aliases TEXT[] NOT NULL DEFAULT '{}';
 
-CREATE TABLE IF NOT EXISTS house_balances (
-    id SERIAL PRIMARY KEY,
-    house_id INTEGER NOT NULL REFERENCES betting_houses(id) ON DELETE CASCADE,
-    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    value NUMERIC(12,2) NOT NULL DEFAULT 0,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
 CREATE TABLE IF NOT EXISTS house_transactions (
     id SERIAL PRIMARY KEY,
     house_id INTEGER NOT NULL REFERENCES betting_houses(id) ON DELETE CASCADE,
@@ -151,8 +143,6 @@ CREATE INDEX IF NOT EXISTS idx_bets_house_id ON bets(house_id);
 CREATE INDEX IF NOT EXISTS idx_bets_user_id ON bets(user_id);
 CREATE INDEX IF NOT EXISTS idx_bet_results_bet_id ON bet_results(bet_id);
 CREATE INDEX IF NOT EXISTS idx_bet_results_result_id ON bet_results(result_id);
-CREATE INDEX IF NOT EXISTS idx_house_balances_house_id ON house_balances(house_id);
-CREATE INDEX IF NOT EXISTS idx_house_balances_user_id ON house_balances(user_id);
 CREATE INDEX IF NOT EXISTS idx_house_transactions_house_id ON house_transactions(house_id);
 CREATE INDEX IF NOT EXISTS idx_house_transactions_user_id ON house_transactions(user_id);
 CREATE INDEX IF NOT EXISTS idx_house_transactions_type_id ON house_transactions(transaction_type_id);
@@ -333,3 +323,6 @@ CREATE INDEX IF NOT EXISTS idx_bets_user_bet_date ON bets (user_id, (coalesce(ev
 
 -- Soft delete: apagar aposta so' preenche deleted_at; toda leitura filtra is null.
 ALTER TABLE bets ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+
+-- Esporte normalizado (tabela sports, bets.sport_id e trigger que canoniza
+-- bets.sport): ver migrations/20260923_sports.sql.
