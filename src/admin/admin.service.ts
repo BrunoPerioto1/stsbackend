@@ -9,6 +9,7 @@ import type { BettingHouseId } from '../db_types/BettingHouse';
 import { ADMIN_ROLE_ID } from '../common/guards/admin.guard';
 import type { UpdateUser, UserId } from '../db_types/Users';
 import type { RoleId } from '../db_types/Roles';
+import { extendAccess } from '../users/access';
 
 type AdminHouseRow = Awaited<ReturnType<HouseRepository['findAllHousesForAdmin']>>[number];
 
@@ -178,6 +179,10 @@ export class AdminService {
     ) {
       throw new BadRequestException('Você não pode alterar o próprio papel');
     }
+    // Mesmo motivo: um prazo na própria conta tranca o admin quando vencer.
+    if (dto.extendDays && requesterId === targetId) {
+      throw new BadRequestException('Sua conta não tem vencimento');
+    }
 
     const fields: UpdateUser = {};
     if (dto.roleId !== undefined) fields.roleId = dto.roleId as RoleId;
@@ -190,6 +195,7 @@ export class AdminService {
       fields.telegramLinkedAt = null;
       fields.telegramUsername = null;
     }
+    if (dto.extendDays) fields.accessUntil = extendAccess(target.accessUntil, dto.extendDays);
 
     if (Object.keys(fields).length === 0) {
       throw new BadRequestException('Nada para atualizar');

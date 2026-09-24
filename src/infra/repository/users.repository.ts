@@ -1,6 +1,7 @@
 
 import { Inject, Injectable } from '@nestjs/common';
 import { NewUser, UpdateUser, UserId } from '../../db_types/Users';
+import type { RoleId } from '../../db_types/Roles';
 import { DATABASE_READ_CONNECTION, DATABASE_WRITE_CONNECTION } from '../db/db.module';
 import { Kysely, sql } from 'kysely';
 import { Database } from '../db/database.types';
@@ -143,6 +144,27 @@ async findLinkedForTipsFanout() {
   return this.dbRead
     .selectFrom("users")
     .select(["id", "telegramUserId", "minPercentFilter"])
+    .where("telegramUserId", "is not", null)
+    // Vencido/desativado não recebe tip: o bloqueio do site valeria pouco se o bot continuasse entregando.
+    .where((eb) => eb.or([eb("isActive", "is", null), eb("isActive", "=", true)]))
+    .where((eb) => eb.or([eb("accessUntil", "is", null), eb("accessUntil", ">", new Date())]))
+    .execute();
+}
+
+// Quem tem vencimento e Telegram vinculado: o cron de aviso decide quem recebe pelo dia.
+async findWithAccessDeadline() {
+  return this.dbRead
+    .selectFrom("users")
+    .select(["id", "username", "telegramUserId", "accessUntil", "isActive"])
+    .where("accessUntil", "is not", null)
+    .execute();
+}
+
+async findAdminsWithTelegram(adminRoleId: number) {
+  return this.dbRead
+    .selectFrom("users")
+    .select(["telegramUserId"])
+    .where("roleId", "=", adminRoleId as RoleId)
     .where("telegramUserId", "is not", null)
     .execute();
 }

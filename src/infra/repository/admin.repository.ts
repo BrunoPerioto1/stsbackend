@@ -285,6 +285,7 @@ export class AdminRepository {
         'u.failedLoginAttempts as failedLoginAttempts',
         'u.telegramLinkedAt as telegramLinkedAt',
         'u.telegramUserId as telegramUserId',
+        'u.accessUntil as accessUntil',
         eb.fn.count<string>('b.id').as('betCount'),
       ])
       .groupBy([
@@ -300,6 +301,7 @@ export class AdminRepository {
         'u.failedLoginAttempts',
         'u.telegramLinkedAt',
         'u.telegramUserId',
+        'u.accessUntil',
       ])
       .orderBy('u.username')
       .execute();

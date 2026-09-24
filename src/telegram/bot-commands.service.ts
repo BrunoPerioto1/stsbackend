@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { PendentesService } from './pendentes.service';
 import { UNLINKED_INSTRUCTIONS } from './messages.const';
+import { accessBlock, billingInfo, billingPayLine, pixKeyboard } from '../users/access';
 
 // Os comandos "simples" do bot — cada um só conversa com o usuário que
 // chamou, sem envolver fan-out de tips nem callback_query.
@@ -143,6 +144,64 @@ export class BotCommandsService {
       this.knownUsernames.delete(from.id);
       console.error('Erro ao sincronizar @ do Telegram:', error);
     });
+  }
+
+  /**
+   * Porteiro do privado: conta vinculada vencida ou desativada não registra
+   * aposta, não planilha e não usa comando. Fica na entrada (middleware) e não
+   * em cada handler — botão ou comando novo já nasce protegido.
+   * Devolve true quando barrou (e já respondeu).
+   */
+  async blockIfNoAccess(ctx: any): Promise<boolean> {
+    if (ctx.chat?.type !== 'private' || !ctx.from || ctx.from.is_bot) return false;
+    // Instruções e vínculo seguem livres: é por eles que a pessoa volta.
+    if (/^\/(start|vincular)(@\w+)?(\s|$)/.test(ctx.message?.text ?? '')) return false;
+
+    let user: Awaited<ReturnType<UsersService['findByTelegramUserId']>>;
+    try {
+      user = await this.usersService.findByTelegramUserId(ctx.from.id);
+    } catch (error) {
+      // Banco fora: deixa passar — o handler vai esbarrar no mesmo erro e
+      // responder como sempre respondeu.
+      console.error('Erro ao conferir acesso no bot:', error);
+      return false;
+    }
+    // Sem vínculo: os handlers já pedem o /vincular.
+    if (!user) return false;
+
+    const block = accessBlock(user);
+    if (!block) return false;
+
+    const { pixKey, price } = billingInfo();
+    if (ctx.callbackQuery) {
+      // Pop-up e nada mais: a mensagem e o botão ficam intactos, então o mesmo
+      // "Planilhar" volta a funcionar quando o acesso for liberado.
+      const text =
+        block === 'inactive'
+          ? '🚫 Sua conta está desativada. Fale com o administrador.'
+          : [
+              '🔒 Seu acesso venceu. Renove pelo PIX para continuar.',
+              price ? `Valor: R$ ${price.toFixed(2).replace('.', ',')}` : null,
+              pixKey ? `PIX: ${pixKey}` : null,
+            ]
+              .filter(Boolean)
+              .join('\n');
+      await ctx.answerCbQuery(text.slice(0, 200), { show_alert: true }).catch(() => undefined);
+      return true;
+    }
+
+    if (block === 'inactive') {
+      await ctx.reply('🚫 Sua conta está desativada. Fale com o administrador.');
+      return true;
+    }
+    const date = new Date(user.accessUntil as Date).toLocaleDateString('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+    });
+    await ctx.reply(`🔒 Seu acesso venceu em ${date}.\n\n${billingPayLine()}`, {
+      parse_mode: 'Markdown',
+      reply_markup: pixKeyboard(),
+    });
+    return true;
   }
 
   async handleVincular(ctx: any) {
