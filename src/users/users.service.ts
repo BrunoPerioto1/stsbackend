@@ -113,6 +113,8 @@ export class UsersService {
     if (params.stake !== undefined) fields.stake = params.stake;
     if (params.minPercentFilter !== undefined)
       fields.minPercentFilter = params.minPercentFilter;
+    if (params.staleHouseDays !== undefined)
+      fields.staleHouseDays = params.staleHouseDays;
 
     const updated = await this.usersRepository.updateUser(
       userId as UserId,

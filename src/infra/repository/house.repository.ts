@@ -103,6 +103,9 @@ export class HouseRepository {
           eb.fn.sum<number>(eb.case().when('br.resultId', 'in', LOST_RESULT_IDS as any).then(1).else(0).end()),
           sql.lit(0),
         ]).as('lostBets'),
+        // Hora em que a aposta foi feita, nao o `betDate`: aposta de hoje num
+        // jogo de daqui a 3 dias tem que contar como atividade de hoje.
+        eb.fn.max('b.betTime').as('lastBetAt'),
       ])
       .groupBy('b.houseId');
   }
@@ -158,6 +161,7 @@ export class HouseRepository {
         eb.fn.coalesce('ta.totalAdjustment', eb.lit(0)).as('totalAdjustment'),
         eb.fn.coalesce('ta.totalTransactions', eb.lit(0)).as('totalTransactions'),
         'ta.lastMovementAt',
+        'ba.lastBetAt',
       ])
       .orderBy('bh.name', 'asc')
       .execute();

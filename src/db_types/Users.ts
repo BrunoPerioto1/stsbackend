@@ -23,6 +23,7 @@ export default interface UsersTable {
   telegramUserId: ColumnType<number | null, number | null, number | null>; // bigint como number
   stake: ColumnType<number | null, number | null, number | null>; // NUMERIC como number
   minPercentFilter: ColumnType<number | null, number | null, number | null>; // NUMERIC; null = sem filtro
+  staleHouseDays: ColumnType<number | null, number | null | undefined, number | null>; // null = padrão do app
   failedLoginAttempts: ColumnType<number, number | undefined, number>;
   lockedUntil: ColumnType<Date | null, Date | null, Date | null>;
   telegramLinkCode: ColumnType<string | null, string | null, string | null>;

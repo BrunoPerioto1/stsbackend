@@ -62,6 +62,9 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS min_percent_filter NUMERIC(5,2);
 -- Personalização opcional; NULL preserva os padrões de usuários existentes.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS dashboard_preferences JSONB;
 
+-- Dias sem apostar numa casa com saldo até sugerir saque; NULL = padrão (20).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS stale_house_days SMALLINT;
+
 -- Login lockout. Counted per user in the database, not per IP in memory: the
 -- API runs serverless, so an in-process counter resets whenever a request
 -- lands on a fresh instance and would never actually lock anyone out.

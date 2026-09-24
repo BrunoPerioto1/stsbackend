@@ -5,6 +5,7 @@ import {
   IsObject,
   ValidateNested,
   IsEmail,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
@@ -74,4 +75,15 @@ export class UpdateUserRequestDTO extends PartialType(OmitType(CreateUserRequest
   @Min(0.01)
   @Max(5)
   minPercentFilter?: number;
+
+  // Dias sem apostar numa casa com saldo até a lista de casas sugerir saque.
+  @ApiProperty({
+    required: false,
+    description: 'Dias sem apostar numa casa até sugerir saque (1–365)',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(365)
+  staleHouseDays?: number;
 }

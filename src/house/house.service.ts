@@ -44,6 +44,7 @@ export class HouseService {
         wonBets: Number(row.wonBets),
         lostBets: Number(row.lostBets),
         lastMovementAt: row.lastMovementAt ?? null,
+        lastBetAt: row.lastBetAt ?? null,
       };
     });
   }

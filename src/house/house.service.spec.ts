@@ -9,12 +9,14 @@ describe('house balances', () => {
         totalDeposit: '100', totalWithdrawalRaw: '0', totalAdjustment: '0', lastMovementAt: null },
       { houseId: 2, houseName: 'Loss', totalBets: 2, settledBets: 1, totalStake: 100,
         totalBetProfit: '-50', pendingBets: 1, wonBets: 0, lostBets: 1,
-        totalDeposit: '0', totalWithdrawalRaw: '-10', totalAdjustment: '5', lastMovementAt: null },
+        totalDeposit: '0', totalWithdrawalRaw: '-10', totalAdjustment: '5', lastMovementAt: null,
+        lastBetAt: new Date('2026-09-01T12:00:00Z') },
     ]);
     const service = new HouseService({ findAllHousesBalance } as unknown as HouseRepository);
     const houses = await service.getAllHousesBalanceWithFilter({}, 7);
-    expect(houses[0]).toMatchObject({ realHouseBalance: 100, totalBetProfit: 0, totalBets: 0 });
-    expect(houses[1]).toMatchObject({ realHouseBalance: -55, totalBetProfit: -50, pendingBets: 1 });
+    expect(houses[0]).toMatchObject({ realHouseBalance: 100, totalBetProfit: 0, totalBets: 0, lastBetAt: null });
+    expect(houses[1]).toMatchObject({ realHouseBalance: -55, totalBetProfit: -50, pendingBets: 1,
+      lastBetAt: new Date('2026-09-01T12:00:00Z') });
     expect(await service.getHouseMetrics(7)).toEqual({ totalBalance: 100, totalDeposit: 100,
       totalWithdrawal: 10, consolidatedProfit: -50, negativeHouses: 1, negativeAmount: -55,
       totalHousesUsed: 2 });

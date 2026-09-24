@@ -41,6 +41,9 @@ export class UserDto {
   @ApiProperty({ type: Number, nullable: true })
   minPercentFilter!: number | null;
 
+  @ApiProperty({ type: Number, nullable: true })
+  staleHouseDays!: number | null;
+
   @ApiProperty()
   failedLoginAttempts!: number;
 
