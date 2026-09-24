@@ -130,7 +130,7 @@ export class UsersService {
    * próprio Telegram garante — por isso não existe mais rota HTTP pra isto: ela
    * aceitava qualquer telegramUserId e deixava chutar os 10^6 códigos.
    */
-  async confirmTelegramLink(code: string, telegramUserId: number) {
+  async confirmTelegramLink(code: string, telegramUserId: number, telegramUsername: string | null = null) {
     const owner = await this.usersRepository.findByTelegramLinkCode(code.trim());
     const expiresAt = owner?.telegramLinkExpiresAt ? new Date(owner.telegramLinkExpiresAt) : null;
     if (!owner || !expiresAt || expiresAt.getTime() < Date.now()) {
@@ -141,7 +141,7 @@ export class UsersService {
       throw new BadRequestException('Este ID do Telegram já está vinculado a outra conta.');
     }
 
-    await this.usersRepository.linkTelegram(owner.id, telegramUserId);
+    await this.usersRepository.linkTelegram(owner.id, telegramUserId, telegramUsername);
   }
 
   async setPassword(userId: number, password: string) {
@@ -158,6 +158,7 @@ export class UsersService {
     await this.usersRepository.updateUser(userId as UserId, {
       telegramUserId: null,
       telegramLinkedAt: null,
+      telegramUsername: null,
     });
   }
 
@@ -191,6 +192,10 @@ export class UsersService {
 
   async getUsersForTipsFanout() {
     return this.usersRepository.findLinkedForTipsFanout();
+  }
+
+  async syncTelegramUsername(telegramUserId: number, telegramUsername: string | null) {
+    await this.usersRepository.syncTelegramUsername(telegramUserId, telegramUsername);
   }
 
   async setMinPercentFilter(

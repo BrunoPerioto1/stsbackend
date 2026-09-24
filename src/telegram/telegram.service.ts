@@ -31,6 +31,12 @@ export class TelegramService implements OnModuleInit {
   }
 
   private registerHandlers() {
+    // Só conversa privada: no grupo de Tips quem fala é o bot de repasse.
+    this.bot.use((ctx, next) => {
+      if (ctx.chat?.type === 'private') this.botCommands.syncUsername(ctx.from);
+      return next();
+    });
+
     this.bot.command('start', (ctx) => this.botCommands.handleStart(ctx));
     this.bot.command('pendentes', (ctx) =>
       this.botCommands.handlePendentes(ctx),

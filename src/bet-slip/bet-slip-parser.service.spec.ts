@@ -289,6 +289,7 @@ describe('BetTextService.handleBetPhoto', () => {
 
 it('inicializa handlers sem registrar webhook nem chamar rede', () => {
   const bot = {
+    use: jest.fn(),
     command: jest.fn(),
     on: jest.fn(),
     telegram: { setWebhook: jest.fn() },

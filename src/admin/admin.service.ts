@@ -188,6 +188,7 @@ export class AdminService {
     if (dto.unlinkTelegram) {
       fields.telegramUserId = null;
       fields.telegramLinkedAt = null;
+      fields.telegramUsername = null;
     }
 
     if (Object.keys(fields).length === 0) {

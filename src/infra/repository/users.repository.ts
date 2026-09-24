@@ -2,7 +2,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { NewUser, UpdateUser, UserId } from '../../db_types/Users';
 import { DATABASE_READ_CONNECTION, DATABASE_WRITE_CONNECTION } from '../db/db.module';
-import { Kysely } from 'kysely';
+import { Kysely, sql } from 'kysely';
 import { Database } from '../db/database.types';
 
 @Injectable()
@@ -38,9 +38,10 @@ async findById(id: UserId) {
     .executeTakeFirst();
 }
 
-   async linkTelegram(userId: UserId, telegramUserId: number) {
+   async linkTelegram(userId: UserId, telegramUserId: number, telegramUsername: string | null = null) {
   const update: UpdateUser = {
     telegramUserId,
+    telegramUsername,
     telegramLinkedAt: new Date(),
     // O código morre no ato: um msesmo código não vincula dois Telegrams.
     telegramLinkCode: null,
@@ -143,6 +144,17 @@ async findLinkedForTipsFanout() {
     .selectFrom("users")
     .select(["id", "telegramUserId", "minPercentFilter"])
     .where("telegramUserId", "is not", null)
+    .execute();
+}
+
+// Uma query só, e só escreve se o @ mudou: vincular antes da coluna existir ou
+// trocar o @ no Telegram não exige vincular de novo.
+async syncTelegramUsername(telegramUserId: number, telegramUsername: string | null) {
+  await this.dbWrite
+    .updateTable("users")
+    .set({ telegramUsername })
+    .where("telegramUserId", "=", telegramUserId)
+    .where(sql<boolean>`telegram_username IS DISTINCT FROM ${telegramUsername}`)
     .execute();
 }
 

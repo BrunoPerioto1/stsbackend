@@ -346,6 +346,7 @@ describe('Entrada de áudio no preview comum', () => {
     const commands = jest.fn();
     const handlers = new Map<string, (ctx: Context) => Promise<void>>();
     const bot = {
+      use: jest.fn(),
       command: commands,
       on: (event: string, handler: (ctx: Context) => Promise<void>) =>
         handlers.set(event, handler),

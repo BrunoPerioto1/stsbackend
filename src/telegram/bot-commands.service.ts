@@ -128,6 +128,23 @@ export class BotCommandsService {
     }
   }
 
+  // Último @ gravado por id do Telegram, neste processo: evita uma escrita no
+  // banco a cada mensagem. Só vai ao banco na primeira mensagem de cada um e
+  // quando o @ muda.
+  private readonly knownUsernames = new Map<number, string | null>();
+
+  /** Mantém o @ do card do app em dia; nunca atrapalha o fluxo da mensagem. */
+  syncUsername(from: { id: number; is_bot?: boolean; username?: string } | undefined) {
+    if (!from || from.is_bot) return;
+    const username = from.username ?? null;
+    if (this.knownUsernames.get(from.id) === username) return;
+    this.knownUsernames.set(from.id, username);
+    this.usersService.syncTelegramUsername(from.id, username).catch((error) => {
+      this.knownUsernames.delete(from.id);
+      console.error('Erro ao sincronizar @ do Telegram:', error);
+    });
+  }
+
   async handleVincular(ctx: any) {
     const args = ctx.message.text.split(' ');
     if (args.length !== 2) {
@@ -136,7 +153,7 @@ export class BotCommandsService {
     }
 
     try {
-      await this.usersService.confirmTelegramLink(args[1], ctx.from.id);
+      await this.usersService.confirmTelegramLink(args[1], ctx.from.id, ctx.from.username ?? null);
       await ctx.reply('✅ Conta vinculada com sucesso!');
     } catch (error) {
       if (error instanceof BadRequestException) {

@@ -77,6 +77,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_link_code VARCHAR(6);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_link_expires_at TIMESTAMP;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_linked_at TIMESTAMP;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_username VARCHAR(32);
 
 -- Accounts linked before the column existed have no date to show. updated_at is
 -- an approximation (any profile change moves it), but it beats leaving the
