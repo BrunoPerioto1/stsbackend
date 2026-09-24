@@ -9,6 +9,7 @@ export default interface BettingHousesTable {
   createdAt: ColumnType<Date, Date | undefined, never>;
   updatedAt: ColumnType<Date, Date | undefined, Date>;
   aliases: ColumnType<string[], string[] | undefined, string[]>;
+  websiteUrl: ColumnType<string | null, string | null | undefined, string | null>; // só .bet.br
 }
 
 export type BettingHouse = Selectable<BettingHousesTable>;   // SELECT

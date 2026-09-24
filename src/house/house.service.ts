@@ -31,6 +31,7 @@ export class HouseService {
       return {
         houseId: row.houseId,
         houseName: row.houseName,
+        websiteUrl: row.websiteUrl ?? null,
         totalBets: Number(row.totalBets),
         settledBets: Number(row.settledBets),
         totalStake: Number(row.totalStake),

@@ -33,10 +33,10 @@ export class HouseRepository {
       .execute();
   }
 
-  createHouse(name: string, aliases: string[] = []) {
+  createHouse(name: string, aliases: string[] = [], websiteUrl: string | null = null) {
     return this.dbWrite
       .insertInto('bettingHouses')
-      .values({ name, aliases, isActive: true })
+      .values({ name, aliases, websiteUrl, isActive: true })
       .returningAll()
       .executeTakeFirstOrThrow();
   }
@@ -55,14 +55,18 @@ export class HouseRepository {
         'h.name as name',
         'h.isActive as isActive',
         'h.aliases as aliases',
+        'h.websiteUrl as websiteUrl',
         eb.fn.count<string>('b.id').as('betCount'),
       ])
-      .groupBy(['h.id', 'h.name', 'h.isActive', 'h.aliases'])
+      .groupBy(['h.id', 'h.name', 'h.isActive', 'h.aliases', 'h.websiteUrl'])
       .orderBy('h.name', 'asc')
       .execute();
   }
 
-  updateHouse(id: BettingHouseId, update: { name?: string; aliases?: string[]; isActive?: boolean }) {
+  updateHouse(
+    id: BettingHouseId,
+    update: { name?: string; aliases?: string[]; isActive?: boolean; websiteUrl?: string | null },
+  ) {
     return this.dbWrite
       .updateTable('bettingHouses')
       .set({ ...update, updatedAt: new Date() })
@@ -149,6 +153,7 @@ export class HouseRepository {
       .select((eb) => [
         'bh.id as houseId',
         'bh.name as houseName',
+        'bh.websiteUrl as websiteUrl',
         eb.fn.coalesce('ba.totalBets', eb.lit(0)).as('totalBets'),
         eb.fn.coalesce('ba.settledBets', eb.lit(0)).as('settledBets'),
         eb.fn.coalesce('ba.totalStake', eb.lit(0)).as('totalStake'),

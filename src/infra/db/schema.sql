@@ -102,6 +102,9 @@ CREATE TABLE IF NOT EXISTS betting_houses (
 -- como candidato extra no fuzzy-match do GrokService além do próprio name.
 ALTER TABLE betting_houses ADD COLUMN IF NOT EXISTS aliases TEXT[] NOT NULL DEFAULT '{}';
 
+-- Site da casa; só domínio .bet.br (autorização federal), validado na API.
+ALTER TABLE betting_houses ADD COLUMN IF NOT EXISTS website_url TEXT;
+
 CREATE TABLE IF NOT EXISTS house_transactions (
     id SERIAL PRIMARY KEY,
     house_id INTEGER NOT NULL REFERENCES betting_houses(id) ON DELETE CASCADE,

@@ -4,6 +4,7 @@ import { UsersRepository } from '../infra/repository/users.repository';
 import { HouseRepository } from '../infra/repository/house.repository';
 import { CreateAdminHouseDTO, UpdateAdminHouseDTO, UpdateAdminUserDTO } from './dto/admin.dto';
 import { normalizeName } from '../common/utils/bet.utils';
+import { normalizeFederalHouseUrl } from '../common/utils/house-url.util';
 import type { BettingHouseId } from '../db_types/BettingHouse';
 import { ADMIN_ROLE_ID } from '../common/guards/admin.guard';
 import type { UpdateUser, UserId } from '../db_types/Users';
@@ -80,8 +81,9 @@ export class AdminService {
 
     this.assertNameIsFree(houses, name);
     const aliases = this.normalizeAliases(dto.aliases ?? [], name, houses, null);
+    const websiteUrl = normalizeFederalHouseUrl(dto.websiteUrl);
 
-    const created = await this.houseRepository.createHouse(name, aliases);
+    const created = await this.houseRepository.createHouse(name, aliases, websiteUrl);
     return { ...created, betCount: 0 };
   }
 
@@ -90,7 +92,7 @@ export class AdminService {
     const current = houses.find((h) => Number(h.id) === id);
     if (!current) throw new NotFoundException('Casa não encontrada');
 
-    const update: { name?: string; aliases?: string[]; isActive?: boolean } = {};
+    const update: { name?: string; aliases?: string[]; isActive?: boolean; websiteUrl?: string | null } = {};
 
     if (dto.name !== undefined) {
       const name = dto.name.trim();
@@ -103,6 +105,7 @@ export class AdminService {
     }
 
     if (dto.isActive !== undefined) update.isActive = dto.isActive;
+    if (dto.websiteUrl !== undefined) update.websiteUrl = normalizeFederalHouseUrl(dto.websiteUrl);
 
     if (Object.keys(update).length === 0) {
       throw new BadRequestException('Nada para atualizar');

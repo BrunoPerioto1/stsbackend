@@ -42,6 +42,16 @@ export class CreateAdminHouseDTO {
   @IsArray()
   @IsString({ each: true })
   aliases?: string[];
+
+  @ApiProperty({
+    required: false,
+    nullable: true,
+    description: 'Site da casa, só domínio .bet.br (federal). Vazio ou null apaga o link.',
+    example: 'https://betano.bet.br',
+  })
+  @IsOptional()
+  @IsString()
+  websiteUrl?: string | null;
 }
 
 export class UpdateAdminHouseDTO extends PartialType(CreateAdminHouseDTO) {
