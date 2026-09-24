@@ -180,7 +180,7 @@ export class AdminService {
       throw new BadRequestException('Você não pode alterar o próprio papel');
     }
     // Mesmo motivo: um prazo na própria conta tranca o admin quando vencer.
-    if (dto.extendDays && requesterId === targetId) {
+    if ((dto.extendDays || dto.accessUntil !== undefined) && requesterId === targetId) {
       throw new BadRequestException('Sua conta não tem vencimento');
     }
 
@@ -195,7 +195,13 @@ export class AdminService {
       fields.telegramLinkedAt = null;
       fields.telegramUsername = null;
     }
+    if (dto.extendDays && dto.accessUntil !== undefined) {
+      throw new BadRequestException('Use +dias ou uma data, não os dois');
+    }
     if (dto.extendDays) fields.accessUntil = extendAccess(target.accessUntil, dto.extendDays);
+    if (dto.accessUntil !== undefined) {
+      fields.accessUntil = dto.accessUntil === null ? null : new Date(dto.accessUntil);
+    }
 
     if (Object.keys(fields).length === 0) {
       throw new BadRequestException('Nada para atualizar');

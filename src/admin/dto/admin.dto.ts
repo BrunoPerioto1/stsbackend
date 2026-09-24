@@ -1,5 +1,16 @@
 import { ApiProperty, PartialType } from '@nestjs/swagger';
-import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min, MinLength } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsDateString,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+  MinLength,
+} from 'class-validator';
 
 // Os dois papéis em uso: 1 admin, 3 usuário. O 2 (moderator) continua na tabela
 // `roles` mas ninguém nunca esteve nele e nenhuma regra do sistema o consulta —
@@ -10,27 +21,53 @@ import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min, MinLen
 export const ROLE_IDS = [1, 3] as const;
 
 export class UpdateAdminUserDTO {
-  @ApiProperty({ required: false, enum: ROLE_IDS, description: '1 admin, 3 usuário' })
+  @ApiProperty({
+    required: false,
+    enum: ROLE_IDS,
+    description: '1 admin, 3 usuário',
+  })
   @IsOptional()
   @IsIn(ROLE_IDS as unknown as number[])
   roleId?: number;
 
-  @ApiProperty({ required: false, description: 'Zera o bloqueio por tentativas de login' })
+  @ApiProperty({
+    required: false,
+    description: 'Zera o bloqueio por tentativas de login',
+  })
   @IsOptional()
   @IsBoolean()
   unlock?: boolean;
 
-  @ApiProperty({ required: false, description: 'Desvincula a conta do Telegram' })
+  @ApiProperty({
+    required: false,
+    description: 'Desvincula a conta do Telegram',
+  })
   @IsOptional()
   @IsBoolean()
   unlinkTelegram?: boolean;
 
-  @ApiProperty({ required: false, description: 'Soma dias ao acesso (a partir de hoje se já venceu)', example: 30 })
+  @ApiProperty({
+    required: false,
+    description: 'Soma dias ao acesso (a partir de hoje se já venceu)',
+    example: 30,
+  })
   @IsOptional()
   @IsInt()
   @Min(1)
   @Max(366)
   extendDays?: number;
+
+  // null tira o prazo (volta a "sem prazo"); ausente não mexe.
+  @ApiProperty({
+    required: false,
+    nullable: true,
+    type: String,
+    description: 'Vencimento exato em ISO 8601 com fuso; null = sem prazo',
+    example: '2026-10-24T23:30:00-03:00',
+  })
+  @IsOptional()
+  @IsDateString({ strict: true })
+  accessUntil?: string | null;
 }
 
 export class CreateAdminHouseDTO {
@@ -53,7 +90,8 @@ export class CreateAdminHouseDTO {
   @ApiProperty({
     required: false,
     nullable: true,
-    description: 'Site da casa, só domínio .bet.br (federal). Vazio ou null apaga o link.',
+    description:
+      'Site da casa, só domínio .bet.br (federal). Vazio ou null apaga o link.',
     example: 'https://betano.bet.br',
   })
   @IsOptional()
@@ -62,7 +100,10 @@ export class CreateAdminHouseDTO {
 }
 
 export class UpdateAdminHouseDTO extends PartialType(CreateAdminHouseDTO) {
-  @ApiProperty({ required: false, description: 'Casa inativa some das listas de seleção' })
+  @ApiProperty({
+    required: false,
+    description: 'Casa inativa some das listas de seleção',
+  })
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
