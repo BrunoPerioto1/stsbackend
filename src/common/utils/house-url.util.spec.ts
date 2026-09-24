@@ -13,6 +13,13 @@ describe('normalizeFederalHouseUrl', () => {
     expect(normalizeFederalHouseUrl(null)).toBeNull();
   });
 
+  it('aceita casa com autorização judicial da lista fechada', () => {
+    expect(normalizeFederalHouseUrl('https://zeroum.bet/')).toBe('https://zeroum.bet');
+    expect(normalizeFederalHouseUrl('zeroum.bet')).toBe('https://zeroum.bet');
+    expect(() => normalizeFederalHouseUrl('https://zeroum.bet.golpe.com')).toThrow();
+    expect(() => normalizeFederalHouseUrl('https://outra.bet')).toThrow();
+  });
+
   it('recusa o que não é domínio federal', () => {
     expect(() => normalizeFederalHouseUrl('betano.com')).toThrow();
     expect(() => normalizeFederalHouseUrl('https://vbet.bet')).toThrow();
