@@ -8,10 +8,7 @@ import { UsersModule } from './users.module';
 import { TelegramController } from '../telegram/telegram.controller';
 import { AccessController } from '../telegram/access.controller';
 import { TipsModule } from './tips.module';
-import {
-  TELEGRAM_BOT,
-  createTelegramBot,
-} from '../telegram/telegram-bot.provider';
+import { TelegramBotModule } from './telegram-bot.module';
 import { BotCommandsService } from '../telegram/bot-commands.service';
 import { BetTextService } from '../telegram/bet-text.service';
 import { BetSlipModule } from './bet-slip.module';
@@ -28,10 +25,10 @@ import { TelegramCallbackService } from '../telegram/telegram-callback.service';
     UsersModule,
     TipsModule,
     BetSlipModule,
+    TelegramBotModule,
   ],
   controllers: [TelegramController, AccessController],
   providers: [
-    { provide: TELEGRAM_BOT, useFactory: createTelegramBot },
     TelegramService,
     GrokService,
     BotCommandsService,

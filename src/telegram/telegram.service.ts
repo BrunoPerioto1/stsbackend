@@ -6,6 +6,7 @@ import { BotCommandsService } from './bot-commands.service';
 import { BetTextService } from './bet-text.service';
 import { TipFanoutService } from './tip-fanout.service';
 import { TelegramCallbackService } from './telegram-callback.service';
+import { TipsGroupService } from './tips-group.service';
 import { EDIT_PROMPT_HEADER_RE } from './messages.const';
 import { parseBetLocal } from './utils/tip-extractors.util';
 
@@ -24,6 +25,7 @@ export class TelegramService implements OnModuleInit {
     private readonly betTextService: BetTextService,
     private readonly tipFanoutService: TipFanoutService,
     private readonly callbackService: TelegramCallbackService,
+    private readonly tipsGroup: TipsGroupService,
   ) {}
 
   onModuleInit() {
@@ -109,5 +111,12 @@ export class TelegramService implements OnModuleInit {
     // Cliques nos botões da cópia individual recebida em DM (Enviar ao
     // Planilhador, Editar, Aposta Caiu) e da lista compacta do /pendentes.
     this.bot.on('callback_query', (ctx) => this.callbackService.handle(ctx));
+
+    // Pedido de entrada no grupo Tips (link com "aprovação do admin"): o bot
+    // aprova só vinculado e em dia. O middleware de acesso lá em cima deixa
+    // passar — o update vem do grupo, não de conversa privada.
+    this.bot.on('chat_join_request', (ctx) =>
+      this.tipsGroup.handleJoinRequest(ctx.chatJoinRequest),
+    );
   }
 }

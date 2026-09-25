@@ -31,6 +31,7 @@ export default interface UsersTable {
   telegramLinkedAt: ColumnType<Date | null, Date | null, Date | null>;
   telegramUsername: ColumnType<string | null, string | null | undefined, string | null>; // @ sem o arroba; null = sem @ ou nao vinculado
   accessUntil: ColumnType<Date | null, Date | null | undefined, Date | null>; // NULL = sem prazo
+  tipsGroupRemovedAt: ColumnType<Date | null, Date | null | undefined, Date | null>; // ban do grupo Tips pelo painel; NULL = dentro ou convidado de volta
 }
 
 export type User = Selectable<UsersTable>; // SELECT

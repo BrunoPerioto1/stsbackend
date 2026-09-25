@@ -68,6 +68,16 @@ export class UpdateAdminUserDTO {
   @IsOptional()
   @IsDateString({ strict: true })
   accessUntil?: string | null;
+
+  @ApiProperty({
+    required: false,
+    enum: ['remove', 'invite'],
+    description:
+      'remove: tira do grupo Tips quem está sem acesso (ban). invite: manda de novo o convite a quem está em dia e ficou de fora',
+  })
+  @IsOptional()
+  @IsIn(['remove', 'invite'])
+  tipsGroup?: 'remove' | 'invite';
 }
 
 export class CreateAdminHouseDTO {

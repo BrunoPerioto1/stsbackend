@@ -91,6 +91,10 @@ UPDATE users
 -- Acesso pago: vencimento renovado pelo admin a cada PIX. NULL = sem prazo.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS access_until TIMESTAMP;
 
+-- Tirado do grupo Tips pelo painel (ban no Telegram). NULL = nunca tirado ou
+-- ja convidado de volta.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS tips_group_removed_at TIMESTAMP;
+
 -- === Bookmakers =========================================================
 
 CREATE TABLE IF NOT EXISTS betting_houses (

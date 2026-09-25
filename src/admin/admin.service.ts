@@ -9,7 +9,8 @@ import type { BettingHouseId } from '../db_types/BettingHouse';
 import { ADMIN_ROLE_ID } from '../common/guards/admin.guard';
 import type { UpdateUser, UserId } from '../db_types/Users';
 import type { RoleId } from '../db_types/Roles';
-import { extendAccess } from '../users/access';
+import { extendAccess, hasAccess } from '../users/access';
+import { TipsGroupService } from '../telegram/tips-group.service';
 
 type AdminHouseRow = Awaited<ReturnType<HouseRepository['findAllHousesForAdmin']>>[number];
 
@@ -19,6 +20,7 @@ export class AdminService {
     private readonly adminRepository: AdminRepository,
     private readonly usersRepository: UsersRepository,
     private readonly houseRepository: HouseRepository,
+    private readonly tipsGroup: TipsGroupService,
   ) {}
 
   async overview(userId: number) {
@@ -203,17 +205,84 @@ export class AdminService {
       fields.accessUntil = dto.accessUntil === null ? null : new Date(dto.accessUntil);
     }
 
-    if (Object.keys(fields).length === 0) {
+    if (Object.keys(fields).length === 0 && !dto.tipsGroup) {
       throw new BadRequestException('Nada para atualizar');
     }
 
-    await this.usersRepository.updateUser(targetId as UserId, fields);
+    const after = { ...target, ...fields };
+    if (dto.tipsGroup) this.assertTipsGroupAction(dto.tipsGroup, after);
+
+    if (Object.keys(fields).length > 0) {
+      await this.usersRepository.updateUser(targetId as UserId, fields);
+    }
+
+    let groupInvite: 'sent' | 'failed' | undefined;
+    if (dto.tipsGroup === 'remove') {
+      await this.removeFromTipsGroup(targetId, after.telegramUserId as number);
+    } else if (this.shouldReadmit(dto, target, after)) {
+      // Depois do UPDATE de propósito: o convite pede aprovação, e o bot
+      // aprova lendo o vencimento no banco.
+      const result = await this.tipsGroup.readmit(after.telegramUserId as number, after.accessUntil ?? null);
+      // Falhou: a marca fica, e a tela oferece "Convidar" pra repetir.
+      if (result !== 'failed' && target.tipsGroupRemovedAt) {
+        await this.usersRepository.updateUser(targetId as UserId, { tipsGroupRemovedAt: null });
+      }
+      groupInvite = result ?? undefined;
+    }
 
     // A linha volta pela mesma consulta da lista (com contagem de apostas e sem
     // hash), pra tela poder trocar a linha no lugar em vez de refazer o GET.
     const users = await this.listUsers();
     const updated = users.find((u) => Number(u.id) === targetId);
     if (!updated) throw new NotFoundException('Usuário não encontrado');
-    return updated;
+    // undefined some no JSON: só vem na resposta quando houve convite.
+    return { ...updated, groupInvite };
+  }
+
+  /**
+   * O Telegram não esconde mensagem de membro: quem não pagou só deixa de ler
+   * o grupo Tips saindo dele. Sair é pelo painel, só pra quem está sem acesso
+   * — em dia e fora do grupo é o estado que "invite" existe pra desfazer.
+   */
+  private assertTipsGroupAction(action: 'remove' | 'invite', after: { telegramUserId: number | null; isActive: boolean | null; accessUntil: Date | null }) {
+    if (!this.tipsGroup.configured) {
+      throw new BadRequestException('Grupo Tips não configurado (TIPS_GROUP_CHAT_ID)');
+    }
+    if (!after.telegramUserId) {
+      throw new BadRequestException('Sem Telegram vinculado: o bot não sabe quem é essa pessoa no grupo');
+    }
+    if (action === 'remove' && hasAccess(after)) {
+      throw new BadRequestException('Só sai do grupo quem está com o acesso vencido');
+    }
+    if (action === 'invite' && !hasAccess(after)) {
+      throw new BadRequestException('O acesso está vencido: libere o prazo antes de convidar');
+    }
+  }
+
+  private async removeFromTipsGroup(targetId: number, telegramUserId: number) {
+    try {
+      await this.tipsGroup.remove(telegramUserId);
+    } catch (error) {
+      // Os motivos comuns são de configuração (bot sem "Banir usuários",
+      // pessoa é admin do grupo) — a descrição do Telegram já diz qual.
+      const reason =
+        (error as { response?: { description?: string } })?.response?.description ??
+        (error instanceof Error ? error.message : 'erro desconhecido');
+      throw new BadRequestException(`O Telegram recusou a remoção: ${reason}`);
+    }
+    await this.usersRepository.updateUser(targetId as UserId, { tipsGroupRemovedAt: new Date() });
+  }
+
+  // Convite só quando o acesso acabou de voltar (estava vencido, ou foi tirado
+  // do grupo) — renovar quem está em dia e lá dentro não manda nada.
+  private shouldReadmit(
+    dto: UpdateAdminUserDTO,
+    target: { isActive: boolean | null; accessUntil: Date | null; tipsGroupRemovedAt: Date | null },
+    after: { telegramUserId: number | null; isActive: boolean | null; accessUntil: Date | null },
+  ): boolean {
+    if (!after.telegramUserId || !hasAccess(after)) return false;
+    if (dto.tipsGroup === 'invite') return true;
+    const accessChanged = dto.extendDays !== undefined || dto.accessUntil !== undefined;
+    return accessChanged && (!!target.tipsGroupRemovedAt || !hasAccess(target));
   }
 }

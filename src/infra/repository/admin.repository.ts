@@ -286,6 +286,7 @@ export class AdminRepository {
         'u.telegramLinkedAt as telegramLinkedAt',
         'u.telegramUserId as telegramUserId',
         'u.accessUntil as accessUntil',
+        'u.tipsGroupRemovedAt as tipsGroupRemovedAt',
         eb.fn.count<string>('b.id').as('betCount'),
       ])
       .groupBy([
@@ -302,6 +303,7 @@ export class AdminRepository {
         'u.telegramLinkedAt',
         'u.telegramUserId',
         'u.accessUntil',
+        'u.tipsGroupRemovedAt',
       ])
       .orderBy('u.username')
       .execute();
