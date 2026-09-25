@@ -110,3 +110,62 @@ describe('BetService ingestion', () => {
     },
   );
 });
+
+describe('BetService.updateBet — casamento de evento', () => {
+  const current = {
+    id: 5,
+    stake: '50.00',
+    odd: '2.00',
+    cashoutValue: null,
+    resultId: 9,
+    game: 'Flamengo x Vasco',
+    market: 'Over 2.5',
+    sport: 'Futebol',
+    betTime: new Date('2026-09-20T18:00:00Z'),
+  };
+
+  function setup() {
+    const repository = {
+      findById: jest.fn().mockResolvedValue(current),
+      update: jest
+        .fn()
+        .mockImplementation((id: number, patch: object) =>
+          Promise.resolve({ id, ...patch }),
+        ),
+      replaceBetEvents: jest.fn().mockResolvedValue(undefined),
+    };
+    const sportEvents = { findCandidates: jest.fn().mockResolvedValue([]) };
+    const service = new BetService(
+      repository as unknown as BetRepository,
+      sportEvents as unknown as SportEventRepository,
+    );
+    return { repository, sportEvents, service };
+  }
+
+  it('jogo novo refaz o casamento e limpa o evento antigo quando nada casa', async () => {
+    const { repository, sportEvents, service } = setup();
+    await service.updateBet(5, { game: 'Palmeiras x Santos', market: 'Over 2.5', sport: 'Futebol' }, 1);
+    expect(sportEvents.findCandidates).toHaveBeenCalledWith(current.betTime);
+    expect(repository.update).toHaveBeenCalledWith(
+      5,
+      expect.objectContaining({
+        game: 'Palmeiras x Santos',
+        eventExternalId: null,
+        eventProvider: null,
+        eventStartAt: null,
+        eventMatchConfidence: null,
+      }),
+      1,
+    );
+    expect(repository.replaceBetEvents).toHaveBeenCalledWith(5, []);
+  });
+
+  it('o front reenviando o mesmo jogo não mexe no evento', async () => {
+    const { repository, sportEvents, service } = setup();
+    await service.updateBet(5, { game: 'Flamengo x Vasco', market: 'Over 2.5', sport: 'Futebol', stake: 60 }, 1);
+    expect(sportEvents.findCandidates).not.toHaveBeenCalled();
+    const [, patch] = repository.update.mock.calls[0] as [number, object];
+    expect(patch).not.toHaveProperty('eventExternalId');
+    expect(repository.replaceBetEvents).not.toHaveBeenCalled();
+  });
+});

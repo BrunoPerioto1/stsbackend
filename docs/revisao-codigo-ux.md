@@ -10,44 +10,45 @@ typecheck limpo, 46 testes passando e 7 warnings de lint.
 
 ## 1. Bugs que mexem em dinheiro ou dado
 
-- [ ] **ROI calculado de dois jeitos.** Dashboard e detalhe da casa dividem o lucro
+- [x] **ROI calculado de dois jeitos.** Dashboard e detalhe da casa dividem o lucro
   por todo o valor apostado, incluindo pendentes e canceladas
   (`src/infra/repository/dashboard.repository.ts:189`,
   `src/dashboard/dashboard.service.ts:57`,
   `sts/src/components/house/HouseDetailsModal.tsx:41`,
   `sts/src/components/house/mobile/HouseDetailScreen.tsx:36`). O ranking de casas
   divide só pelo liquidado. Quem tem muita aposta em aberto vê ROI menor.
-- [ ] **"Saldo real" não desconta apostas em aberto.** A casa mostra o saldo já
+- [x] **"Saldo real" não desconta apostas em aberto.** A casa mostra o saldo já
   sem o stake das pendentes; o app conta esse stake como saldo (pendente tem
   lucro null). O ajuste sai negativo no valor das pendentes e fica pra sempre
   depois que a aposta liquida (`sts/src/components/house/NovaTransacaoModal.tsx:49`,
   `betsAggregate` em `src/infra/repository/house.repository.ts`). Agregar o
   stake em aberto por casa e comparar com "saldo − em aberto".
-- [ ] **Aposta duplicada em clique duplo.** O lock do bot é um `Set` em memória
+- [x] **Aposta duplicada em clique duplo.** O lock do bot é um `Set` em memória
   (`src/telegram/telegram-callback.service.ts:31`), que não vale entre instâncias
   da Vercel. O Planilhar do site consulta e depois insere sem lock
   (`src/tips/tips.service.ts:82`). Resolver com índice único parcial:
   `CREATE UNIQUE INDEX ON bets (user_id, tip_id) WHERE tip_id IS NOT NULL AND deleted_at IS NULL`.
-- [ ] **Planilhar pelo Telegram recalcula a stake com a banca atual**
+  *Migration `20260925_bets_unique_tip_per_user.sql` ainda precisa ser aplicada no banco.*
+- [x] **Planilhar pelo Telegram recalcula a stake com a banca atual**
   (`src/telegram/bet-text.service.ts:100`) em vez de usar o `🎯 Recomendação de
   aposta` que o card mostrou. Diverge quando a banca muda entre a entrega e o clique.
-- [ ] **Casa desativada some do saldo do usuário.** `findAllHousesBalance` filtra
+- [x] **Casa desativada some do saldo do usuário.** `findAllHousesBalance` filtra
   `isActive = true` (`src/infra/repository/house.repository.ts:146`).
-- [ ] **Exportar apostas no Perfil não funciona.** Pede `perPage: 5000`
+- [x] **Exportar apostas no Perfil não funciona.** Pede `perPage: 5000`
   (`sts/src/lib/bet-exports.ts:33`); o DTO limita em 1000
   (`src/bet/dto/bet-filter.dto.ts:84`) → 400, e o erro não é tratado.
-- [ ] **`/stake 1500,50` grava 150050** (`src/telegram/bot-commands.service.ts:108`).
+- [x] **`/stake 1500,50` grava 150050** (`src/telegram/bot-commands.service.ts:108`).
   Usar `normalizeBetNumber`.
-- [ ] **Banca padrão inventada.** Sem `/stake`, `getUserStake` devolve 2000
+- [x] **Banca padrão inventada.** Sem `/stake`, `getUserStake` devolve 2000
   (`src/users/users.service.ts:193`) e o bot recomenda stake sobre ela.
-- [ ] **Editar jogo/mercado não refaz o casamento de evento**
+- [x] **Editar jogo/mercado não refaz o casamento de evento**
   (`src/bet/bet.service.ts:204`); a liquidação usa o placar do jogo antigo.
-- [ ] **Retry do Telegram duplica DMs.** `recordTip` é idempotente, mas o loop de
+- [x] **Retry do Telegram duplica DMs.** `recordTip` é idempotente, mas o loop de
   envio roda de novo (`src/telegram/tip-fanout.service.ts:97`). Pular o fan-out
   quando o insert não foi novo.
-- [ ] **Admin não consegue desativar conta.** `is_active` é checado em todo lugar,
+- [x] **Admin não consegue desativar conta.** `is_active` é checado em todo lugar,
   mas nenhuma rota grava a coluna (`src/admin/dto/admin.dto.ts`).
-- [ ] Menores: `UpdateApostaDto.house` não é coluna (`src/bet/dto/bet.dto.ts:135`);
+- [x] Menores: `UpdateApostaDto.house` não é coluna (`src/bet/dto/bet.dto.ts:135`);
   `GET /house/:id` sem `ParseIntPipe`; username sem `MaxLength` (coluna de 50).
 
 ## 2. Fluxos que travam ou confundem

@@ -119,6 +119,19 @@ export class BetRepository {
       .execute();
   }
 
+  // Edicao que troca o jogo: as pernas antigas sao de outro confronto e nao
+  // podem ficar pra liquidacao. Lista vazia so' apaga.
+  async replaceBetEvents(betId: BetId, events: Omit<NewBetEvent, "betId">[]) {
+    await this.dbWrite.transaction().execute(async (trx) => {
+      await trx.deleteFrom("betEvents").where("betId", "=", betId).execute();
+      if (!events.length) return;
+      await trx
+        .insertInto("betEvents")
+        .values(events.map((event) => ({ ...event, betId })))
+        .execute();
+    });
+  }
+
   async update(betId: BetId, update: UpdateBet, userId: UserId) {
     return this.dbWrite
       .updateTable("bets")
@@ -283,12 +296,23 @@ export class BetRepository {
 
   // Traz tambem resultId/cashoutValue porque o profit e funcao de
   // (resultId, stake, odd, cashoutValue) — o updateBet precisa dos quatro pra
-  // recalcular quando o usuario edita uma aposta ja liquidada.
+  // recalcular quando o usuario edita uma aposta ja liquidada. Jogo, mercado,
+  // esporte e hora sao o que o updateBet compara pra refazer o casamento.
   async findById(betId: BetId) {
     return this.dbRead
       .selectFrom("bets as b")
       .leftJoin("betResults as br", "br.betId", "b.id")
-      .select(["b.id", "b.stake", "b.odd", "b.cashoutValue", "br.resultId"])
+      .select([
+        "b.id",
+        "b.stake",
+        "b.odd",
+        "b.cashoutValue",
+        "br.resultId",
+        "b.game",
+        "b.market",
+        "b.sport",
+        "b.betTime",
+      ])
       .where("b.id", "=", betId)
       .where("b.deletedAt", "is", null)
       .executeTakeFirst();

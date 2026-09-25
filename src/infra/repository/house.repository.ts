@@ -94,6 +94,17 @@ export class HouseRepository {
         eb.fn.count('b.id').as('totalBets'),
         eb.fn<number>('sum', [eb.case().when('br.resultId', 'in', SETTLED_RESULT_IDS as any).then(1).else(0).end()]).as('settledBets'),
         eb.fn<number>('coalesce', [eb.fn.sum<number>('b.stake'), sql.lit(0)]).as('totalStake'),
+        // Base do ROI, igual ao ranking: so' o que ja' liquidou.
+        eb.fn<number>('coalesce', [
+          eb.fn.sum<number>(eb.case().when('br.resultId', 'in', SETTLED_RESULT_IDS as any).then(eb.ref('b.stake')).else(0).end()),
+          sql.lit(0),
+        ]).as('settledStake'),
+        // A casa ja' tirou do saldo o que esta' em jogo; aqui pendente tem
+        // lucro null e o stake continua contando. E' a diferenca entre os dois.
+        eb.fn<number>('coalesce', [
+          eb.fn.sum<number>(eb.case().when('br.resultId', '=', ResultIdEnum.PENDING as any).then(eb.ref('b.stake')).else(0).end()),
+          sql.lit(0),
+        ]).as('openStake'),
         eb.fn<number>('coalesce', [eb.fn.sum<number>('b.profit'), sql.lit(0)]).as('totalBetProfit'),
         eb.fn<number>('coalesce', [
           eb.fn.sum<number>(eb.case().when('br.resultId', '=', ResultIdEnum.PENDING as any).then(1).else(0).end()),
@@ -143,7 +154,8 @@ export class HouseRepository {
       .selectFrom('bettingHouses as bh')
       .leftJoin(this.betsAggregate(userId).as('ba'), 'ba.houseId', 'bh.id')
       .leftJoin(this.transactionsAggregate(userId).as('ta'), 'ta.houseId', 'bh.id')
-      .where('bh.isActive', '=', true)
+      // Sem filtro de isActive: desativar a casa tira ela das listas de
+      // selecao, nao o dinheiro que o usuario tem la'.
       .where((eb) => eb.or([
         eb('ba.houseId', 'is not', null),
         eb('ta.houseId', 'is not', null),
@@ -157,6 +169,8 @@ export class HouseRepository {
         eb.fn.coalesce('ba.totalBets', eb.lit(0)).as('totalBets'),
         eb.fn.coalesce('ba.settledBets', eb.lit(0)).as('settledBets'),
         eb.fn.coalesce('ba.totalStake', eb.lit(0)).as('totalStake'),
+        eb.fn.coalesce('ba.settledStake', eb.lit(0)).as('settledStake'),
+        eb.fn.coalesce('ba.openStake', eb.lit(0)).as('openStake'),
         eb.fn.coalesce('ba.totalBetProfit', eb.lit(0)).as('totalBetProfit'),
         eb.fn.coalesce('ba.pendingBets', eb.lit(0)).as('pendingBets'),
         eb.fn.coalesce('ba.wonBets', eb.lit(0)).as('wonBets'),
@@ -179,7 +193,6 @@ export class HouseRepository {
         join.onRef('bh.id', '=', 'b.houseId').on('b.userId', '=', userId).on('b.deletedAt', 'is', null),
       )
       .innerJoin('betResults as br', 'br.betId', 'b.id')
-      .where('bh.isActive', '=', true)
       .where('br.resultId', 'in', SETTLED_RESULT_IDS as any)
       .$if(!!startDate, (qb) => qb.where(betDate, '>=', startOfDay(startDate!)))
       .$if(!!endDate, (qb) => qb.where(betDate, '<', endOfDay(endDate!)))

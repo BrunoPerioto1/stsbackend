@@ -188,9 +188,11 @@ export class UsersService {
     return this.usersRepository.updateUserStake(userId as UserId, stake);
   }
 
-  async getUserStake(userId: number): Promise<number> {
+  // null = usuário ainda não definiu a banca (/stake ou Perfil). Sem banca não
+  // há recomendação: um valor padrão virava stake gravada sem ninguém escolher.
+  async getUserStake(userId: number): Promise<number | null> {
     const stake = await this.usersRepository.getUserStake(userId as UserId);
-    return stake ?? 2000; // Retorna 2000 como valor padrão se não encontrar
+    return stake != null && Number(stake) > 0 ? Number(stake) : null;
   }
 
   async getUsersForTipsFanout() {

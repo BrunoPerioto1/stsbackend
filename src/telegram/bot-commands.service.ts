@@ -3,6 +3,7 @@ import { UsersService } from '../users/users.service';
 import { PendentesService } from './pendentes.service';
 import { UNLINKED_INSTRUCTIONS } from './messages.const';
 import { accessBlock, billingInfo, billingPayLine, pixKeyboard } from '../users/access';
+import { normalizeBetNumber } from '../bet/bet-normalization';
 
 // Os comandos "simples" do bot — cada um só conversa com o usuário que
 // chamou, sem envolver fan-out de tips nem callback_query.
@@ -105,8 +106,10 @@ export class BotCommandsService {
       return;
     }
 
-    const value = Number(args[1].replace(/[.,]/g, ''));
-    if (!Number.isFinite(value) || value <= 0) {
+    // Banca é dinheiro: "1.500" é mil e quinhentos, "1500,50" tem centavos.
+    // O prefixo R$ é o que faz o normalizeBetNumber ler o ponto como milhar.
+    const value = normalizeBetNumber(`R$ ${args[1].replace(/^R\$/i, '')}`);
+    if (value === null || value <= 0) {
       await ctx.reply('❌ Valor inválido. Informe um número maior que zero.');
       return;
     }

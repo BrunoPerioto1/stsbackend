@@ -185,9 +185,14 @@ export class AdminService {
     if ((dto.extendDays || dto.accessUntil !== undefined) && requesterId === targetId) {
       throw new BadRequestException('Sua conta não tem vencimento');
     }
+    // Idem: desativar a própria conta tranca o admin do lado de fora na hora.
+    if (dto.isActive === false && requesterId === targetId) {
+      throw new BadRequestException('Você não pode desativar a própria conta');
+    }
 
     const fields: UpdateUser = {};
     if (dto.roleId !== undefined) fields.roleId = dto.roleId as RoleId;
+    if (dto.isActive !== undefined) fields.isActive = dto.isActive;
     if (dto.unlock) {
       fields.failedLoginAttempts = 0;
       fields.lockedUntil = null;
@@ -282,7 +287,8 @@ export class AdminService {
   ): boolean {
     if (!after.telegramUserId || !hasAccess(after)) return false;
     if (dto.tipsGroup === 'invite') return true;
-    const accessChanged = dto.extendDays !== undefined || dto.accessUntil !== undefined;
+    const accessChanged =
+      dto.extendDays !== undefined || dto.accessUntil !== undefined || dto.isActive !== undefined;
     return accessChanged && (!!target.tipsGroupRemovedAt || !hasAccess(target));
   }
 }

@@ -21,4 +21,15 @@ describe('house balances', () => {
       totalWithdrawal: 10, consolidatedProfit: -50, negativeHouses: 1, negativeAmount: -55,
       totalHousesUsed: 2 });
   });
+
+  it('divide o ROI só pelo stake liquidado e expõe o stake em aberto', async () => {
+    const findAllHousesBalance = jest.fn().mockResolvedValue([
+      { houseId: 3, houseName: 'Aberta', totalBets: 3, settledBets: 1, totalStake: '300',
+        settledStake: '100', openStake: '150', totalBetProfit: '50', pendingBets: 1, wonBets: 1, lostBets: 0,
+        totalDeposit: '500', totalWithdrawalRaw: '0', totalAdjustment: '0', lastMovementAt: null },
+    ]);
+    const service = new HouseService({ findAllHousesBalance } as unknown as HouseRepository);
+    const [house] = await service.getAllHousesBalanceWithFilter({}, 7);
+    expect(house).toMatchObject({ roi: 0.5, settledStake: 100, openStake: 150, realHouseBalance: 550 });
+  });
 });

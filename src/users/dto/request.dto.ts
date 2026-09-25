@@ -10,13 +10,16 @@ import {
   IsOptional,
   IsString,
   Max,
+  MaxLength,
   Min,
   MinLength,
 } from 'class-validator';
 
 export class CreateUserRequestDTO {
-  @ApiProperty()
+  // VARCHAR(50) no banco: acima disso o insert estourava com 500.
+  @ApiProperty({ maxLength: 50 })
   @IsString()
+  @MaxLength(50)
   username!: string;
 
   @ApiProperty()

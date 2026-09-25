@@ -25,6 +25,7 @@ export class HouseService {
       const totalWithdrawal = Math.abs(Number(row.totalWithdrawalRaw));
       const totalAdjustment = Number(row.totalAdjustment);
       const totalBetProfit = Number(row.totalBetProfit);
+      const settledStake = Number(row.settledStake);
       const netTransactions = totalDeposit - totalWithdrawal + totalAdjustment;
       const realHouseBalance = netTransactions + totalBetProfit;
 
@@ -35,6 +36,11 @@ export class HouseService {
         totalBets: Number(row.totalBets),
         settledBets: Number(row.settledBets),
         totalStake: Number(row.totalStake),
+        settledStake,
+        // Stake das pendentes: o saldo que a casa mostra e' realHouseBalance
+        // menos isto. O "Saldo real" compara contra essa diferenca.
+        openStake: Number(row.openStake),
+        roi: settledStake > 0 ? totalBetProfit / settledStake : 0,
         totalBetProfit,
         totalDeposit,
         totalWithdrawal,

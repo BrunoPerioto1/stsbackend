@@ -48,6 +48,14 @@ export class UpdateAdminUserDTO {
 
   @ApiProperty({
     required: false,
+    description: 'false desativa a conta (sem login, sem API, sem tips); true reativa',
+  })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
+  @ApiProperty({
+    required: false,
     description: 'Soma dias ao acesso (a partir de hoje se já venceu)',
     example: 30,
   })

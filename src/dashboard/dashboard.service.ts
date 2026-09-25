@@ -37,6 +37,7 @@ export class DashboardService {
     const wonBets     = Number(raw.wonBets);
     const settledBets = Number(raw.settledBets ?? 0);
     const totalStaked = Number(raw.totalStaked);
+    const settledStake = Number(raw.settledStake ?? 0);
     const totalProfit = Number(raw.totalProfit);
 
     return {
@@ -45,6 +46,7 @@ export class DashboardService {
       wonBets,
       settledBets,
       totalStaked,
+      settledStake,
       totalProfit,
       lostBets:     Number(raw.lostBets),
       pendingBets:  Number(raw.pendingBets),
@@ -54,7 +56,8 @@ export class DashboardService {
       // Sobre ganhas + perdidas: settledBets agora inclui CASHOUT, que nao e'
       // acerto nem erro.
       hitRate: wonBets + Number(raw.lostBets) > 0 ? wonBets / (wonBets + Number(raw.lostBets)) : 0,
-      roi:     totalStaked > 0 ? totalProfit / totalStaked : 0,
+      // Mesma base do ranking de casas: lucro / stake liquidado.
+      roi:     settledStake > 0 ? totalProfit / settledStake : 0,
     };
   }
 

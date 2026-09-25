@@ -20,7 +20,8 @@ export class TipsRepository {
 
   // Idempotente por (chatId, messageId): o Telegram pode reentregar o mesmo
   // update de webhook, e handleTipsMessage não pode acabar criando duas tips
-  // pra mesma mensagem do grupo.
+  // pra mesma mensagem do grupo. `created` diz se esta chamada inseriu — a
+  // reentrega não pode refazer o fan-out e mandar a DM de novo.
   async create(tip: NewTip) {
     const inserted = await this.dbWrite
       .insertInto('tips')
@@ -29,14 +30,17 @@ export class TipsRepository {
       .returningAll()
       .executeTakeFirst();
 
-    if (inserted) return inserted;
+    if (inserted) return { tip: inserted, created: true };
 
-    return this.dbRead
+    // Writer: a outra entrega pode ter acabado de inserir, e a réplica ainda
+    // não ter a linha.
+    const existing = await this.dbWrite
       .selectFrom('tips')
       .selectAll()
       .where('chatId', '=', tip.chatId)
       .where('messageId', '=', tip.messageId)
       .executeTakeFirstOrThrow();
+    return { tip: existing, created: false };
   }
 
   async findById(tipId: TipId) {

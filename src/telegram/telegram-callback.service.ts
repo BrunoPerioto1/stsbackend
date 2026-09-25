@@ -5,7 +5,7 @@ import { TipsService } from '../tips/tips.service';
 import { BetTextService } from './bet-text.service';
 import { TipFanoutService } from './tip-fanout.service';
 import { PendentesService } from './pendentes.service';
-import { BetService } from '../bet/bet.service';
+import { BetService, TipAlreadyPlanilhadaException } from '../bet/bet.service';
 import { EDIT_PROMPT_INSTRUCTIONS } from './messages.const';
 import { escapeHtml } from './utils/tip-text.util';
 import {
@@ -178,6 +178,11 @@ export class TelegramCallbackService {
           await ctx.editMessageText(novoTexto, { reply_markup: doneKeyboard });
         await ctx.answerCbQuery('✅ Planilhado!');
       } catch (err) {
+        // O outro clique (em outra instância) já gravou e vai marcar o card.
+        if (err instanceof TipAlreadyPlanilhadaException) {
+          await ctx.answerCbQuery('✅ Essa aposta já está planilhada.');
+          return;
+        }
         console.error('❌ Erro ao planilhar via callback:', err);
         await ctx.answerCbQuery(
           '❌ Erro ao planilhar. Veja o chat para detalhes.',
@@ -450,9 +455,11 @@ export class TelegramCallbackService {
               tipId,
               user.id,
             );
+            // Texto da entrega, não o do canal: é nele que está a
+            // "🎯 Recomendação de aposta" que o usuário viu na DM.
             await this.betTextService.processBetText(
               ctx,
-              tip.text,
+              delivery?.text ?? tip.text,
               delivery?.messageId ?? msg.message_id,
               tipId,
             );
@@ -464,6 +471,11 @@ export class TelegramCallbackService {
             await ctx.answerCbQuery(`✅ ${label} planilhada!`);
             undo = { tipId, kind: 'planilhar', label };
           } catch (err) {
+            if (err instanceof TipAlreadyPlanilhadaException) {
+              await ctx.answerCbQuery(`✅ ${label} já está planilhada.`);
+              await this.refreshList(ctx, user, page);
+              return;
+            }
             // processBetText ja respondeu no chat com o motivo; o toast so
             // aponta pra la, mas o log guarda a causa.
             console.error('❌ Erro ao planilhar do /pendentes:', err);

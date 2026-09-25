@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { TipsRepository } from '../infra/repository/tips.repository';
 import { UsersService } from '../users/users.service';
-import { BetService } from '../bet/bet.service';
+import { BetService, TipAlreadyPlanilhadaException } from '../bet/bet.service';
 import { GrokService } from '../telegram/grok.service';
 import { HouseService } from '../house/house.service';
 import { matchHouseIdByName } from '../common/utils/house-match.util';
@@ -98,7 +98,7 @@ export class TipsService {
     const stake = overrides.stake ?? (await this.resolveStake(tip, userId));
     if (stake === null)
       throw new BadRequestException(
-        'Não consegui calcular a stake dessa tip. Informe o valor em Editar.',
+        'Não consegui calcular a stake dessa tip. Informe o valor em Editar ou defina sua banca no Perfil.',
       );
 
     const odd = overrides.odd ?? parsed.odd;
@@ -106,27 +106,40 @@ export class TipsService {
     if (!game || !market || !sport)
       throw new BadRequestException('Dados da tip incompletos.');
 
-    const bet = await this.betService.createBet(
-      {
-        userId,
-        game,
-        market,
-        sport,
-        odd,
-        houseId,
-        stake: Number(stake.toFixed(2)),
-      } as any,
-      tipId,
-      { source: 'app', sourceType: 'manual' },
-    );
-
-    return { bet, alreadyExisted: false };
+    try {
+      const bet = await this.betService.createBet(
+        {
+          userId,
+          game,
+          market,
+          sport,
+          odd,
+          houseId,
+          stake: Number(stake.toFixed(2)),
+        } as any,
+        tipId,
+        { source: 'app', sourceType: 'manual' },
+      );
+      return { bet, alreadyExisted: false };
+    } catch (error) {
+      // Clique duplo: os dois passaram pela consulta acima antes de qualquer
+      // insert, e o índice único barrou o segundo.
+      if (!(error instanceof TipAlreadyPlanilhadaException)) throw error;
+      const bet = await this.betService.findBetByTip(tipId, userId);
+      if (!bet) throw error;
+      return { bet, alreadyExisted: true };
+    }
   }
 
+  // A entrega manda, igual à lista: é a "🎯 Recomendação de aposta" que o
+  // usuário viu na DM. Sem entrega, refaz a conta com a banca de agora.
   private async resolveStake(
-    tip: { text: string; percent: number | null },
+    tip: { id: number; text: string; percent: number | null },
     userId: number,
   ): Promise<number | null> {
+    const delivery = await this.findDelivery(tip.id, userId);
+    const delivered = extractRecommendedStakeFromText(delivery?.text ?? '');
+    if (delivered !== null) return delivered;
     const banca = await this.usersService.getUserStake(userId);
     return computeStake(tip.percent, tip.text, banca);
   }
@@ -355,12 +368,13 @@ export class TipsService {
 
 // Mesma conta do processBetText do bot: a tip carrega só a % da banca, o
 // valor absoluto sai dela, e o 🚦 do texto corta por cima quando existe.
+// Sem banca definida não há stake: a tela pede o valor em Editar.
 function computeStake(
   percent: number | null,
   text: string,
-  banca: number,
+  banca: number | null,
 ): number | null {
-  if (percent === null) return null;
+  if (percent === null || banca === null) return null;
   let stake = (Number(percent) / 100) * banca;
   const limit = extractLimitFromText(text);
   if (limit !== null) stake = Math.min(stake, limit);

@@ -7,6 +7,7 @@ import {
   extractLimitFromText,
   extractMarketFromText,
   extractOddFromText,
+  extractRecommendedStakeFromText,
 } from '../telegram/utils/tip-extractors.util';
 import {
   findBetMatches,
@@ -24,6 +25,7 @@ interface TipSummaryRow {
   createdAt: string | Date;
   betId: number | null;
   dismissalId: number | null;
+  deliveryText?: string | null;
 }
 
 // Pendencias do usuario que ainda podem ser a aposta do bilhete. So I/O — o
@@ -53,11 +55,16 @@ export class PendingMatchService {
     return (rows as unknown as TipSummaryRow[])
       .filter((row) => row.betId == null && row.dismissalId == null)
       .map((row) => {
-        // Mesma conta do processBetText: a tip so tem a % da banca, a stake
-        // absoluta vem dai (e do limite, quando ele corta).
+        // Mesma regra do processBetText: vale a stake que a entrega mostrou;
+        // sem entrega, % da banca (cortada pelo limite). Sem banca, stake
+        // desconhecida — o scorer compara o resto.
         const percent = row.percent != null ? Number(row.percent) : null;
         const limit = extractLimitFromText(row.text);
-        let stake = percent !== null ? (percent / 100) * userStake : NaN;
+        let stake =
+          extractRecommendedStakeFromText(row.deliveryText ?? '') ??
+          (percent !== null && userStake !== null
+            ? (percent / 100) * userStake
+            : NaN);
         if (limit !== null && Number.isFinite(stake))
           stake = Math.min(stake, limit);
         return {

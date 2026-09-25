@@ -1,4 +1,5 @@
 import { TipsService } from './tips.service';
+import { TipAlreadyPlanilhadaException } from '../bet/bet.service';
 import { DIAS_ANTES_RETIDOS } from '../infra/repository/sport-event.repository';
 import { matchHouseIdByName } from '../common/utils/house-match.util';
 
@@ -179,5 +180,52 @@ describe('tips: janela de busca de eventos', () => {
       expect.any(Date),
       DIAS_ANTES_RETIDOS,
     );
+  });
+});
+
+describe('tips: Planilhar do site', () => {
+  const TEXT = ['🏠 Bet365', '🆚 Flamengo x Vasco', '⚽️ Futebol', '📌 Over 2.5', '🏷 1.90', '🛑 1.5%'].join(NL);
+
+  function setup(deliveryText: string | null) {
+    const tipsRepository = {
+      findById: jest.fn().mockResolvedValue({ id: 4, text: TEXT, percent: '1.5' }),
+      findDelivery: jest.fn().mockResolvedValue(deliveryText ? { text: deliveryText } : undefined),
+    };
+    const usersService = { getUserStake: jest.fn().mockResolvedValue(5000) };
+    const betService = {
+      findBetByTip: jest.fn().mockResolvedValue(undefined),
+      createBet: jest.fn().mockImplementation((bet: object) => Promise.resolve({ id: 70, ...bet })),
+    };
+    const grokService = { resolveHouseId: jest.fn().mockResolvedValue(3) };
+    const service = new TipsService(
+      tipsRepository as any,
+      usersService as any,
+      betService as any,
+      grokService as any,
+      {} as any,
+      {} as any,
+    );
+    return { service, betService, usersService };
+  }
+
+  it('usa a stake que a entrega mostrou, não a banca de agora', async () => {
+    const { service, betService, usersService } = setup(`${TEXT}${NL}${NL}🎯 Recomendação de aposta: R$ 12,34`);
+    await service.planilharTip(4, 1);
+    expect(betService.createBet.mock.calls[0][0]).toMatchObject({ stake: 12.34 });
+    expect(usersService.getUserStake).not.toHaveBeenCalled();
+  });
+
+  it('sem banca e sem entrega, pede o valor em vez de inventar', async () => {
+    const { service, betService, usersService } = setup(null);
+    usersService.getUserStake.mockResolvedValue(null);
+    await expect(service.planilharTip(4, 1)).rejects.toThrow('Não consegui calcular a stake');
+    expect(betService.createBet).not.toHaveBeenCalled();
+  });
+
+  it('clique duplo barrado pelo índice devolve a aposta que já existe', async () => {
+    const { service, betService } = setup(null);
+    betService.createBet.mockRejectedValue(new TipAlreadyPlanilhadaException());
+    betService.findBetByTip.mockResolvedValueOnce(undefined).mockResolvedValueOnce({ id: 69 });
+    await expect(service.planilharTip(4, 1)).resolves.toEqual({ bet: { id: 69 }, alreadyExisted: true });
   });
 });

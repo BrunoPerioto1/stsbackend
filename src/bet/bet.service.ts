@@ -10,6 +10,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
   InternalServerErrorException,
 } from '@nestjs/common';
 import { ResultIdEnum } from './dto/result-id.enum';
@@ -28,6 +29,19 @@ import type { BetId, NewBet, UpdateBet } from '../db_types/Bet';
 import type { BettingHouseId } from '../db_types/BettingHouse';
 import type { UserId } from '../db_types/Users';
 import type { TipId } from '../db_types/Tips';
+
+// Segunda aposta viva pra mesma (usuario, tip): o indice uq_bets_user_tip
+// recusou. Quem chama trata como "ja planilhada", nao como erro.
+export class TipAlreadyPlanilhadaException extends ConflictException {
+  constructor() {
+    super('Essa tip já foi planilhada.');
+  }
+}
+
+function isTipUniqueViolation(error: unknown): boolean {
+  const pg = error as { code?: string; constraint?: string } | null;
+  return pg?.code === '23505' && pg.constraint === 'uq_bets_user_tip';
+}
 
 @Injectable()
 export class BetService {
@@ -172,7 +186,13 @@ export class BetService {
       console.info(
         '[DUPLICATE_DETECTED] reason=same_event_market_odd_stake_recent',
       );
-    const result = await this.betRepository.create(newBet);
+    let result: Awaited<ReturnType<BetRepository['create']>>;
+    try {
+      result = await this.betRepository.create(newBet);
+    } catch (error) {
+      if (isTipUniqueViolation(error)) throw new TipAlreadyPlanilhadaException();
+      throw error;
+    }
 
     if (!result) {
       throw new InternalServerErrorException();
@@ -203,15 +223,44 @@ export class BetService {
     // valor), entao a edicao so pode mexer em stake/odd.
     const touchesProfitInput =
       updateData.stake !== undefined || updateData.odd !== undefined;
+    const touchesEventInput =
+      updateData.game !== undefined ||
+      updateData.market !== undefined ||
+      updateData.sport !== undefined;
 
     const patch: UpdateBet = { ...(updateData as UpdateBet) };
+    let pernas: Omit<NewBetEvent, 'betId'>[] | null = null;
 
-    if (touchesProfitInput) {
+    if (touchesProfitInput || touchesEventInput) {
       const current = await this.betRepository.findById(betId as BetId);
       if (!current) {
         throw new NotFoundException(`Bet with ID ${betId} not found`);
       }
-      if (current.resultId != null) {
+
+      // Jogo/mercado/esporte novos: o evento casado na criacao e' de outro
+      // jogo e a liquidacao usaria o placar dele. Refaz o casamento so' quando
+      // o texto mudou de fato — o front manda os tres em toda edicao, e depois
+      // que sport_events apaga o jogo (2 dias) refazer a toa perderia um
+      // evento certo. Sem match novo o evento fica vazio, nunca o antigo.
+      const game = updateData.game ?? current.game;
+      const market = updateData.market ?? current.market;
+      const sport = updateData.sport ?? current.sport;
+      const eventInputChanged =
+        game.trim() !== current.game.trim() ||
+        market.trim() !== current.market.trim() ||
+        sport.trim() !== current.sport.trim();
+      if (eventInputChanged) {
+        const resolved = await this.resolveEvent(
+          game,
+          market,
+          sport,
+          updateData.betTime ? new Date(updateData.betTime) : current.betTime,
+        );
+        Object.assign(patch, resolved.evento);
+        pernas = resolved.pernas;
+      }
+
+      if (touchesProfitInput && current.resultId != null) {
         const stake = updateData.stake ?? Number(current.stake);
         const odd = updateData.odd ?? Number(current.odd);
         const cashoutValue =
@@ -235,6 +284,16 @@ export class BetService {
     );
     if (!updated) {
       throw new NotFoundException(`Bet with ID ${betId} not found`);
+    }
+
+    // Consultivo como na criacao: falha aqui so' deixa a multipla sem
+    // liquidacao automatica por perna.
+    if (pernas) {
+      try {
+        await this.betRepository.replaceBetEvents(updated.id, pernas);
+      } catch (error) {
+        console.warn('[EVENT_MATCH] result=legs_error', (error as Error).message);
+      }
     }
     return updated;
   }

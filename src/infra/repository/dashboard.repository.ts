@@ -187,6 +187,12 @@ async findDashboardMetrics(filters: FilterDashboard) {
       eb.fn<number>("coalesce", [eb.fn.avg<number>("b.stake"), sql.lit(0)]).as("averageStake"),
       eb.fn<number>("coalesce", [eb.fn.avg<number>("b.odd"), sql.lit(0)]).as("averageOdd"),
       eb.fn<number>("coalesce", [eb.fn.sum<number>("b.stake"), sql.lit(0)]).as("totalStaked"),
+      // Base do ROI: so' o que ja' liquidou. Pendente ainda nao tem lucro e
+      // cancelada devolve a stake — dividir por elas encolhia o ROI.
+      eb.fn<number>("coalesce", [
+        eb.fn.sum<number>(eb.case().when("br.resultId", "in", SETTLED_RESULT_IDS as any).then(eb.ref("b.stake")).else(0).end()),
+        sql.lit(0),
+      ]).as("settledStake"),
       eb.fn<number>("coalesce", [eb.fn.sum<number>("b.profit"), sql.lit(0)]).as("totalProfit"),
     ])
     .executeTakeFirst();

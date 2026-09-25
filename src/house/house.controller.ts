@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, Header } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, ParseIntPipe, Query, Header } from '@nestjs/common';
 import {
   ApiOperation,
   ApiResponse,
@@ -81,8 +81,8 @@ export class HouseController {
   @ApiOperation({ summary: 'Busca uma casa por ID' })
   @ApiResponse({ status: 200, description: 'Casa encontrada com sucesso.' })
   @ApiNotFoundResponse({ description: 'Casa não encontrada.' })
-  findHouseById(@Param('id') id: string) {
-    return this.houseService.findHouseById(+id);
+  findHouseById(@Param('id', ParseIntPipe) id: number) {
+    return this.houseService.findHouseById(id);
   }
 
   // @Get(':id/balance')

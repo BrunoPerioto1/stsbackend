@@ -125,16 +125,6 @@ export class UpdateApostaDto {
   odd?: number;
 
   @ApiProperty({
-    description: 'Nome da casa de apostas',
-    example: 'Bet365',
-    required: false
-  })
-  @IsOptional()
-  @IsString()
-  @IsNotEmpty()
-  house?: string;
-
-  @ApiProperty({
     description: 'ID da casa de apostas',
     example: 1,
     required: false

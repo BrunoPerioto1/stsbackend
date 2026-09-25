@@ -1,6 +1,6 @@
 import { BetTextService } from './bet-text.service';
 import { TelegramCallbackService } from './telegram-callback.service';
-import { BetService } from '../bet/bet.service';
+import { BetService, TipAlreadyPlanilhadaException } from '../bet/bet.service';
 import { BetRepository } from '../infra/repository/bet.repository';
 import { SportEventRepository } from '../infra/repository/sport-event.repository';
 import { buildBetPreview } from './utils/bet-preview.util';
@@ -26,16 +26,17 @@ describe('Telegram ingestion through existing house resolver', () => {
         stake: 'R$ 50,00',
       }),
     };
+    const users = {
+      findByTelegramUserId: jest.fn().mockResolvedValue({ id: 10 }),
+      getUserStake: jest.fn().mockResolvedValue(1000),
+    };
     type Dependencies = ConstructorParameters<typeof BetTextService>;
     const service = new BetTextService(
       grok as unknown as Dependencies[0],
       new BetService(repository as unknown as BetRepository, {
         findCandidates: jest.fn().mockResolvedValue([]),
       } as unknown as SportEventRepository),
-      {
-        findByTelegramUserId: jest.fn().mockResolvedValue({ id: 10 }),
-        getUserStake: jest.fn().mockResolvedValue(1000),
-      } as unknown as Dependencies[2],
+      users as unknown as Dependencies[2],
       {
         getAllHouses: jest.fn().mockResolvedValue([{ id: 7, name: 'Betfair' }]),
       } as unknown as Dependencies[3],
@@ -55,7 +56,7 @@ describe('Telegram ingestion through existing house resolver', () => {
       answerCbQuery: jest.fn(),
       editMessageText: jest.fn(),
     };
-    return { service, grok, repository, ctx };
+    return { service, grok, repository, ctx, users };
   }
   it('uses resolved house ID instead of AI-provided ID for free text', async () => {
     const { service, grok, repository, ctx } = setup();
@@ -156,5 +157,60 @@ describe('Telegram ingestion through existing house resolver', () => {
       'CASA_INVALIDA',
     );
     expect(repository.create).not.toHaveBeenCalled();
+  });
+
+  const TIP = [
+    '🏠 Betfair',
+    '🆚 Flamengo x Vasco',
+    '⚽️ Futebol',
+    '📌 Over 2.5',
+    '🏷 1.90',
+    '🛑 1.5%',
+  ].join('\n');
+
+  it('planilha com a stake da recomendação do card, não com a banca de agora', async () => {
+    const { service, repository, ctx, users } = setup();
+    // Banca mudou depois da entrega: 1,5% de 5000 seria 75.
+    users.getUserStake.mockResolvedValue(5000);
+    await service.processBetText(
+      ctx,
+      `${TIP}\n\n🎯 Recomendação de aposta: R$ 12,34\n💰 Lucro potencial: R$ 11,11`,
+      undefined,
+      99,
+    );
+    expect(repository.create).toHaveBeenCalledWith(
+      expect.objectContaining({ stake: 12.34, tipId: 99 }),
+    );
+  });
+
+  it('sem recomendação no texto, calcula pela banca', async () => {
+    const { service, repository, ctx } = setup();
+    await service.processBetText(ctx, TIP);
+    expect(repository.create).toHaveBeenCalledWith(
+      expect.objectContaining({ stake: 15 }),
+    );
+  });
+
+  it('sem banca definida, pede o /stake em vez de inventar um valor', async () => {
+    const { service, repository, ctx, users } = setup();
+    users.getUserStake.mockResolvedValue(null);
+    await expect(service.processBetText(ctx, TIP)).rejects.toThrow('SEM_BANCA');
+    expect(repository.create).not.toHaveBeenCalled();
+    const [reply] = ctx.reply.mock.calls.at(-1) as [string];
+    expect(reply).toContain('/stake');
+  });
+
+  it('segunda aposta da mesma tip vira "já planilhada", sem mensagem de erro', async () => {
+    const { service, repository, ctx } = setup();
+    repository.create.mockRejectedValue(
+      Object.assign(new Error('duplicate key'), {
+        code: '23505',
+        constraint: 'uq_bets_user_tip',
+      }),
+    );
+    await expect(
+      service.processBetText(ctx, TIP, undefined, 99),
+    ).rejects.toBeInstanceOf(TipAlreadyPlanilhadaException);
+    expect(ctx.reply).not.toHaveBeenCalled();
   });
 });

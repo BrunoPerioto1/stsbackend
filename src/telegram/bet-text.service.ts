@@ -5,7 +5,7 @@ import {
 } from '../bet/bet-normalization';
 import { Injectable } from '@nestjs/common';
 import { GrokService } from './grok.service';
-import { BetService } from '../bet/bet.service';
+import { BetService, TipAlreadyPlanilhadaException } from '../bet/bet.service';
 import { CreateBetDto } from '../bet/dto/bet.dto';
 import { UsersService } from '../users/users.service';
 import { HouseService } from '../house/house.service';
@@ -21,6 +21,7 @@ import {
   extractMarketFromText,
   extractOddFromText,
   extractPercent,
+  extractRecommendedStakeFromText,
   extractStakeFromText,
   parseBetLocal,
 } from './utils/tip-extractors.util';
@@ -94,16 +95,25 @@ export class BetTextService {
       const user = await this.usersService.findByTelegramUserId(ctx.from.id);
       if (!user) throw new Error('UNLINKED');
 
-      const userStake = await this.usersService.getUserStake(user.id);
-      let stake =
-        percent !== null
-          ? (percent / 100) * userStake
-          : (normalized.stake ?? NaN);
+      // O card entregue já traz a stake calculada na hora da entrega
+      // ("🎯 Recomendação de aposta"): é ela que o usuário viu e vai apostar.
+      // Refazer banca × % aqui divergia quando a banca mudou nesse meio tempo.
+      // A conta só roda pra texto sem essa linha (tip colada à mão, card antigo).
+      let stake = extractRecommendedStakeFromText(userMessage) ?? NaN;
+      let semBanca = false;
+      if (!Number.isFinite(stake) && percent !== null) {
+        const userStake = await this.usersService.getUserStake(user.id);
+        if (userStake === null) semBanca = true;
+        else stake = (percent / 100) * userStake;
+      } else if (!Number.isFinite(stake)) {
+        stake = normalized.stake ?? NaN;
+      }
 
       // Card vindo de print: não tem % pra converter pela banca, o valor
       // apostado já está no texto ("💰 Stake: R$ 14,83").
       if (!Number.isFinite(stake))
         stake = extractStakeFromText(userMessage) ?? NaN;
+      if (!Number.isFinite(stake) && semBanca) throw new Error('SEM_BANCA');
 
       const limit = extractLimitFromText(userMessage);
       if (limit !== null) stake = Math.min(stake, limit);
@@ -189,12 +199,20 @@ export class BetTextService {
           : undefined,
       );
     } catch (err) {
+      // Clique duplo que passou pelo lock em memória (outra instância): o
+      // banco recusou a segunda aposta. Quem chamou responde "já planilhada".
+      if (err instanceof TipAlreadyPlanilhadaException) throw err;
       console.error('[VALIDATION_FAILED] stage=telegram_bet', err);
       const extra = replyToMessageId
         ? { reply_parameters: { message_id: replyToMessageId } }
         : undefined;
       if ((err as Error).message === 'UNLINKED') {
         await ctx.reply(UNLINKED_INSTRUCTIONS, extra);
+      } else if ((err as Error).message === 'SEM_BANCA') {
+        await ctx.reply(
+          '❌ Você ainda não definiu sua banca, então não dá pra calcular a stake dessa tip.\nUse /stake VALOR (ex.: /stake 2000) e clique em Planilhar de novo.',
+          extra,
+        );
       } else if ((err as Error).message === 'CASA_INVALIDA') {
         await ctx.reply(
           '❌ Erro ao ler a casa de aposta. Por favor, remande a aposta aqui no chat trocando a casa por uma parecida.',
@@ -571,6 +589,43 @@ export class BetTextService {
     }
   }
 
+  // O Planilhar grava o "🎯 Recomendação de aposta" do card, então o card tem
+  // que acompanhar a edição. Limite novo refaz banca × % cortada pelo limite
+  // (subir o limite pode liberar mais stake); só a odd mudando mantém a stake
+  // e refaz o lucro potencial. Card sem 🎯 (sem banca, AVISO) fica como está.
+  private async refreshRecommendation(
+    ctx: any,
+    text: string,
+    limitChanged: boolean,
+  ): Promise<string> {
+    let stake = extractRecommendedStakeFromText(text);
+    if (stake === null) return text;
+
+    const percent = extractPercent(text);
+    if (limitChanged && percent !== null) {
+      const user = await this.usersService.findByTelegramUserId(ctx.from.id);
+      const banca = user
+        ? await this.usersService.getUserStake(user.id)
+        : null;
+      if (banca !== null) stake = (percent / 100) * banca;
+    }
+    const limit = extractLimitFromText(text);
+    if (limit !== null) stake = Math.min(stake, limit);
+
+    const money = (value: number) => value.toFixed(2).replace('.', ',');
+    let out = text.replace(
+      /^(🎯\s*Recomendação de aposta:\s*R?\$?\s*)[\d.,]+/m,
+      `$1${money(stake)}`,
+    );
+    const odd = extractOddFromText(out);
+    if (odd !== null)
+      out = out.replace(
+        /^(💰\s*Lucro potencial:\s*R?\$?\s*)[\d.,]+/m,
+        `$1${money(stake * odd - stake)}`,
+      );
+    return out;
+  }
+
   // Resposta (reply) a um prompt de "✏️ Editar": extrai a odd/limite novos e
   // o texto original (embutido no próprio prompt) e edita só essa mensagem.
   async handleEditReply(
@@ -650,6 +705,13 @@ export class BetTextService {
     }
     if (novaCasa) {
       novoTexto = novoTexto.replace(/^🏠\s*.*$/m, `🏠 ${novaCasa}`);
+    }
+    if (novaOdd !== null || novoLimite !== null) {
+      novoTexto = await this.refreshRecommendation(
+        ctx,
+        novoTexto,
+        extractLimitFromText(novoTexto) !== extractLimitFromText(originalText),
+      );
     }
 
     try {

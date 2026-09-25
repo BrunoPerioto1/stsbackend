@@ -207,3 +207,17 @@ describe('AdminService.updateUser — grupo Tips', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 });
+
+describe('AdminService.updateUser — desativar conta', () => {
+  it('grava is_active', async () => {
+    const { service, usersRepository } = setup();
+    await service.updateUser(1, 16, { isActive: false });
+    expect(usersRepository.updateUser).toHaveBeenCalledWith(16, { isActive: false });
+  });
+
+  it('recusa desativar a própria conta', async () => {
+    const { service, usersRepository } = setup();
+    await expect(service.updateUser(16, 16, { isActive: false })).rejects.toBeInstanceOf(BadRequestException);
+    expect(usersRepository.updateUser).not.toHaveBeenCalled();
+  });
+});

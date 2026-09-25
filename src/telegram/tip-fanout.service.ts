@@ -15,6 +15,9 @@ import {
   stripBoilerplateParagraphs,
 } from './utils/tip-text.util';
 
+const NO_BANKROLL_LINE =
+  '🎯 Defina sua banca com /stake VALOR pra receber a recomendação de aposta.';
+
 // Tudo que envolve entregar uma tip pro DM individual de cada usuário: o
 // fan-out ao vivo (quando a tip chega no grupo), o reenvio avulso de um item
 // (botão "✏️ Editar" da lista do /pendentes) e a edição posterior dessa
@@ -83,7 +86,7 @@ export class TipFanoutService {
     );
     if (rawPercent === null && !isAviso) return;
 
-    const tip = await this.tipsService.recordTip({
+    const { tip, created } = await this.tipsService.recordTip({
       chatId,
       messageId,
       text,
@@ -92,6 +95,12 @@ export class TipFanoutService {
       hasMedia,
       entities: entities ?? null,
     });
+    // Reentrega do webhook (o Telegram repete quando a resposta demora): a
+    // primeira entrega já fez o fan-out, repetir mandaria a DM duas vezes.
+    if (!created) {
+      console.log(`📨 handleTipsMessage: tip ${tip.id} já registrada, fan-out ignorado`);
+      return;
+    }
 
     const users = await this.usersService.getUsersForTipsFanout();
     const limit = extractLimitFromText(text);
@@ -151,8 +160,13 @@ export class TipFanoutService {
     // .toFixed(2) e comparações mais adiante esperam number de verdade).
     const percent = tip.percent !== null ? Number(tip.percent) : null;
     try {
-      if (percent !== null) {
-        const userStake = await this.usersService.getUserStake(user.id);
+      const userStake =
+        percent !== null ? await this.usersService.getUserStake(user.id) : null;
+      if (percent !== null && userStake === null) {
+        // Sem banca não existe recomendação: o Planilhar pede o /stake em vez
+        // de gravar uma stake calculada sobre um valor inventado.
+        outgoingText = `${baseText}\n\n${NO_BANKROLL_LINE}`;
+      } else if (percent !== null && userStake !== null) {
         let recommendedStake = (percent / 100) * userStake;
         if (limit !== null)
           recommendedStake = Math.min(recommendedStake, limit);
