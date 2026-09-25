@@ -3,6 +3,7 @@ import { Telegraf } from 'telegraf';
 import { TELEGRAM_BOT } from './telegram-bot.provider';
 import { UsersService } from '../users/users.service';
 import { TipsService } from '../tips/tips.service';
+import { TipsGroupService } from './tips-group.service';
 import {
   extractLimitFromText,
   extractOddFromText,
@@ -20,27 +21,15 @@ import {
 // mensagem quando o usuário resolve pela lista em vez de clicar nela direto.
 @Injectable()
 export class TipFanoutService {
-  private readonly tipsGroupChatId: number | null;
-
   constructor(
     @Inject(TELEGRAM_BOT) private readonly bot: Telegraf,
     private readonly usersService: UsersService,
     private readonly tipsService: TipsService,
-  ) {
-    const tipsGroupChatId = Number(process.env.TIPS_GROUP_CHAT_ID);
-    this.tipsGroupChatId =
-      Number.isFinite(tipsGroupChatId) && tipsGroupChatId !== 0
-        ? tipsGroupChatId
-        : null;
-    if (!this.tipsGroupChatId) {
-      console.warn(
-        '⚠️  TIPS_GROUP_CHAT_ID não definido — o fan-out multiusuário do grupo Tips ficará desativado.',
-      );
-    }
-  }
+    private readonly tipsGroup: TipsGroupService,
+  ) {}
 
   isTipsGroup(chatId: number): boolean {
-    return this.tipsGroupChatId !== null && chatId === this.tipsGroupChatId;
+    return this.tipsGroup.isTipsGroup(chatId);
   }
 
   tipsCopyKeyboard(tipId?: number) {
@@ -117,7 +106,7 @@ export class TipFanoutService {
       )
         continue;
 
-      const stillMember = await this.isTipsGroupMember(
+      const stillMember = await this.tipsGroup.isMember(
         user.telegramUserId as number,
       );
       if (!stillMember) continue;
@@ -334,25 +323,6 @@ export class TipFanoutService {
         `⚠️ Não foi possível atualizar a mensagem original da tip (tipId=${tipId}):`,
         err,
       );
-    }
-  }
-
-  // Só manda tip pra quem ainda está no grupo Tips — evita continuar mandando
-  // DM pra quem já vinculou a conta um dia mas saiu do grupo depois.
-  private async isTipsGroupMember(telegramUserId: number): Promise<boolean> {
-    if (!this.tipsGroupChatId) return true;
-    try {
-      const member = await this.bot.telegram.getChatMember(
-        this.tipsGroupChatId,
-        telegramUserId,
-      );
-      return member.status !== 'left' && member.status !== 'kicked';
-    } catch (err) {
-      console.error(
-        `⚠️ Não foi possível checar membro do grupo Tips (telegramUserId=${telegramUserId}):`,
-        err,
-      );
-      return false;
     }
   }
 }

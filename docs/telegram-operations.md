@@ -22,6 +22,38 @@ identifica a casa e baixa a imagem em paralelo. O resultado substitui essa
 mensagem. Se o aviso falhar, a leitura continua e o resultado é enviado
 normalmente.
 
+## Grupo Tips: só quem está em dia
+
+O Telegram não esconde mensagem de quem é membro, então quem não pagou só deixa
+de ler as tips saindo do grupo. O controle tem três partes:
+
+- **Entrada por pedido.** O link do grupo pede aprovação. O bot aprova quem tem
+  o Telegram vinculado e o acesso em dia, e recusa o resto mandando no privado
+  o que falta (vincular, ou a chave PIX).
+- **Saída pelo painel.** Em Admin → Usuários, quem está vencido e vinculado ganha
+  o botão **Tirar do grupo**. É ban, não expulsão: expulso volta pelo link que
+  já tem. A pessoa recebe no privado o aviso com o PIX.
+- **Volta automática.** Ao liberar o acesso (+30d ou data) de quem estava fora do
+  grupo, o bot tira o ban e manda no privado um convite de 24h que também pede
+  aprovação. Se o convite falhar, a linha fica "fora do grupo" com o botão
+  **Convidar** pra repetir.
+
+Configuração, uma vez:
+
+1. Aplicar `src/infra/db/migrations/20260925_users_tips_group_removed_at.sql`
+   antes do deploy da API.
+2. O grupo precisa ser supergrupo (ID começando em `-100`). Grupo comum não
+   segura o ban nem aceita pedido de entrada.
+3. No grupo, dar ao bot as permissões de admin **Banir usuários** e **Convidar
+   usuários via link**.
+4. Em Convites, revogar o link aberto e criar um com **Pedir aprovação do admin**.
+   É esse que se divulga.
+5. Webhook: nada a fazer. `npm run telegram:webhook` não restringe
+   `allowed_updates`, e o padrão do Telegram já entrega `chat_join_request`.
+
+Quem já está no grupo sem ter vinculado o Telegram fica de fora desse controle:
+a API de bot não lista membros, então essa limpeza é manual, uma vez.
+
 ## Logs
 
 Todos os valores em milissegundos.
