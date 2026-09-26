@@ -97,19 +97,6 @@ export class BetController {
     return this.betService.getMonthlySummary({ ...filters, userId });
   }
 
-  @Get('totals')
-  @UseGuards(AuthGuard('jwt'))
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Totais do filtro (apostado, lucro, ROI, acerto), com os mesmos filtros da lista',
-  })
-  async totals(
-    @Query() filters: BetFilterDto,
-    @User('userId') userId: number,
-  ) {
-    return this.betService.getTotals({ ...filters, userId });
-  }
-
   @Put('finalize-multiple')
   @ApiOperation({ summary: 'Finaliza múltiplas apostas (apenas admin)' })
   @ApiResponse({

@@ -405,26 +405,6 @@ export class BetService {
     return this.betRepository.monthlySummary(this.toRepositoryFilter(filters));
   }
 
-  // Faixa de totais da lista: o filtro inteiro, não só a página ou o mês aberto.
-  async getTotals(filters: BetFilterDto) {
-    const raw = await this.betRepository.totals(this.toRepositoryFilter(filters));
-    const settledStake = Number(raw.settledStake);
-    const profit = Number(raw.profit);
-    const won = Number(raw.won);
-    const lost = Number(raw.lost);
-    return {
-      count: Number(raw.count),
-      staked: Number(raw.staked),
-      settledStake,
-      profit,
-      won,
-      lost,
-      pending: Number(raw.pending),
-      roi: settledStake > 0 ? profit / settledStake : 0,
-      hitRate: won + lost > 0 ? won / (won + lost) : 0,
-    };
-  }
-
   async findBets(filters: BetFilterDto): Promise<PaginatedBetsResponseDto> {
     const repositoryFilter = this.toRepositoryFilter(filters);
 

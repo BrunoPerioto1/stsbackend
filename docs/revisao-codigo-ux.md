@@ -138,9 +138,9 @@ typecheck limpo, 46 testes passando e 7 warnings de lint.
   todas as começadas como caiu"; badge de Tips no menu.
   *Fila pendente em três blocos (`lib/tip-schedule.ts`), relógio de 1 min;
   badge via `GET /tips/counts`.*
-- [x] **Apostas**: faixa com totais do filtro (apostado, lucro, ROI, acerto); filtro por
+- [x] **Apostas**: ~~faixa com totais do filtro (apostado, lucro, ROI, acerto)~~; filtro por
   origem e por "sem jogo identificado"; badge só para jogo que acabou e segue pendente.
-  *`GET /bets/totals`; filtros `origins` (tip, telegram, print, manual) e `unmatched`
+  *Faixa de totais retirada a pedido. Filtros `origins` (tip, telegram, print, manual) e `unmatched`
   (print x digitada via `fromImage` no POST; apostas antigas do site contam como digitadas);
   badge do menu usa `overdue` do `/settlement/queue` (placar coletado, início
   há mais de 3h, ou sem jogo casado e planilhada há mais de 1 dia).*
@@ -181,3 +181,98 @@ typecheck limpo, 46 testes passando e 7 warnings de lint.
 4. Webhook com `secret_token` + SSL no pool; `TZ=UTC` local; `schema.sql` atualizado.
 5. UX de Tips (por horário) e Casas (disponível vs em aberto).
 6. Telas novas: Primeiros passos e Agenda → Análise → Desempenho do canal.
+
+## 11. Roteiro de teste visual (seções 7 e 8)
+
+O que conferir no front (`http://localhost:8080` com a API em `:4000`) depois
+das seções 7 e 8. PWA e compartilhar print só aparecem em build de produção.
+
+### Menu (sidebar no desktop, barra inferior no mobile)
+
+- [ ] Recolher a sidebar e dar F5: continua recolhida.
+- [ ] Sidebar aberta não cobre mais 8px do conteúdo.
+- [ ] **Tips** com número cinza de pendentes.
+- [ ] **Apostas**: o número conta só pendentes de jogo que já acabou (menor que antes).
+
+### Dashboard
+
+- [ ] Desktop: cada KPI com linha "+2,3 p.p. vs. anterior" (ROI, Unidades e
+  Acerto coloridos).
+- [ ] Header com **Casas** e **Esportes** ao lado do período; filtrar muda
+  lucro, gráfico, KPIs e "Por casa".
+- [ ] Com filtro ativo, o painel vira "Banca acumulada · todas as casas".
+- [ ] Conta sem apostas: checklist **Primeiros passos · X de 4**, com os
+  passos feitos riscados.
+
+### Tips (aba Pendentes)
+
+- [ ] Fila em três blocos: **Ainda dá tempo** (o que começa antes em cima),
+  **Sem horário identificado**, **Jogo já começou**.
+- [ ] Coluna Início no desktop mostra "em 40 min" / "há 2h"; no mobile o card
+  mostra "· começa em 40 min".
+- [ ] Bloco "Jogo já começou" com **"Marcar as N como caiu"**; elas vão pra
+  aba Caíram.
+- [ ] Rótulos atualizam sozinhos a cada minuto.
+
+### Apostas
+
+- [ ] Filtro **Origem** na barra do desktop (Tip do canal, Mensagem no bot,
+  Print no site, Digitada no site) com **"Sem jogo identificado"** no fim.
+- [ ] Mobile: seção **Origem** no sheet de Filtros.
+- [ ] Filtros ativos viram chips removíveis.
+- [ ] Registrar uma aposta colando print e outra digitando: cada uma aparece
+  só no seu filtro (apostas antigas do site contam como digitadas).
+
+### Casas
+
+- [ ] Valor grande da linha é o **disponível**; com aposta aberta aparece
+  "· R$ X em aberto" (desktop) / "+R$ X em aberto" (mobile).
+- [ ] "Saldo total" mostra "R$ X em aberto".
+- [ ] Bloco **A conferir** é clicável: filtra só as casas no vermelho; clicar
+  de novo volta.
+- [ ] Casa no vermelho com "a conferir −R$ X · **Conciliar**", que abre a
+  movimentação já em **Saldo real**.
+- [ ] Lista agrupada em **Em uso**, **Paradas** e **Sem uso**, com contagem.
+- [ ] Histórico: **⋯** em cada movimentação com **Corrigir** (tipo e valor,
+  prévia "Fica no histórico como +R$ X") e **Excluir** (pede confirmação).
+
+### Perfil → Exportar
+
+- [ ] CSV **Resumo mensal** com Mês, Apostas, Stake liquidado, Lucro e ROI (%).
+
+### Mobile / PWA (build de produção)
+
+- [ ] `npm run build` + `npm run preview`: Chrome oferece **Instalar app**
+  (ícone roxo da seta).
+- [ ] Android com HTTPS: Compartilhar print → SportsBet abre a Nova aposta
+  lendo a imagem.
+
+### Comportamentos (não aparecem só olhando a tela)
+
+- [ ] **Corrigir movimentação respeita o sinal**: saque sempre negativo,
+  depósito sempre positivo, ajuste com o sinal digitado. Corrigir um depósito
+  de 100 para Saque, sem mexer no valor, vira −R$ 100 no histórico.
+- [ ] **Corrigir/excluir movimentação recalcula tudo na hora**: saldo da casa,
+  "A conferir" e a banca acumulada do Dashboard mudam sem F5.
+- [ ] **Contador de Tips do menu segue o filtro de %** de Preferências: mudar
+  o filtro muda o número junto com a aba Pendentes.
+- [ ] **Contador de Tips atualiza depois de agir**: planilhar ou marcar como
+  caiu faz o número descer.
+- [ ] **Contador de Apostas do menu**: pendente só entra quando o jogo acabou
+  (placar coletado, início há mais de 3h, ou sem jogo identificado e
+  planilhada há mais de 1 dia). Jogo de amanhã não conta; jogo de ontem ainda
+  pendente conta.
+- [ ] **ROI do CSV mensal** usa só o stake liquidado: bate com o ROI do
+  dashboard no mesmo mês.
+- [ ] **Movimentação de outro usuário** (`PATCH`/`DELETE /transactions/:id`
+  com o token de outra conta) devolve 404 e não altera nada.
+- [ ] **Service worker não guarda o app em cache**: com o PWA instalado, um
+  deploy novo aparece num F5 normal.
+
+### Já existiam antes desta rodada (só conferir que seguem funcionando)
+
+- [ ] Admin → Usuários: tabela sem cortar colunas, ativar/desativar,
+  confirmação de admin, filtro "Vence em 7 dias".
+- [ ] Conferência com as cores de Preferências; cálculo automático e aviso no bot.
+- [ ] Deep link do Telegram, "Esqueci a senha" pelo Telegram, PIX
+  copia-e-cola e "Já paguei".

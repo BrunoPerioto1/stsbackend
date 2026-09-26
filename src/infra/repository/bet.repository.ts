@@ -5,12 +5,7 @@ import {
   DATABASE_WRITE_CONNECTION,
 } from "../db/db.module";
 
-import {
-  LOST_RESULT_IDS,
-  ResultIdEnum,
-  SETTLED_RESULT_IDS,
-  WON_RESULT_IDS,
-} from "../../bet/dto/result-id.enum";
+import { ResultIdEnum } from "../../bet/dto/result-id.enum";
 import { isNotEmpty } from "class-validator";
 import { UserId } from "../../db_types/Users";
 import { BetId, NewBet, UpdateBet } from "../../db_types/Bet";
@@ -414,33 +409,6 @@ export class BetRepository {
       .orderBy(month, "desc")
       .execute();
     return rows.map((row) => ({ month: row.month, count: Number(row.count), profit: Number(row.profit) }));
-  }
-
-  /**
-   * Totais do filtro inteiro pra faixa do topo da lista (apostado, lucro,
-   * ROI, acerto). Mesma base do dashboard: ROI sobre o stake já liquidado.
-   */
-  async totals(filters: FilterGetBets) {
-    const settled = SETTLED_RESULT_IDS as unknown as ResultId[];
-    return this.dbRead
-      .selectFrom("bets as b")
-      .leftJoin("betResults as br", "br.betId", "b.id")
-      .where(betFilters(filters))
-      .select((eb) => [
-        eb.fn.count<string>("b.id").as("count"),
-        eb.fn.coalesce(eb.fn.sum<string>("b.stake"), sql<string>`0`).as("staked"),
-        eb.fn
-          .coalesce(
-            eb.fn.sum<string>(eb.case().when("br.resultId", "in", settled).then(eb.ref("b.stake")).else(0).end()),
-            sql<string>`0`,
-          )
-          .as("settledStake"),
-        eb.fn.coalesce(eb.fn.sum<string>("b.profit"), sql<string>`0`).as("profit"),
-        eb.fn.count<string>("b.id").filterWhere("br.resultId", "in", WON_RESULT_IDS as unknown as ResultId[]).as("won"),
-        eb.fn.count<string>("b.id").filterWhere("br.resultId", "in", LOST_RESULT_IDS as unknown as ResultId[]).as("lost"),
-        eb.fn.count<string>("b.id").filterWhere("br.resultId", "=", ResultIdEnum.PENDING as ResultId).as("pending"),
-      ])
-      .executeTakeFirstOrThrow();
   }
 }
 
