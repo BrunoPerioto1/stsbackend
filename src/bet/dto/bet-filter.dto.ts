@@ -4,7 +4,8 @@ import { Type, Transform } from 'class-transformer';
 import { toNumberArray, toStringArray } from '../../common/utils/dto-transform.util';
 
 // De onde a aposta veio: botão Planilhar de uma tip (tem tip_id), mensagem
-// avulsa pro bot, print lido no site, ou digitada à mão no site.
+// avulsa pro bot, print (site ou bot), ou digitada à mão no site. O site só
+// oferece print e manual; tip e telegram seguem aceitos por compatibilidade.
 export const BET_ORIGINS = ['tip', 'telegram', 'print', 'manual'] as const;
 export type BetOriginFilter = (typeof BET_ORIGINS)[number];
 

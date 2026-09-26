@@ -441,7 +441,8 @@ function betFilters(filters: FilterGetBets) {
       const byOrigin: Record<BetOriginFilter, Expression<SqlBool>> = {
         tip: eb("b.tipId", "is not", null),
         telegram: eb.and([eb("b.tipId", "is", null), eb("b.source", "=", "telegram")]),
-        print: eb.and([noSite, eb("b.sourceType", "=", "image")]),
+        // Print no geral: lido no site ou mandado pro bot, com ou sem tip.
+        print: eb("b.sourceType", "=", "image"),
         manual: eb.and([
           noSite,
           eb.or([eb("b.sourceType", "is", null), eb("b.sourceType", "!=", "image")]),
