@@ -209,6 +209,8 @@ export class AdminService {
     if (dto.accessUntil !== undefined) {
       fields.accessUntil = dto.accessUntil === null ? null : new Date(dto.accessUntil);
     }
+    // Liberou o acesso: o "Já paguei" foi atendido e sai do destaque do painel.
+    if (dto.extendDays || dto.accessUntil !== undefined) fields.paymentClaimedAt = null;
 
     if (Object.keys(fields).length === 0 && !dto.tipsGroup) {
       throw new BadRequestException('Nada para atualizar');
@@ -266,7 +268,7 @@ export class AdminService {
 
   private async removeFromTipsGroup(targetId: number, telegramUserId: number) {
     try {
-      await this.tipsGroup.remove(telegramUserId);
+      await this.tipsGroup.remove(telegramUserId, targetId);
     } catch (error) {
       // Os motivos comuns são de configuração (bot sem "Banir usuários",
       // pessoa é admin do grupo) — a descrição do Telegram já diz qual.

@@ -7,7 +7,7 @@
 # trafego sai pelo secret PROXY_URL (proxy residencial) ou, sem ele, pelo WARP.
 #
 # Nada aqui liquida aposta: o job so' grava placar. Quem propoe resultado e' a
-# API (POST /settlement/compute), e quem decide e' o usuario, na tela de
+# API (POST /settlement/cron, chamado no fim deste job), e quem decide e' o usuario, na tela de
 # conferencia.
 name: sofascore-results
 
@@ -34,6 +34,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PROXY_URL: ${{ secrets.PROXY_URL }}
+      # Usados so' no ultimo passo (calculo das propostas na API).
+      API_URL: ${{ secrets.API_URL }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
     # Com a coleta de estatisticas sao 4 requests por evento, nao 1: o lote
     # cheio passa de 80 minutos no intervalo de 3-5s entre requests. Com 25
     # o job era cortado no meio e metade do lote ficava sem placar.
@@ -54,3 +57,12 @@ jobs:
           # Nos disparos por cron os inputs vem vazios e o job usa os padroes.
           MAX_EVENTOS: ${{ inputs.max_eventos }}
           FATOS: ${{ inputs.fatos }}
+      # Placar gravado: a API calcula as propostas de todo mundo e avisa no bot
+      # quem tem aposta pronta pra conferir. Continua sem liquidar nada.
+      # Sem os secrets API_URL/CRON_SECRET o passo e' pulado, nao falha o job.
+      - name: Calcular propostas de conferencia
+        if: ${{ always() && env.API_URL != '' && env.CRON_SECRET != '' }}
+        run: |
+          curl --fail --silent --show-error --max-time 90 \
+            -X POST "$API_URL/settlement/cron" \
+            -H "Authorization: Bearer $CRON_SECRET"

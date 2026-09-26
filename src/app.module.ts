@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { validateEnv } from './config/env.validation';
 import { BetModule } from './module/bet.module';
 import { BetSlipModule } from './module/bet-slip.module';
 import { TelegramModule } from './module/telegram.module';
@@ -13,6 +15,9 @@ import { AdminModule } from './module/admin.module';
 
 @Module({
   imports: [
+    // Carrega o .env (local; na Vercel as variáveis já estão no processo) e
+    // valida tudo no boot. Os módulos continuam lendo process.env.
+    ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     BetModule,
     BetSlipModule,
     TelegramModule,

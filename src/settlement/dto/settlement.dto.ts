@@ -71,6 +71,14 @@ export class SettlementQueueDto {
   })
   settleable!: number;
 
+  @ApiProperty({
+    example: 5,
+    description:
+      'Pendentes de jogo que já acabou (placar coletado, início há mais de 3h, ou ' +
+      'sem jogo casado e planilhada há mais de um dia). É o número do menu de Apostas.',
+  })
+  overdue!: number;
+
   @ApiProperty({ example: 12, description: 'Propostas aguardando confirmação.' })
   suggestions!: number;
 

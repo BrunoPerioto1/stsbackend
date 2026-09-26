@@ -1,3 +1,5 @@
+import { frontUrl } from '../common/utils/front-url';
+
 // Cabeçalho do prompt de "Editar" — carrega o messageId + tipo (texto/mídia)
 // direto no texto da mensagem, sem precisar de estado em memória (o processo
 // roda em serverless, então nada garante que a mesma instância trate o clique
@@ -12,10 +14,12 @@ export const EDIT_PROMPT_INSTRUCTIONS =
   '• casa Superbet Brasil\n' +
   '• 3.50 60 (odd + limite juntos)';
 
-export const UNLINKED_INSTRUCTIONS =
+// Função, não constante: o endereço do front vem de env (FRONT_URL), lida
+// na hora de responder e não no import do arquivo.
+export const unlinkedInstructions = () =>
   '❌ Sua conta não está vinculada.\n\n' +
   'Pra vincular:\n' +
-  '1️⃣ Entre em https://stsfront.vercel.app/login e faça login\n' +
+  `1️⃣ Entre em ${frontUrl('/login')} e faça login\n` +
   '2️⃣ Vá em Perfil → Telegram → "Gerar código de vinculação"\n' +
   '3️⃣ Copie os seis dígitos (valem 5 minutos)\n' +
   '4️⃣ Volte aqui e envie: /vincular 123456';

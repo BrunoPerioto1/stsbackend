@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { BettingHouseId } from '../../db_types/BettingHouse';
 import { UserId } from '../../db_types/Users';
-import { NewHouseTransaction } from '../../db_types/HouseTransactions';
+import { HouseTransactionId, NewHouseTransaction, UpdateHouseTransaction } from '../../db_types/HouseTransactions';
 import { DATABASE_READ_CONNECTION, DATABASE_WRITE_CONNECTION } from '../db/db.module';
 import { Kysely } from 'kysely';
 import { Database } from '../db/database.types';
@@ -41,6 +41,9 @@ async findAllTransactions(userId: UserId, filter?: FilterGetTransactions) {
     .leftJoin("transactionTypes as tt", "ht.transactionTypeId", "tt.id")
     .select([
       "ht.id",
+      "ht.houseId",
+      "ht.transactionTypeId",
+      "ht.description",
       "h.name as houseName",
       "tt.name as transactionType",
       "ht.value",
@@ -59,6 +62,35 @@ async findAllTransactions(userId: UserId, filter?: FilterGetTransactions) {
     .orderBy("ht.createdAt", "desc")
     .execute();
 }
+  // Sempre com o dono na cláusula: movimentação de outro usuário é tratada
+  // como inexistente, não como proibida.
+  async findById(id: HouseTransactionId, userId: UserId) {
+    return this.dbRead
+      .selectFrom("houseTransactions")
+      .selectAll()
+      .where("id", "=", id)
+      .where("userId", "=", userId)
+      .executeTakeFirst();
+  }
+
+  async update(id: HouseTransactionId, userId: UserId, changes: UpdateHouseTransaction) {
+    return this.dbWrite
+      .updateTable("houseTransactions")
+      .set({ ...changes, updatedAt: new Date() })
+      .where("id", "=", id)
+      .where("userId", "=", userId)
+      .returning("id")
+      .executeTakeFirst();
+  }
+
+  async delete(id: HouseTransactionId, userId: UserId) {
+    return this.dbWrite
+      .deleteFrom("houseTransactions")
+      .where("id", "=", id)
+      .where("userId", "=", userId)
+      .executeTakeFirst();
+  }
+
   async findAllTypeTransactions() {
     return this.dbRead
       .selectFrom("transactionTypes")

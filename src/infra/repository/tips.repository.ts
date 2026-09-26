@@ -9,6 +9,11 @@ import type { NewTip, TipId } from '../../db_types/Tips';
 import type { NewTipDelivery } from '../../db_types/TipDeliveries';
 import type { UserId } from '../../db_types/Users';
 
+export interface TipListFilter {
+  status?: 'pending' | 'planilhada' | 'caiu';
+  q?: string;
+}
+
 @Injectable()
 export class TipsRepository {
   constructor(
@@ -128,6 +133,92 @@ export class TipsRepository {
       )
       .orderBy('t.createdAt', 'asc')
       .execute();
+  }
+
+  // Mesma base da findSummaryForUser (joins, janela de 48h pra tip não
+  // tocada, filtro de %), sem o SELECT: cada consulta da tela escolhe o seu.
+  private listBase(userId: UserId, minPercentFilter: number | null) {
+    const untouchedSince = new Date(Date.now() - TipsRepository.UNTOUCHED_WINDOW_MS);
+    return this.dbWrite
+      .selectFrom('tips as t')
+      .leftJoin('bets as b', (join) =>
+        join.onRef('b.tipId', '=', 't.id').on('b.userId', '=', userId).on('b.deletedAt', 'is', null),
+      )
+      .leftJoin('tipDismissals as d', (join) => join.onRef('d.tipId', '=', 't.id').on('d.userId', '=', userId))
+      .leftJoin('tipDeliveries as td', (join) => join.onRef('td.tipId', '=', 't.id').on('td.userId', '=', userId))
+      .where('t.percent', 'is not', null)
+      .where((eb) =>
+        eb.or([eb('t.createdAt', '>=', untouchedSince), eb('b.id', 'is not', null), eb('d.id', 'is not', null)]),
+      )
+      .$if(minPercentFilter !== null, (qb) => qb.where('t.percent', '>=', minPercentFilter as number));
+  }
+
+  // Status e busca no SQL. A tela de Tips carregava o histórico inteiro (toda
+  // tip planilhada ou "caiu" fica pra sempre) e paginava em memória.
+  private listFiltered(userId: UserId, minPercentFilter: number | null, filter: TipListFilter) {
+    const termo = filter.q?.trim();
+    return this.listBase(userId, minPercentFilter)
+      .$if(filter.status === 'planilhada', (qb) => qb.where('b.id', 'is not', null))
+      .$if(filter.status === 'caiu', (qb) => qb.where('b.id', 'is', null).where('d.id', 'is not', null))
+      .$if(filter.status === 'pending', (qb) => qb.where('b.id', 'is', null).where('d.id', 'is', null))
+      // Busca no texto da mensagem (jogo, mercado, casa). Curinga do LIKE
+      // digitado pelo usuário vale como letra.
+      .$if(!!termo, (qb) => qb.where('t.text', 'ilike', `%${termo!.replace(/[\\%_]/g, (c) => '\\' + c)}%`));
+  }
+
+  /** Página da lista (mais recente primeiro). Sem `page`, devolve tudo que casa com o filtro. */
+  async findListRows(
+    userId: UserId,
+    minPercentFilter: number | null,
+    filter: TipListFilter,
+    page?: { limit: number; offset: number },
+  ) {
+    return this.listFiltered(userId, minPercentFilter, filter)
+      .select([
+        't.id',
+        't.text',
+        't.percent',
+        't.isAviso',
+        't.entities',
+        't.createdAt',
+        'b.id as betId',
+        'b.eventStartAt as betEventStartAt',
+        'd.id as dismissalId',
+        'td.text as deliveryText',
+      ])
+      .orderBy('t.createdAt', 'desc')
+      .orderBy('t.id', 'desc')
+      .$if(!!page, (qb) => qb.limit(page!.limit).offset(page!.offset))
+      .execute();
+  }
+
+  async countListRows(userId: UserId, minPercentFilter: number | null, filter: TipListFilter) {
+    const row = await this.listFiltered(userId, minPercentFilter, filter)
+      .select((eb) => eb.fn.countAll<string>().as('total'))
+      .executeTakeFirstOrThrow();
+    return Number(row.total);
+  }
+
+  /** Contadores das abas: ignoram busca e casa, como sempre fizeram. */
+  async countByStatus(userId: UserId, minPercentFilter: number | null) {
+    const row = await this.listBase(userId, minPercentFilter)
+      .select((eb) => [
+        eb.fn.countAll<string>().filterWhere('b.id', 'is not', null).as('planilhadas'),
+        eb.fn
+          .countAll<string>()
+          .filterWhere((fb) => fb.and([fb('b.id', 'is', null), fb('d.id', 'is not', null)]))
+          .as('caidas'),
+        eb.fn
+          .countAll<string>()
+          .filterWhere((fb) => fb.and([fb('b.id', 'is', null), fb('d.id', 'is', null)]))
+          .as('pending'),
+      ])
+      .executeTakeFirstOrThrow();
+    return {
+      pending: Number(row.pending),
+      planilhadas: Number(row.planilhadas),
+      caidas: Number(row.caidas),
+    };
   }
 
   async dismiss(tipId: TipId, userId: UserId) {

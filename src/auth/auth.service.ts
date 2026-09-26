@@ -35,9 +35,7 @@ export class AuthService {
   async login(loginDTO: LoginDTO) {
     const user = await this.usersService.findByEmail(loginDTO.email);
 
-    // E-mail que não existe sai pelo erro genérico, sem `attemptsLeft`: a
-    // contagem só faz sentido pra uma conta real, e devolvê-la aqui diria a
-    // quem está tentando que o e-mail existe.
+    // E-mail que não existe sai pelo mesmo erro genérico da senha errada.
     if (!user) {
       throw new UnauthorizedException('E-mail ou senha incorretos');
     }
@@ -71,11 +69,10 @@ export class AuthService {
         );
       }
 
+      // Mesma resposta do e-mail inexistente. Devolver `attemptsLeft` aqui
+      // (e só aqui) confirmava a quem testava que o e-mail estava cadastrado.
       await this.usersService.registerFailedLogin(user.id, attempts, null);
-      throw new UnauthorizedException({
-        message: 'E-mail ou senha incorretos',
-        attemptsLeft: MAX_LOGIN_ATTEMPTS - attempts,
-      });
+      throw new UnauthorizedException('E-mail ou senha incorretos');
     }
 
     // Depois da senha: vencimento/desativação só é revelado a quem é dono da conta.
@@ -94,7 +91,8 @@ export class AuthService {
     };
 
     return {
-      access_token: this.jwtService.sign(payload),
+      // "Manter conectado" vale 30 dias; sem ele, 1 dia (o padrão do módulo).
+      access_token: this.jwtService.sign(payload, loginDTO.remember ? { expiresIn: '30d' } : undefined),
     };
   }
 }

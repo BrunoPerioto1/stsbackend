@@ -1,0 +1,48 @@
+# Barra push/PR que quebra o build. Antes o único workflow era o cron do
+# SofaScore: typecheck, lint e testes só rodavam quando alguém lembrava.
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit -p tsconfig.json
+      # --quiet: só erro barra. Formatação (prettier) aparece como aviso.
+      - name: Lint
+        run: npx eslint "{src,test}/**/*.ts" --quiet
+      - name: Testes
+        run: npx jest --ci
+      - name: Build
+        run: npm run build
+
+  jobs-python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: jobs/sofascore/requirements.txt
+      - run: pip install -r jobs/sofascore/requirements.txt
+      - name: Testes do adaptador de liquidacao
+        working-directory: jobs/sofascore
+        run: python -m unittest discover -p 'test_*.py'

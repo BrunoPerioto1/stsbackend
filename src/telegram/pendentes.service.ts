@@ -1,3 +1,4 @@
+import type { InlineKeyboardButton } from 'telegraf/types';
 import { Injectable } from '@nestjs/common';
 import { TipsService } from '../tips/tips.service';
 import { escapeHtml } from './utils/tip-text.util';
@@ -77,7 +78,9 @@ export class PendentesService {
     if (pendentes.length === 0) {
       return {
         text: '🎉 Nada pendente!',
-        keyboard: undoRow ? { inline_keyboard: [undoRow] } : (undefined as any),
+        // Teclado vazio (e não ausente): sem nada a desfazer, a mensagem fica
+        // sem botão, e quem lê o retorno não precisa tratar undefined.
+        keyboard: { inline_keyboard: undoRow ? [undoRow] : [] },
       };
     }
 
@@ -92,7 +95,7 @@ export class PendentesService {
     );
 
     let listText = '';
-    const keyboardRows: any[] = [];
+    const keyboardRows: InlineKeyboardButton.CallbackButton[][] = [];
     let lastDateLabel = '';
     for (const [i, tip] of pageItems.entries()) {
       const dateLabel = new Date(tip.createdAt).toLocaleDateString('pt-BR', {

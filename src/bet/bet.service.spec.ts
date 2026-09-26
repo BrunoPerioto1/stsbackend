@@ -169,3 +169,42 @@ describe('BetService.updateBet — casamento de evento', () => {
     expect(repository.replaceBetEvents).not.toHaveBeenCalled();
   });
 });
+
+describe('BetService: totais e filtros novos da lista', () => {
+  function setup(totals: object = {}) {
+    const repository = {
+      findBets: jest.fn().mockResolvedValue([]),
+      countBets: jest.fn().mockResolvedValue(0),
+      totals: jest.fn().mockResolvedValue({
+        count: '4', staked: '400', settledStake: '300', profit: '60', won: '2', lost: '1', pending: '1',
+        ...totals,
+      }),
+    };
+    const service = new BetService(
+      repository as unknown as BetRepository,
+      { findCandidates: jest.fn() } as unknown as SportEventRepository,
+    );
+    return { repository, service };
+  }
+
+  it('totais do filtro: ROI sobre o liquidado e acerto sobre ganhas + perdidas', async () => {
+    const { service } = setup();
+    expect(await service.getTotals({ userId: 1 } as any)).toEqual({
+      count: 4, staked: 400, settledStake: 300, profit: 60, won: 2, lost: 1, pending: 1,
+      roi: 0.2, hitRate: 2 / 3,
+    });
+  });
+
+  it('sem nada liquidado, ROI e acerto zerados', async () => {
+    const { service } = setup({ settledStake: '0', won: '0', lost: '0', profit: '0' });
+    expect(await service.getTotals({ userId: 1 } as any)).toMatchObject({ roi: 0, hitRate: 0 });
+  });
+
+  it('origem e "sem jogo identificado" chegam ao repositório', async () => {
+    const { repository, service } = setup();
+    await service.findBets({ userId: 1, origins: ['tip', 'app'], unmatched: true, page: 1, perPage: 30 } as any);
+    expect(repository.findBets).toHaveBeenCalledWith(
+      expect.objectContaining({ origins: ['tip', 'app'], unmatched: true }),
+    );
+  });
+});

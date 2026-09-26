@@ -1,4 +1,5 @@
 import { PendentesService } from './pendentes.service';
+import type { BotContext } from './utils/bot-context';
 import { TelegramCallbackService } from './telegram-callback.service';
 
 const TIP_TEXT = '🏠 Betfair\n🆚 Real Madrid x Barcelona\n🏷 Odd: 2.10';
@@ -54,10 +55,12 @@ function setup(rows: ReturnType<typeof tip>[]) {
 }
 
 const user = { id: 10, minPercentFilter: null };
-const click = (data: string, ctx: ReturnType<typeof setup>['ctx']) => ({
-  ...ctx,
-  callbackQuery: { ...ctx.callbackQuery, data },
-});
+// Contexto parcial do clique: só o que o dispatcher lê.
+const click = (data: string, ctx: ReturnType<typeof setup>['ctx']) =>
+  ({
+    ...ctx,
+    callbackQuery: { ...ctx.callbackQuery, data },
+  }) as unknown as BotContext;
 
 describe('lista do /pendentes', () => {
   it('marca cada botão com o número da pendência a que pertence', async () => {

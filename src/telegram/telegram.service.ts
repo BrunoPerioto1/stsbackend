@@ -1,16 +1,14 @@
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { Telegraf } from 'telegraf';
-import * as dotenv from 'dotenv';
+import type { MessageEntity } from 'telegraf/types';
 import { TELEGRAM_BOT } from './telegram-bot.provider';
 import { BotCommandsService } from './bot-commands.service';
-import { BetTextService } from './bet-text.service';
+import { BetTextService, type BetPhotoMessage } from './bet-text.service';
 import { TipFanoutService } from './tip-fanout.service';
 import { TelegramCallbackService } from './telegram-callback.service';
 import { TipsGroupService } from './tips-group.service';
 import { EDIT_PROMPT_HEADER_RE } from './messages.const';
 import { parseBetLocal } from './utils/tip-extractors.util';
-
-dotenv.config();
 
 // Bootstrap do bot: conecta cada evento do Telegraf no
 // serviço responsável. A lógica de verdade (comandos, fan-out de tips,
@@ -58,7 +56,18 @@ export class TelegramService implements OnModuleInit {
     // se quem mandou for um bot (evita alguém digitando "%5" ser confundido
     // com uma tip de verdade).
     this.bot.on('message', async (ctx) => {
-      const msg = ctx.message as any;
+      // A mensagem vem como união de todos os tipos; aqui só importam estes
+      // campos, e cada ramo abaixo confere o que usa.
+      const msg = ctx.message as {
+        message_id: number;
+        date: number;
+        text?: string;
+        caption?: string;
+        photo?: BetPhotoMessage['photo'];
+        entities?: MessageEntity[];
+        caption_entities?: MessageEntity[];
+        reply_to_message?: { text?: string };
+      };
 
       if (this.tipFanoutService.isTipsGroup(ctx.chat.id)) {
         if (!ctx.from?.is_bot) return;
@@ -82,7 +91,7 @@ export class TelegramService implements OnModuleInit {
       }
 
       // Resposta a um prompt de "✏️ Editar" (força reply no Telegram)?
-      const replyToText = msg.reply_to_message?.text as string | undefined;
+      const replyToText = msg.reply_to_message?.text;
       const headerMatch = replyToText?.match(EDIT_PROMPT_HEADER_RE);
       if (headerMatch && replyToText) {
         await this.betTextService.handleEditReply(
@@ -98,7 +107,7 @@ export class TelegramService implements OnModuleInit {
       // um card de aposta completo — encaminhar uma tip com mídia + legenda
       // inteira continua caindo no parser de texto de sempre.
       if (msg.photo && !parseBetLocal(msg.caption ?? '')) {
-        await this.betTextService.handleBetPhoto(ctx, msg);
+        await this.betTextService.handleBetPhoto(ctx, { ...msg, photo: msg.photo });
         return;
       }
 

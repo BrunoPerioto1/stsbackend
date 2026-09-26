@@ -1,3 +1,6 @@
+import { Logger } from '@nestjs/common';
+
+const logger = new Logger('bet-normalization');
 // Labels are removed only as whole, delimiter-separated UI fragments.
 export const BET_UI_LABELS = new Set([
   'super odds',
@@ -123,16 +126,16 @@ export function normalizeBetData(data: RawBetData, diagnostics = true) {
     process.env.NODE_ENV !== 'production'
   ) {
     const raw = Object.fromEntries(
-      Object.keys(normalized).map((key) => [key, data[key]]),
+      Object.keys(normalized).map((key) => [key, data[key as keyof RawBetData]]),
     );
-    console.debug('[AI_EXTRACTION]', raw);
-    console.debug('[BET_NORMALIZED]', normalized);
+    logger.debug(`[AI_EXTRACTION] ${JSON.stringify(raw)}`);
+    logger.debug(`[BET_NORMALIZED] ${JSON.stringify(normalized)}`);
   }
   return normalized;
 }
 
 export type BetOrigin =
-  | { source: 'app'; sourceType: 'manual' }
+  | { source: 'app'; sourceType: 'manual' | 'image' }
   | {
       source: 'telegram';
       sourceType: 'text' | 'image' | 'audio';

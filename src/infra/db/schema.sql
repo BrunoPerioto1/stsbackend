@@ -1,5 +1,9 @@
 -- Betting Tracker schema
 -- Idempotent: safe to re-run against an existing database.
+--
+-- Banco novo: `npm run db:setup` (este arquivo + todas as migrations, em ordem,
+-- registradas em schema_migrations). Banco existente: `npm run db:migrate`.
+-- Mudança de estrutura nova entra como migration em ./migrations, não aqui.
 
 -- === Reference tables ===============================================
 
@@ -95,6 +99,13 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS access_until TIMESTAMP;
 -- ja convidado de volta.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS tips_group_removed_at TIMESTAMP;
 
+-- "Ja paguei" e codigo de redefinir senha pelo bot. Ver
+-- migrations/20260926_users_payment_and_password_reset.sql.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS payment_claimed_at TIMESTAMP;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_code_hash VARCHAR(100);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_expires_at TIMESTAMP;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_attempts SMALLINT NOT NULL DEFAULT 0;
+
 -- === Bookmakers =========================================================
 
 CREATE TABLE IF NOT EXISTS betting_houses (
@@ -149,6 +160,55 @@ CREATE TABLE IF NOT EXISTS bet_results (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- === Tips (grupo do Telegram) ===========================================
+-- Existiam no banco e faltavam aqui: quem subia um banco novo pelo schema.sql
+-- ficava sem /pendentes, sem tela de Tips e sem bets.tip_id. Tirado da
+-- estrutura de producao (information_schema) em 2026-09-26.
+
+-- Cada mensagem do grupo Tips. (chat_id, message_id) unico: o Telegram
+-- reentrega o mesmo update e a tip nao pode duplicar.
+CREATE TABLE IF NOT EXISTS tips (
+    id BIGSERIAL PRIMARY KEY,
+    chat_id BIGINT NOT NULL,
+    message_id BIGINT NOT NULL,
+    text TEXT NOT NULL,
+    percent NUMERIC(5,2),
+    is_aviso BOOLEAN NOT NULL DEFAULT FALSE,
+    has_media BOOLEAN NOT NULL DEFAULT FALSE,
+    entities JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (chat_id, message_id)
+);
+CREATE INDEX IF NOT EXISTS idx_tips_created_at ON tips (created_at);
+
+-- "Aposta caiu" do usuario pra uma tip.
+CREATE TABLE IF NOT EXISTS tip_dismissals (
+    id BIGSERIAL PRIMARY KEY,
+    tip_id BIGINT NOT NULL REFERENCES tips(id),
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (tip_id, user_id)
+);
+
+-- A copia que o fan-out mandou na DM de cada usuario (texto com a
+-- "Recomendacao de aposta" dele), pra editar a mensagem depois.
+CREATE TABLE IF NOT EXISTS tip_deliveries (
+    id BIGSERIAL PRIMARY KEY,
+    tip_id BIGINT NOT NULL REFERENCES tips(id),
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    message_id BIGINT NOT NULL,
+    has_media BOOLEAN NOT NULL DEFAULT FALSE,
+    text TEXT NOT NULL,
+    entities JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (tip_id, user_id)
+);
+
+-- Aposta que uma tip gerou. Uma aposta viva por (usuario, tip): ver
+-- migrations/20260925_bets_unique_tip_per_user.sql.
+ALTER TABLE bets ADD COLUMN IF NOT EXISTS tip_id BIGINT REFERENCES tips(id);
+CREATE INDEX IF NOT EXISTS idx_bets_tip_id ON bets (tip_id);
 
 -- === Indexes ============================================================
 
@@ -340,3 +400,18 @@ ALTER TABLE bets ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
 
 -- Esporte normalizado (tabela sports, bets.sport_id e trigger que canoniza
 -- bets.sport): ver migrations/20260923_sports.sql.
+
+-- Contador de limite de uso (parse-image, /vincular): ver
+-- migrations/20260926_rate_limit_hits.sql.
+CREATE TABLE IF NOT EXISTS rate_limit_hits (
+    bucket VARCHAR(100) NOT NULL,
+    window_start TIMESTAMP NOT NULL,
+    hits INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (bucket, window_start)
+);
+
+-- Controle das migrations aplicadas (scripts/migrate.cjs).
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    name VARCHAR(200) PRIMARY KEY,
+    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

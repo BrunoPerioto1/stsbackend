@@ -20,10 +20,13 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "test:bet-image": "ts-node -r tsconfig-paths/register scripts/test-bet-image.ts",
     "telegram:webhook": "node scripts/register-telegram-webhook.cjs",
-    "test:bet-audio": "ts-node -r tsconfig-paths/register scripts/test-bet-audio.ts"
+    "test:bet-audio": "ts-node -r tsconfig-paths/register scripts/test-bet-audio.ts",
+    "db:migrate": "node scripts/migrate.cjs",
+    "db:setup": "node scripts/migrate.cjs --schema"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
+    "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.1",
     "@nestjs/jwt": "^11.0.0",
     "@nestjs/passport": "^11.0.5",
@@ -58,6 +61,8 @@
     "@types/jest": "^30.0.0",
     "@types/node": "^22.10.7",
     "@types/passport-jwt": "^4.0.1",
+    "@types/pg": "^8.23.1",
+    "@types/string-similarity": "^4.0.2",
     "@types/supertest": "^6.0.2",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",

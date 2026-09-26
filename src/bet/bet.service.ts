@@ -12,6 +12,7 @@ import {
   BadRequestException,
   ConflictException,
   InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
 import { ResultIdEnum } from './dto/result-id.enum';
 import { CreateBetDto } from './dto/bet.dto';
@@ -45,6 +46,8 @@ function isTipUniqueViolation(error: unknown): boolean {
 
 @Injectable()
 export class BetService {
+  private readonly logger = new Logger(BetService.name);
+
   constructor(
     private readonly betRepository: BetRepository,
     private readonly sportEventRepository: SportEventRepository,
@@ -97,13 +100,11 @@ export class BetService {
 
       const match = matchEvent(game, market, candidatos, sport, cache);
       if (!match) {
-        console.info('[EVENT_MATCH] result=no_match legs=%d', pernas.length);
+        this.logger.log(`[EVENT_MATCH] result=no_match legs=${pernas.length}`);
         return { ...vazio, pernas };
       }
-      console.info(
-        '[EVENT_MATCH] result=matched confidence=%s legs=%d',
-        match.confidence.toFixed(3),
-        pernas.length,
+      this.logger.log(
+        `[EVENT_MATCH] result=matched confidence=${match.confidence.toFixed(3)} legs=${pernas.length}`,
       );
       return {
         evento: {
@@ -115,7 +116,7 @@ export class BetService {
         pernas,
       };
     } catch (error) {
-      console.warn('[EVENT_MATCH] result=error', (error as Error).message);
+      this.logger.warn(`[EVENT_MATCH] result=error ${(error as Error).message}`);
       return vazio;
     }
   }
@@ -135,9 +136,8 @@ export class BetService {
     });
     const errors = validateSync(validated);
     if (errors.length || normalized.odd === null || normalized.odd <= 1) {
-      console.warn(
-        '[VALIDATION_FAILED] stage=create_bet fields=%s',
-        errors.map((error) => error.property).join(',') || 'odd',
+      this.logger.warn(
+        `[VALIDATION_FAILED] stage=create_bet fields=${errors.map((error) => error.property).join(',') || 'odd'}`,
       );
       throw new BadRequestException('Dados da aposta inválidos.');
     }
@@ -183,7 +183,7 @@ export class BetService {
           );
     const duplicate = detectPotentialDuplicate(betData, candidates, now);
     if (duplicate.isPotentialDuplicate)
-      console.info(
+      this.logger.log(
         '[DUPLICATE_DETECTED] reason=same_event_market_odd_stake_recent',
       );
     let result: Awaited<ReturnType<BetRepository['create']>>;
@@ -204,7 +204,7 @@ export class BetService {
       try {
         await this.betRepository.saveBetEvents(result.id, pernas);
       } catch (error) {
-        console.warn('[EVENT_MATCH] result=legs_error', (error as Error).message);
+        this.logger.warn(`[EVENT_MATCH] result=legs_error ${(error as Error).message}`);
       }
     }
 
@@ -292,7 +292,7 @@ export class BetService {
       try {
         await this.betRepository.replaceBetEvents(updated.id, pernas);
       } catch (error) {
-        console.warn('[EVENT_MATCH] result=legs_error', (error as Error).message);
+        this.logger.warn(`[EVENT_MATCH] result=legs_error ${(error as Error).message}`);
       }
     }
     return updated;
@@ -373,7 +373,7 @@ export class BetService {
     };
   }
 
-  async findBets(filters: BetFilterDto): Promise<PaginatedBetsResponseDto> {
+  private toRepositoryFilter(filters: BetFilterDto): FilterGetBets {
     if (
       filters.startDate &&
       filters.endDate &&
@@ -384,7 +384,7 @@ export class BetService {
       );
     }
 
-    const repositoryFilter = {
+    return {
       betId: filters.betId,
       userId: filters.userId,
       startDate: filters.startDate ? new Date(filters.startDate) : undefined,
@@ -393,10 +393,40 @@ export class BetService {
       resultIds: filters.resultIds,
       houseIds: filters.houseIds,
       sportIds: filters.sportIds,
+      origins: filters.origins,
+      unmatched: filters.unmatched,
       q: filters.q,
       page: filters.page ?? 1,
       perPage: filters.perPage ?? 30,
     } as FilterGetBets;
+  }
+
+  async getMonthlySummary(filters: BetFilterDto) {
+    return this.betRepository.monthlySummary(this.toRepositoryFilter(filters));
+  }
+
+  // Faixa de totais da lista: o filtro inteiro, não só a página ou o mês aberto.
+  async getTotals(filters: BetFilterDto) {
+    const raw = await this.betRepository.totals(this.toRepositoryFilter(filters));
+    const settledStake = Number(raw.settledStake);
+    const profit = Number(raw.profit);
+    const won = Number(raw.won);
+    const lost = Number(raw.lost);
+    return {
+      count: Number(raw.count),
+      staked: Number(raw.staked),
+      settledStake,
+      profit,
+      won,
+      lost,
+      pending: Number(raw.pending),
+      roi: settledStake > 0 ? profit / settledStake : 0,
+      hitRate: won + lost > 0 ? won / (won + lost) : 0,
+    };
+  }
+
+  async findBets(filters: BetFilterDto): Promise<PaginatedBetsResponseDto> {
+    const repositoryFilter = this.toRepositoryFilter(filters);
 
     const [bets, total] = await Promise.all([
       this.betRepository.findBets(repositoryFilter),

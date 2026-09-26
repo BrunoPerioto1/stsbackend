@@ -1,9 +1,10 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Telegraf } from 'telegraf';
 import { TELEGRAM_BOT } from './telegram-bot.provider';
 import { UsersService } from '../users/users.service';
-import { UNLINKED_INSTRUCTIONS } from './messages.const';
+import { unlinkedInstructions } from './messages.const';
 import { accessBlock, billingPayLine, pixKeyboard } from '../users/access';
+import { errorArgs } from '../common/utils/log';
 
 // Curto o bastante pra um convite esquecido no chat não virar porta aberta. E,
 // como o link pede aprovação, quem não pagou esbarra no bot mesmo com ele na mão.
@@ -30,6 +31,8 @@ const spDate = (d: Date) =>
 // usuários via link".
 @Injectable()
 export class TipsGroupService {
+  private readonly logger = new Logger(TipsGroupService.name);
+
   private readonly chatId: number | null;
 
   constructor(
@@ -39,7 +42,7 @@ export class TipsGroupService {
     const chatId = Number(process.env.TIPS_GROUP_CHAT_ID);
     this.chatId = Number.isFinite(chatId) && chatId !== 0 ? chatId : null;
     if (!this.chatId) {
-      console.warn(
+      this.logger.warn(
         '⚠️  TIPS_GROUP_CHAT_ID não definido — fan-out e controle de entrada do grupo Tips ficam desativados.',
       );
     }
@@ -64,31 +67,26 @@ export class TipsGroupService {
       );
       return member.status !== 'left' && member.status !== 'kicked';
     } catch (err) {
-      console.error(
-        `⚠️ Não foi possível checar membro do grupo Tips (telegramUserId=${telegramUserId}):`,
-        err,
-      );
+      this.logger.error(...errorArgs(`⚠️ Não foi possível checar membro do grupo Tips (telegramUserId=${telegramUserId})`, err));
       return false;
     }
   }
 
   // Ban sem prazo: dura até o readmit. O aviso é cortesia — se não sair (a
-  // pessoa bloqueou o bot), a remoção continua valendo.
-  async remove(telegramUserId: number): Promise<void> {
+  // pessoa bloqueou o bot), a remoção continua valendo. `userId` (da conta)
+  // deixa o aviso levar o PIX copia-e-cola dela.
+  async remove(telegramUserId: number, userId?: number): Promise<void> {
     if (!this.chatId) throw new Error('TIPS_GROUP_CHAT_ID não definido');
     await this.bot.telegram.banChatMember(this.chatId, telegramUserId);
 
     await this.bot.telegram
       .sendMessage(
         telegramUserId,
-        `🔒 Seu acesso venceu e você saiu do grupo de Tips.\n\n${billingPayLine()}`,
-        { parse_mode: 'Markdown', reply_markup: pixKeyboard() },
+        `🔒 Seu acesso venceu e você saiu do grupo de Tips.\n\n${billingPayLine(userId)}`,
+        { parse_mode: 'Markdown', reply_markup: pixKeyboard(userId) },
       )
       .catch((error) =>
-        console.error(
-          `⚠️ Aviso de saída do grupo Tips falhou (telegramUserId=${telegramUserId}):`,
-          error,
-        ),
+        this.logger.error(...errorArgs(`⚠️ Aviso de saída do grupo Tips falhou (telegramUserId=${telegramUserId})`, error)),
       );
   }
 
@@ -134,10 +132,7 @@ export class TipsGroupService {
       );
       return 'sent';
     } catch (error) {
-      console.error(
-        `⚠️ Convite do grupo Tips falhou (telegramUserId=${telegramUserId}):`,
-        error,
-      );
+      this.logger.error(...errorArgs(`⚠️ Convite do grupo Tips falhou (telegramUserId=${telegramUserId})`, error));
       return 'failed';
     }
   }
@@ -153,7 +148,7 @@ export class TipsGroupService {
       user = await this.usersService.findByTelegramUserId(telegramUserId);
     } catch (error) {
       // Banco fora: o pedido fica pendente e um admin decide pelo Telegram.
-      console.error('Erro ao conferir pedido de entrada no grupo Tips:', error);
+      this.logger.error(...errorArgs('Erro ao conferir pedido de entrada no grupo Tips', error));
       return;
     }
 
@@ -169,22 +164,16 @@ export class TipsGroupService {
 
       // O Telegram só deixa o bot falar com quem pediu enquanto o pedido está
       // aberto: a explicação vai antes da recusa.
-      await this.explainRefusal(request.user_chat_id, block, user?.accessUntil)
+      await this.explainRefusal(request.user_chat_id, block, user?.accessUntil, user?.id)
         .catch((error) =>
-          console.error(
-            `⚠️ Explicação da recusa no grupo Tips falhou (telegramUserId=${telegramUserId}):`,
-            error,
-          ),
+          this.logger.error(...errorArgs(`⚠️ Explicação da recusa no grupo Tips falhou (telegramUserId=${telegramUserId})`, error)),
         );
       await this.bot.telegram.declineChatJoinRequest(
         this.chatId,
         telegramUserId,
       );
     } catch (error) {
-      console.error(
-        `⚠️ Pedido de entrada no grupo Tips não resolvido (telegramUserId=${telegramUserId}):`,
-        error,
-      );
+      this.logger.error(...errorArgs(`⚠️ Pedido de entrada no grupo Tips não resolvido (telegramUserId=${telegramUserId})`, error));
     }
   }
 
@@ -192,11 +181,12 @@ export class TipsGroupService {
     chatId: number,
     block: 'unlinked' | 'inactive' | 'expired',
     accessUntil: Date | null | undefined,
+    userId?: number,
   ) {
     if (block === 'unlinked') {
       return this.bot.telegram.sendMessage(
         chatId,
-        `${UNLINKED_INSTRUCTIONS}\n\nO grupo de Tips é só pra contas vinculadas e em dia. Depois de vincular, peça pra entrar de novo pelo mesmo link.`,
+        `${unlinkedInstructions()}\n\nO grupo de Tips é só pra contas vinculadas e em dia. Depois de vincular, peça pra entrar de novo pelo mesmo link.`,
       );
     }
     if (block === 'inactive') {
@@ -207,8 +197,8 @@ export class TipsGroupService {
     }
     return this.bot.telegram.sendMessage(
       chatId,
-      `🔒 Seu acesso venceu em ${spDate(accessUntil as Date)}, então o pedido pra entrar no grupo de Tips foi recusado.\n\n${billingPayLine()}`,
-      { parse_mode: 'Markdown', reply_markup: pixKeyboard() },
+      `🔒 Seu acesso venceu em ${spDate(accessUntil as Date)}, então o pedido pra entrar no grupo de Tips foi recusado.\n\n${billingPayLine(userId)}`,
+      { parse_mode: 'Markdown', reply_markup: pixKeyboard(userId) },
     );
   }
 }

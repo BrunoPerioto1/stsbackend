@@ -121,6 +121,24 @@ export class SettlementRepository {
    * consegue quebrar. Nao e' motivo pra deixar de liquidar.
    */
   /**
+   * Quem tem aposta pendente — o universo do calculo em lote do cron. Conta
+   * inativa fica de fora: nao entra no app nem recebe aviso.
+   */
+  async findUsersWithPendingBets(): Promise<UserId[]> {
+    const rows = await this.dbRead
+      .selectFrom('bets')
+      .innerJoin('betResults', 'betResults.betId', 'bets.id')
+      .innerJoin('users', 'users.id', 'bets.userId')
+      .where('bets.deletedAt', 'is', null)
+      .where('betResults.resultId', '=', ResultIdEnum.PENDING as ResultId)
+      .where((eb) => eb.or([eb('users.isActive', 'is', null), eb('users.isActive', '=', true)]))
+      .select('bets.userId')
+      .distinct()
+      .execute();
+    return rows.flatMap((row) => (row.userId == null ? [] : [row.userId]));
+  }
+
+  /**
    * Contadores da fila. A tela precisa deles no load: hoje esses numeros so'
    * existem na resposta do ultimo `compute`, entao um F5 apaga tanto o aviso de
    * fila restante quanto o de aposta sem proposta.
@@ -132,6 +150,7 @@ export class SettlementRepository {
   async queue(userId: UserId): Promise<{
     pending: number;
     settleable: number;
+    overdue: number;
     suggestions: number;
     undecided: number;
   }> {
@@ -181,6 +200,23 @@ export class SettlementRepository {
               ]),
             )
             .as('settleable'),
+          eb.fn
+            .count<string>('bets.id')
+            // Pendente de jogo que ja acabou: e' a que pede atencao. Aposta de
+            // jogo de amanha tambem e' pendente, e contar ela no menu fazia o
+            // numero nunca zerar. Acabou = placar coletado, ou inicio ha mais
+            // de 3h; sem jogo casado, planilhada ha mais de um dia.
+            .filterWhere((fb) =>
+              fb.or([
+                fb('eventResults.externalId', 'is not', null),
+                fb('bets.eventStartAt', '<', sql<Date>`now() - interval '3 hours'`),
+                fb.and([
+                  fb('bets.eventStartAt', 'is', null),
+                  fb('bets.betTime', '<', sql<Date>`now() - interval '1 day'`),
+                ]),
+              ]),
+            )
+            .as('overdue'),
         ])
         .executeTakeFirstOrThrow(),
       this.dbRead
@@ -225,6 +261,7 @@ export class SettlementRepository {
     return {
       pending: Number(bets.pending),
       settleable: Number(bets.settleable),
+      overdue: Number(bets.overdue),
       suggestions: Number(suggestions.suggestions),
       undecided: Number(suggestions.undecided),
     };

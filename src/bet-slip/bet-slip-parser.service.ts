@@ -3,11 +3,9 @@ import {
   normalizeBetNumber,
   BET_EXTRACTION_RULES,
 } from '../bet/bet-normalization';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { getOpenAIClient } from '../telegram/openai-client';
-import * as dotenv from 'dotenv';
 
-dotenv.config();
 
 const MODEL = 'gpt-5.6-luna';
 
@@ -96,6 +94,8 @@ export interface ExtractedBetSlip {
 // botão. Quem chama é que combina isso com casa/horário.
 @Injectable()
 export class BetSlipParserService {
+  private readonly logger = new Logger(BetSlipParserService.name);
+
   async extractBetFromImage({
     imageBuffer,
     mimeType,
@@ -143,7 +143,7 @@ export class BetSlipParserService {
             ...images.map((image_url) => ({
               type: 'input_image' as const,
               image_url,
-              detail: (deep ? 'high' : 'original') as 'high' | 'original',
+              detail: deep ? ('high' as const) : ('original' as const),
             })),
           ],
         },
@@ -170,7 +170,7 @@ export class BetSlipParserService {
     );
 
     const usage = response.usage;
-    console.log(
+    this.logger.log(
       `[BET_IMAGE_AI] model=${MODEL} mode=${deep ? 'deep' : 'standard'} images=${images.length} input=${usage?.input_tokens ?? '?'} ` +
         `cached=${usage?.input_tokens_details?.cached_tokens ?? 0} ` +
         `cache_write=${usage?.input_tokens_details?.cache_write_tokens ?? 0} ` +

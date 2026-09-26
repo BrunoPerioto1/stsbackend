@@ -1,4 +1,3 @@
-import { Transaction } from 'kysely';
 import type BetsTable from '../../db_types/Bet';
 import type BetResultsTable from '../../db_types/BetsResults';
 import type BettingHousesTable from '../../db_types/BettingHouse';
@@ -16,6 +15,7 @@ import type EventFactsTable from '../../db_types/EventFacts';
 import type BetSettlementSuggestionsTable from '../../db_types/BetSettlementSuggestions';
 import type BetEventsTable from '../../db_types/BetEvents';
 import type SportsTable from '../../db_types/Sports';
+import type RateLimitHitsTable from '../../db_types/RateLimitHits';
 
 export interface Database {
   bets: BetsTable;
@@ -35,4 +35,5 @@ export interface Database {
   betSettlementSuggestions: BetSettlementSuggestionsTable
   betEvents: BetEventsTable
   sports: SportsTable
+  rateLimitHits: RateLimitHitsTable
 }

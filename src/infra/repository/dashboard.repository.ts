@@ -1,6 +1,7 @@
 // src/dashboard/dashboard.repository.ts
 import { Inject, Injectable } from '@nestjs/common';
-import { Kysely, sql } from 'kysely';
+import { Kysely, sql, type Expression, type ExpressionBuilder, type SqlBool } from 'kysely';
+import type { SportId } from '../../db_types/Sports';
 import type { Database } from '../db/database.types';
 import { DATABASE_READ_CONNECTION } from '../db/db.module';
 import { BettingHouseId } from '../../db_types/BettingHouse';
@@ -27,8 +28,25 @@ interface FilterDashboard {
   startDate?: string;
   endDate?: string;
   houseId?: BettingHouseId;
-  house_id?: BettingHouseId;
+  houseIds?: number[];
+  sportIds?: number[];
   userId?: UserId;
+}
+
+// Filtros de todas as consultas do dashboard. Eram quatro cadeias de $if
+// copiadas, uma por consulta, que podiam divergir. Exige `bets as b`.
+function dashboardFilters(filters: FilterDashboard) {
+  const { startDate, endDate, houseId, houseIds, sportIds, userId } = filters;
+  return (eb: ExpressionBuilder<Database & { b: Database["bets"] }, "b">) => {
+    const conditions: Expression<SqlBool>[] = [eb("b.deletedAt", "is", null)];
+    if (isNotEmpty(userId)) conditions.push(eb("b.userId", "=", userId!));
+    if (isNotEmpty(houseId)) conditions.push(eb("b.houseId", "=", houseId!));
+    if (houseIds?.length) conditions.push(eb("b.houseId", "in", houseIds as BettingHouseId[]));
+    if (sportIds?.length) conditions.push(eb("b.sportId", "in", sportIds as SportId[]));
+    if (isNotEmpty(startDate)) conditions.push(eb(betDate, ">=", startOfDay(new Date(startDate!))));
+    if (isNotEmpty(endDate)) conditions.push(eb(betDate, "<", endOfDay(new Date(endDate!))));
+    return eb.and(conditions);
+  };
 }
 
 @Injectable()
@@ -41,23 +59,9 @@ export class DashboardRepository {
 
 
 async findDailySummary(filters: FilterDashboard) {
-  const { startDate, endDate, houseId, userId } = filters;
-
   return this.dbRead
     .selectFrom("bets as b")
-    .where("b.deletedAt", "is", null)
-    .$if(isNotEmpty(userId), (qb) =>
-      qb.where("b.userId", "=", userId!),
-    )
-    .$if(isNotEmpty(houseId), (qb) =>
-      qb.where("b.houseId", "=", houseId!),
-    )
-    .$if(isNotEmpty(startDate), (qb) =>
-      qb.where(betDate, ">=", startOfDay(new Date(startDate!))),
-    )
-    .$if(isNotEmpty(endDate), (qb) =>
-      qb.where(betDate, "<", endOfDay(new Date(endDate!))),
-    )
+    .where(dashboardFilters(filters))
     .select(({ fn }) => [
       betCalendarDateBr.as("date"),
       fn.count("b.id").as("totalBets"),
@@ -68,27 +72,19 @@ async findDailySummary(filters: FilterDashboard) {
     .execute();
 }
 async findMonthlySummary(filters: FilterDashboard) {
-  const { startDate, endDate, houseId, userId } = filters;
-
   return this.dbRead
     .selectFrom("bets as b")
-    .where("b.deletedAt", "is", null)
-    .$if(isNotEmpty(userId), (qb) =>
-      qb.where("b.userId", "=", userId!),
-    )
-    .$if(isNotEmpty(houseId), (qb) =>
-      qb.where("b.houseId", "=", houseId!),
-    )
-    .$if(isNotEmpty(startDate), (qb) =>
-      qb.where(betDate, ">=", startOfDay(new Date(startDate!))),
-    )
-    .$if(isNotEmpty(endDate), (qb) =>
-      qb.where(betDate, "<", endOfDay(new Date(endDate!))),
-    )
-    .select(({ fn }) => [
+    .leftJoin("betResults as br", "br.betId", "b.id")
+    .where(dashboardFilters(filters))
+    .select((eb) => [
       betCalendarMonthBr.as("month"),
-      fn.count("b.id").as("totalBets"),
-      fn<number>("coalesce", [fn.sum<number>("b.profit"), sql.lit(0)]).as("profitMonth"),
+      eb.fn.count("b.id").as("totalBets"),
+      eb.fn<number>("coalesce", [eb.fn.sum<number>("b.profit"), sql.lit(0)]).as("profitMonth"),
+      // Base do ROI do mês, igual à das métricas: só o stake já liquidado.
+      eb.fn<number>("coalesce", [
+        eb.fn.sum<number>(eb.case().when("br.resultId", "in", SETTLED_RESULT_IDS as any).then(eb.ref("b.stake")).else(0).end()),
+        sql.lit(0),
+      ]).as("settledStake"),
     ])
     .groupBy(betCalendarMonthBr)
     .orderBy(betCalendarMonthBr, "asc")
@@ -96,19 +92,10 @@ async findMonthlySummary(filters: FilterDashboard) {
 }
 // Lucro por casa no periodo. Casa sem lucro/prejuizo (so pendentes) fica de fora.
 async findProfitByHouse(filters: FilterDashboard) {
-  const { startDate, endDate, userId } = filters;
-
   return this.dbRead
     .selectFrom("bets as b")
-    .where("b.deletedAt", "is", null)
     .leftJoin("bettingHouses as bh", "bh.id", "b.houseId")
-    .where("b.userId", "=", userId!)
-    .$if(isNotEmpty(startDate), (qb) =>
-      qb.where(betDate, ">=", startOfDay(new Date(startDate!))),
-    )
-    .$if(isNotEmpty(endDate), (qb) =>
-      qb.where(betDate, "<", endOfDay(new Date(endDate!))),
-    )
+    .where(dashboardFilters(filters))
     .select(({ fn }) => [
       sql<string>`coalesce(${sql.ref("bh.name")}, 'Sem casa')`.as("house"),
       fn.sum<string>("b.profit").as("profit"),
@@ -131,24 +118,10 @@ async findBetDateRange(userId: UserId) {
 }
 
 async findDashboardMetrics(filters: FilterDashboard) {
-  const { startDate, endDate, houseId, userId } = filters;
-
   return this.dbRead
     .selectFrom("bets as b")
-    .where("b.deletedAt", "is", null)
     .leftJoin("betResults as br", "br.betId", "b.id")
-    .$if(isNotEmpty(userId), (qb) =>
-      qb.where("b.userId", "=", userId!),
-    )
-    .$if(isNotEmpty(houseId), (qb) =>
-      qb.where("b.houseId", "=", houseId!),
-    )
-    .$if(isNotEmpty(startDate), (qb) =>
-      qb.where(betDate, ">=", startOfDay(new Date(startDate!))),
-    )
-    .$if(isNotEmpty(endDate), (qb) =>
-      qb.where(betDate, "<", endOfDay(new Date(endDate!))),
-    )
+    .where(dashboardFilters(filters))
     .select((eb) => [
       eb.fn.count("b.id").as("totalBets"),
       eb.fn<number>("sum", [eb.case().when("br.resultId", "in", SETTLED_RESULT_IDS as any).then(1).else(0).end()]).as("settledBets"),

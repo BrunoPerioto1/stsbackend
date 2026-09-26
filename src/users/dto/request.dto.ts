@@ -15,12 +15,18 @@ import {
   MinLength,
 } from 'class-validator';
 
+// Faixa do filtro de % das tips: vale pro Perfil e pro /filtro do bot.
+export const MIN_PERCENT_FILTER = 0.01;
+export const MAX_PERCENT_FILTER = 5;
+
 export class CreateUserRequestDTO {
+  // Opcional: sem ele o servidor gera um livre a partir do nome/e-mail.
   // VARCHAR(50) no banco: acima disso o insert estourava com 500.
-  @ApiProperty({ maxLength: 50 })
+  @ApiProperty({ required: false, maxLength: 50 })
+  @IsOptional()
   @IsString()
   @MaxLength(50)
-  username!: string;
+  username?: string;
 
   @ApiProperty()
   @IsEmail()
@@ -31,9 +37,10 @@ export class CreateUserRequestDTO {
   @MinLength(6)
   password!: string;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, maxLength: 100 })
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   fullName?: string;
 }
 
@@ -67,7 +74,8 @@ export class UpdateUserRequestDTO extends PartialType(OmitType(CreateUserRequest
   stake?: number;
 
   // % mínima (da banca) que o sinal de uma tip precisa indicar pro bot notificar
-  // o usuário — mesmo campo usado pelo comando /filtro do bot do Telegram.
+  // o usuário — mesmo campo usado pelo comando /filtro do bot do Telegram, com
+  // a mesma faixa (MIN/MAX_PERCENT_FILTER).
   @ApiProperty({
     required: false,
     description:
@@ -75,8 +83,8 @@ export class UpdateUserRequestDTO extends PartialType(OmitType(CreateUserRequest
   })
   @IsOptional()
   @IsNumber()
-  @Min(0.01)
-  @Max(5)
+  @Min(MIN_PERCENT_FILTER)
+  @Max(MAX_PERCENT_FILTER)
   minPercentFilter?: number;
 
   // Dias sem apostar numa casa com saldo até a lista de casas sugerir saque.
@@ -89,4 +97,13 @@ export class UpdateUserRequestDTO extends PartialType(OmitType(CreateUserRequest
   @Min(1)
   @Max(365)
   staleHouseDays?: number;
+}
+
+// Excluir a conta pede a senha: com só o token, quem pegasse uma sessão aberta
+// apagaria tudo sem volta.
+export class DeleteAccountRequestDTO {
+  @ApiProperty({ description: 'Senha atual' })
+  @IsString()
+  @MinLength(1)
+  password!: string;
 }

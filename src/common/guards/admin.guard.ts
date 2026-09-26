@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { UsersRepository } from '../../infra/repository/users.repository';
 import type { UserId } from '../../db_types/Users';
+import type { JwtPayload } from '../../auth/jwt/jwt-payload';
 
 // roles.id = 1, permissions ["*"]. Um número em vez de ler
 // `roles.permissions`: existe um nível de acesso, não um sistema de permissões.
@@ -25,7 +26,7 @@ export class AdminGuard implements CanActivate {
   constructor(private readonly usersRepository: UsersRepository) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const { user } = context.switchToHttp().getRequest();
+    const { user } = context.switchToHttp().getRequest<{ user?: JwtPayload }>();
     const current = user?.userId ? await this.usersRepository.findById(user.userId as UserId) : undefined;
     if (current?.roleId !== ADMIN_ROLE_ID || current.isActive === false) {
       throw new ForbiddenException('Acesso restrito ao administrador');

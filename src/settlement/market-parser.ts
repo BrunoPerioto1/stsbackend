@@ -83,7 +83,9 @@ export const labels = {
 export function parseScoreMarket(text: string, teams: Teams): Condition | null {
   const sc = scoped(text); if (!sc) return null;
   const { scope } = sc;
-  let { selection: sel, label } = splitLabel(sc.text);
+  const split = splitLabel(sc.text);
+  const sel = split.selection;
+  let label = split.label;
   const c = (normalizedMarket: string, extra: Partial<Condition>): Condition => ({ normalizedMarket, scope, ...extra });
   if (labels.exact.test(label)) {
     const m = /^(\d{1,2})\s*[-x:]\s*(\d{1,2})$/.exec(sel);
@@ -99,7 +101,7 @@ export function parseScoreMarket(text: string, teams: Teams): Condition | null {
     const codes: Record<string, SelectionPick[]> = { '1x': ['HOME','DRAW'], 'x2': ['DRAW','AWAY'], '12': ['HOME','AWAY'] };
     const parts = sel.split(' ou ');
     const picks = codes[sel] ?? (parts.length === 2 ? parts.map(p => resultPick(p, teams)) : []);
-    return picks.length === 2 && picks.every(p => p !== null) && picks[0] !== picks[1] ? c('DUPLA_CHANCE', { picks: picks as SelectionPick[] }) : null;
+    return picks.length === 2 && picks.every(p => p !== null) && picks[0] !== picks[1] ? c('DUPLA_CHANCE', { picks: picks }) : null;
   }
   if (/^handicap(?: asiatico)?$/.test(label)) {
     const m = /^(.+?)\s+\(?([+-]\d+(?:[.,]\d+)?)\)?(?: gols?)?$/.exec(sel);
@@ -125,7 +127,7 @@ export function parseScoreMarket(text: string, teams: Teams): Condition | null {
   }
   if (/^(clean sheet|sem sofrer gols)$/.test(label)) {
     const m = /^(.+?)(?:\s+(sim|nao))?$/.exec(sel), side = m && teamPick(m[1], teams);
-    return side ? c('CLEAN_SHEET', { side, expected: m![2] !== 'nao' }) : null;
+    return side ? c('CLEAN_SHEET', { side, expected: m[2] !== 'nao' }) : null;
   }
   if (labels.result.test(label)) {
     const pick = resultPick(sel, teams);

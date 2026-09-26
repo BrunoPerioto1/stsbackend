@@ -13,7 +13,7 @@ describe('selecao / mercado: regressao do CSV real', () => {
     ['2-0 / Resultado Correto', 2, 0, ResultIdEnum.WON],
     ['Empate / Resultado Final', 1, 1, ResultIdEnum.WON],
   ])('%s', (market, home, away, result) => {
-    expect(settleBet(market as string, TIMES, placar(home as number, away as number), 'finished').resultId).toBe(result);
+    expect(settleBet(market, TIMES, placar(home, away), 'finished').resultId).toBe(result);
   });
   it('preserva todas as pernas e recusa alternativas de placar', () => {
     expect(settleBet('Sim / Ambos os Times Marcam / Mais de 3.5 / Total de Gols', TIMES, placar(2, 1), 'finished').resultId).toBe(ResultIdEnum.LOST);

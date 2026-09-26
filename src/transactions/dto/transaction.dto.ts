@@ -1,4 +1,4 @@
-import { IsNumber, IsString, IsPositive, IsNotEmpty, IsOptional } from "class-validator";
+import { IsNumber, IsString, IsPositive, IsNotEmpty, IsOptional, IsIn, MaxLength } from "class-validator";
 import { ApiProperty } from "@nestjs/swagger";
 
 export enum TransactionTypeEnum {
@@ -55,3 +55,23 @@ export class NewTransactionDto {
   userId?: number;
 }
 
+
+// Edição parcial: só o que mudou. O sinal do valor segue a mesma regra da
+// criação (saque sempre negativo), então o front manda o valor como digitado.
+export class UpdateTransactionDto {
+  @ApiProperty({ description: 'Tipo (1=Depósito, 2=Saque, 3=Ajuste)', example: 1, required: false })
+  @IsOptional()
+  @IsIn([TransactionTypeEnum.DEPOSIT, TransactionTypeEnum.WITHDRAWAL, TransactionTypeEnum.ADJUSTMENT])
+  transactionTypeId?: number;
+
+  @ApiProperty({ description: 'Valor da movimentação', example: 100.5, required: false })
+  @IsOptional()
+  @IsNumber()
+  value?: number;
+
+  @ApiProperty({ description: 'Descrição', example: 'Depósito via Pix', required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  description?: string;
+}

@@ -42,7 +42,7 @@ describe('mercados por capacidades',()=>{
     ['Sim / Mais de 2.5 / Ambos os Times Marcam / Total de Gols',R.WON],
     ['Mais de (2.5) e Sim / Total de Gols e Ambas as Equipes Marcam',R.WON],
     ['Flamengo e mais de 3.5 - Resultado final e total de gols',R.LOST],['BTTS e 3+ gols',R.WON],
-  ])('%s',(market,result)=>expect(run(market as string).resultId).toBe(result));
+  ])('%s',(market,result)=>expect(run(market).resultId).toBe(result));
 
   it.each(['Mais de 8.5 - Escanteios','Mais de 0.5 - Total de gols 1ºT','Flamengo - Primeiro gol','Pedro - Jogador para marcar'])('dados ausentes: %s',market=>{
     expect(run(market,{sport:'football',scoreScope:'REGULATION'})).toMatchObject({resultId:null,reason:'DADO_INDISPONIVEL'});

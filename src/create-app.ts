@@ -1,8 +1,9 @@
-import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
+import { errorArgs } from './common/utils/log';
+import { allowedOrigins } from './common/utils/cors';
 
 // Bootstrap do Nest isolado do app.listen() — reaproveitado tanto pelo
 // main.ts (dev local) quanto pela function serverless da Vercel
@@ -11,8 +12,10 @@ import { ValidationPipe } from '@nestjs/common';
 export async function createNestApp(): Promise<NestExpressApplication> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  // Cacheia o preflight: sem isso cada request do front paga um OPTIONS extra.
-  app.enableCors({ maxAge: 86400 });
+  // Só o front chama pelo navegador (ver allowedOrigins). Webhook do Telegram,
+  // cron e job não mandam Origin e não passam por CORS.
+  // maxAge cacheia o preflight: sem isso cada request do front paga um OPTIONS extra.
+  app.enableCors({ origin: allowedOrigins(), maxAge: 86400 });
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -32,10 +35,7 @@ export async function createNestApp(): Promise<NestExpressApplication> {
       const { configureSwagger } = await import('./swagger');
       configureSwagger(app);
     } catch (err) {
-      console.error(
-        '⚠️  Falha ao carregar a documentação Swagger/Scalar:',
-        err,
-      );
+      new Logger('Bootstrap').error(...errorArgs('Falha ao carregar a documentação Swagger/Scalar', err));
     }
   }
 

@@ -1,23 +1,50 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { PendentesService } from './pendentes.service';
-import { UNLINKED_INSTRUCTIONS } from './messages.const';
-import { accessBlock, billingInfo, billingPayLine, pixKeyboard } from '../users/access';
+import { unlinkedInstructions } from './messages.const';
+import {
+  PAYMENT_CLAIM_CALLBACK,
+  accessBlock,
+  accessStatus,
+  billingInfo,
+  billingPayLine,
+  pixKeyboard,
+} from '../users/access';
+import { PaymentClaimService } from '../users/payment-claim.service';
+import {
+  RateLimitedException,
+  RateLimitService,
+  TELEGRAM_LINK_LIMIT,
+} from '../common/rate-limit/rate-limit.service';
+import { MAX_PERCENT_FILTER, MIN_PERCENT_FILTER } from '../users/dto/request.dto';
 import { normalizeBetNumber } from '../bet/bet-normalization';
+import { frontUrl } from '../common/utils/front-url';
+import {
+  callbackData,
+  commandArgs,
+  messageText,
+  senderId,
+  type BotContext,
+} from './utils/bot-context';
+import { errorArgs } from '../common/utils/log';
 
 // Os comandos "simples" do bot — cada um só conversa com o usuário que
 // chamou, sem envolver fan-out de tips nem callback_query.
 @Injectable()
 export class BotCommandsService {
+  private readonly logger = new Logger(BotCommandsService.name);
+
   constructor(
     private readonly usersService: UsersService,
     private readonly pendentesService: PendentesService,
+    private readonly paymentClaim: PaymentClaimService,
+    private readonly rateLimit?: RateLimitService,
   ) {}
 
-  async handleStart(ctx: any) {
+  async handleStart(ctx: BotContext) {
     await ctx.reply(
       '👋 Bem-vindo!\n\n' +
-        '1️⃣ Vincule sua conta: faça login em https://stsfront.vercel.app/login → Perfil → Telegram → "Gerar código de vinculação" e envie aqui /vincular com os seis dígitos\n' +
+        `1️⃣ Vincule sua conta: faça login em ${frontUrl('/login')} → Perfil → Telegram → "Gerar código de vinculação" e envie aqui /vincular com os seis dígitos\n` +
         '2️⃣ Defina sua banca: /stake VALOR\n' +
         '3️⃣ (Opcional) Defina o filtro de porcentagem mínima das tips que você quer receber: /filtro 1.5\n' +
         '   Use /filtro off para remover o filtro e receber todas as tips.\n\n' +
@@ -30,11 +57,11 @@ export class BotCommandsService {
   // caiu), sem limite de data — uma tip só sai da lista quando você resolve
   // ela, senão ficaria perdida pra sempre se passasse batido no dia em que
   // chegou.
-  async handlePendentes(ctx: any) {
+  async handlePendentes(ctx: BotContext) {
     try {
-      const user = await this.usersService.findByTelegramUserId(ctx.from.id);
+      const user = await this.usersService.findByTelegramUserId(senderId(ctx));
       if (!user) {
-        await ctx.reply(UNLINKED_INSTRUCTIONS);
+        await ctx.reply(unlinkedInstructions());
         return;
       }
       const { text, keyboard } = await this.pendentesService.buildMessage(user);
@@ -44,80 +71,74 @@ export class BotCommandsService {
         reply_markup: keyboard,
       });
     } catch (err) {
-      console.error('❌ Erro ao buscar pendentes:', err);
+      this.logger.error(...errorArgs('Erro ao buscar pendentes', err));
       await ctx.reply('❌ Erro ao buscar tips pendentes. Tente novamente.');
     }
   }
 
   // /site: link direto pro dashboard do app.
-  async handleSite(ctx: any) {
-    await ctx.reply('📊 Site: https://stsfront.vercel.app');
+  async handleSite(ctx: BotContext) {
+    await ctx.reply(`📊 Site: ${frontUrl()}`);
   }
 
-  async handleFiltro(ctx: any) {
-    const args = ctx.message.text.split(' ');
-    const telegramUserId = ctx.from.id;
+  async handleFiltro(ctx: BotContext) {
+    const [arg] = commandArgs(ctx);
+    const telegramUserId = senderId(ctx);
 
     try {
       const user = await this.usersService.findByTelegramUserId(telegramUserId);
       if (!user) {
-        await ctx.reply(UNLINKED_INSTRUCTIONS);
+        await ctx.reply(unlinkedInstructions());
         return;
       }
 
-      if (args.length !== 2 || args[1].toLowerCase() === 'off') {
-        if (args.length === 2 && args[1].toLowerCase() === 'off') {
-          await this.usersService.setMinPercentFilter(telegramUserId, null);
-          await ctx.reply(
-            '✅ Filtro removido. Você vai receber todas as tips do grupo.',
-          );
-          return;
-        }
+      if (commandArgs(ctx).length !== 1) {
         await ctx.reply(
           '❌ Formato incorreto. Use: /filtro VALOR (ex.: /filtro 1.5) ou /filtro off',
         );
         return;
       }
+      if (arg.toLowerCase() === 'off') {
+        await this.usersService.setMinPercentFilter(telegramUserId, null);
+        await ctx.reply('✅ Filtro removido. Você vai receber todas as tips do grupo.');
+        return;
+      }
 
-      const value = Number(args[1].replace(',', '.'));
-      if (!Number.isFinite(value) || value < 0) {
+      const value = Number(arg.replace(',', '.'));
+      if (!Number.isFinite(value) || value < MIN_PERCENT_FILTER || value > MAX_PERCENT_FILTER) {
         await ctx.reply(
-          '❌ Valor inválido. Informe um número maior ou igual a zero.',
+          `❌ Valor inválido. Informe de ${MIN_PERCENT_FILTER} a ${MAX_PERCENT_FILTER} (ex.: /filtro 1.5), ou /filtro off pra receber tudo.`,
         );
         return;
       }
 
       await this.usersService.setMinPercentFilter(telegramUserId, value);
-      await ctx.reply(
-        `✅ Filtro definido: só chegam tips com porcentagem >= ${value}%`,
-      );
+      await ctx.reply(`✅ Filtro definido: só chegam tips com porcentagem >= ${value}%`);
     } catch (error) {
-      console.error('Erro ao atualizar filtro:', error);
+      this.logger.error(...errorArgs('Erro ao atualizar filtro', error));
       await ctx.reply('❌ Erro ao atualizar seu filtro. Tente novamente.');
     }
   }
 
-  async handleStake(ctx: any) {
-    const args = ctx.message.text.split(' ');
-    if (args.length !== 2) {
-      await ctx.reply(
-        '❌ Formato incorreto. Use: /stake VALOR\nExemplo: /stake 2000',
-      );
+  async handleStake(ctx: BotContext) {
+    const args = commandArgs(ctx);
+    if (args.length !== 1) {
+      await ctx.reply('❌ Formato incorreto. Use: /stake VALOR\nExemplo: /stake 2000');
       return;
     }
 
     // Banca é dinheiro: "1.500" é mil e quinhentos, "1500,50" tem centavos.
     // O prefixo R$ é o que faz o normalizeBetNumber ler o ponto como milhar.
-    const value = normalizeBetNumber(`R$ ${args[1].replace(/^R\$/i, '')}`);
+    const value = normalizeBetNumber(`R$ ${args[0].replace(/^R\$/i, '')}`);
     if (value === null || value <= 0) {
       await ctx.reply('❌ Valor inválido. Informe um número maior que zero.');
       return;
     }
 
     try {
-      const user = await this.usersService.findByTelegramUserId(ctx.from.id);
+      const user = await this.usersService.findByTelegramUserId(senderId(ctx));
       if (!user) {
-        await ctx.reply(UNLINKED_INSTRUCTIONS);
+        await ctx.reply(unlinkedInstructions());
         return;
       }
 
@@ -127,7 +148,7 @@ export class BotCommandsService {
         `✅ Banca definida: R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
       );
     } catch (error) {
-      console.error('Erro ao atualizar stake:', error);
+      this.logger.error(...errorArgs('Erro ao atualizar stake', error));
       await ctx.reply('❌ Erro ao atualizar sua banca. Tente novamente.');
     }
   }
@@ -143,9 +164,9 @@ export class BotCommandsService {
     const username = from.username ?? null;
     if (this.knownUsernames.get(from.id) === username) return;
     this.knownUsernames.set(from.id, username);
-    this.usersService.syncTelegramUsername(from.id, username).catch((error) => {
+    this.usersService.syncTelegramUsername(from.id, username).catch((error: Error) => {
       this.knownUsernames.delete(from.id);
-      console.error('Erro ao sincronizar @ do Telegram:', error);
+      this.logger.error('Erro ao sincronizar @ do Telegram', error);
     });
   }
 
@@ -155,10 +176,10 @@ export class BotCommandsService {
    * em cada handler — botão ou comando novo já nasce protegido.
    * Devolve true quando barrou (e já respondeu).
    */
-  async blockIfNoAccess(ctx: any): Promise<boolean> {
+  async blockIfNoAccess(ctx: BotContext): Promise<boolean> {
     if (ctx.chat?.type !== 'private' || !ctx.from || ctx.from.is_bot) return false;
     // Instruções e vínculo seguem livres: é por eles que a pessoa volta.
-    if (/^\/(start|vincular)(@\w+)?(\s|$)/.test(ctx.message?.text ?? '')) return false;
+    if (/^\/(start|vincular)(@\w+)?(\s|$)/.test(messageText(ctx))) return false;
 
     let user: Awaited<ReturnType<UsersService['findByTelegramUserId']>>;
     try {
@@ -166,16 +187,22 @@ export class BotCommandsService {
     } catch (error) {
       // Banco fora: deixa passar — o handler vai esbarrar no mesmo erro e
       // responder como sempre respondeu.
-      console.error('Erro ao conferir acesso no bot:', error);
+      this.logger.error(...errorArgs('Erro ao conferir acesso no bot', error));
       return false;
     }
     // Sem vínculo: os handlers já pedem o /vincular.
     if (!user) return false;
 
+    // "Já paguei" passa pelo porteiro: é justamente quem está vencido que aperta.
+    if (callbackData(ctx) === PAYMENT_CLAIM_CALLBACK) {
+      await this.answerPaymentClaim(ctx, user.id, !accessBlock(user));
+      return true;
+    }
+
     const block = accessBlock(user);
     if (!block) return false;
 
-    const { pixKey, price } = billingInfo();
+    const { pixKey, price } = billingInfo(user.id);
     if (ctx.callbackQuery) {
       // Pop-up e nada mais: a mensagem e o botão ficam intactos, então o mesmo
       // "Planilhar" volta a funcionar quando o acesso for liberado.
@@ -183,7 +210,9 @@ export class BotCommandsService {
         block === 'inactive'
           ? '🚫 Sua conta está desativada. Fale com o administrador.'
           : [
-              '🔒 Seu acesso venceu. Renove pelo PIX para continuar.',
+              accessStatus(user) === 'new'
+                ? '🔓 Sua conta ainda não foi ativada. Ative pelo PIX.'
+                : '🔒 Seu acesso venceu. Renove pelo PIX para continuar.',
               price ? `Valor: R$ ${price.toFixed(2).replace('.', ',')}` : null,
               pixKey ? `PIX: ${pixKey}` : null,
             ]
@@ -200,29 +229,55 @@ export class BotCommandsService {
     const date = new Date(user.accessUntil as Date).toLocaleDateString('pt-BR', {
       timeZone: 'America/Sao_Paulo',
     });
-    await ctx.reply(`🔒 Seu acesso venceu em ${date}.\n\n${billingPayLine()}`, {
+    const headline =
+      accessStatus(user) === 'new'
+        ? '🔓 Sua conta ainda não foi ativada.'
+        : `🔒 Seu acesso venceu em ${date}.`;
+    await ctx.reply(`${headline}\n\n${billingPayLine(user.id)}`, {
       parse_mode: 'Markdown',
-      reply_markup: pixKeyboard(),
+      reply_markup: pixKeyboard(user.id),
     });
     return true;
   }
 
-  async handleVincular(ctx: any) {
-    const args = ctx.message.text.split(' ');
-    if (args.length !== 2) {
+  private async answerPaymentClaim(ctx: BotContext, userId: number, alreadyReleased: boolean) {
+    if (alreadyReleased) {
+      await ctx.answerCbQuery('✅ Seu acesso já está liberado.', { show_alert: true }).catch(() => undefined);
+      return;
+    }
+    const result = await this.paymentClaim.claim(userId);
+    const text =
+      result === 'notified'
+        ? '✅ Avisei o administrador. O acesso volta assim que ele conferir o pagamento.'
+        : result === 'already'
+          ? '⏳ O administrador já foi avisado. Assim que ele conferir, o acesso volta.'
+          : '🚫 Sua conta está desativada. Fale com o administrador.';
+    await ctx.answerCbQuery(text, { show_alert: true }).catch(() => undefined);
+  }
+
+  async handleVincular(ctx: BotContext) {
+    const args = commandArgs(ctx);
+    if (args.length !== 1) {
       await ctx.reply('❌ Formato incorreto. Use: /vincular 123456');
       return;
     }
 
+    const telegramUserId = senderId(ctx);
     try {
-      await this.usersService.confirmTelegramLink(args[1], ctx.from.id, ctx.from.username ?? null);
+      // Código de 6 dígitos: sem teto de tentativas dava pra chutar o de outra conta.
+      await this.rateLimit?.consume(`vincular:tg:${telegramUserId}`, TELEGRAM_LINK_LIMIT);
+      await this.usersService.confirmTelegramLink(args[0], telegramUserId, ctx.from?.username ?? null);
       await ctx.reply('✅ Conta vinculada com sucesso!');
     } catch (error) {
       if (error instanceof BadRequestException) {
         await ctx.reply('❌ Erro: ' + error.message);
         return;
       }
-      console.error('Erro ao confirmar vinculação:', error);
+      if (error instanceof RateLimitedException) {
+        await ctx.reply(`⏳ ${(error.getResponse() as { message: string }).message}`);
+        return;
+      }
+      this.logger.error(...errorArgs('Erro ao confirmar vinculação', error));
       await ctx.reply('❌ Erro ao processar solicitação. Tente mais tarde.');
     }
   }

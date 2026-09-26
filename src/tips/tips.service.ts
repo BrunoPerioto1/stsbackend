@@ -1,8 +1,7 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { TipsRepository } from '../infra/repository/tips.repository';
 import { UsersService } from '../users/users.service';
 import { BetService, TipAlreadyPlanilhadaException } from '../bet/bet.service';
-import { GrokService } from '../telegram/grok.service';
 import { HouseService } from '../house/house.service';
 import { matchHouseIdByName } from '../common/utils/house-match.util';
 import { normalizeBetData } from '../bet/bet-normalization';
@@ -56,11 +55,12 @@ interface SaveDeliveryData {
 
 @Injectable()
 export class TipsService {
+  private readonly logger = new Logger(TipsService.name);
+
   constructor(
     private readonly tipsRepository: TipsRepository,
     private readonly usersService: UsersService,
     private readonly betService: BetService,
-    private readonly grokService: GrokService,
     private readonly houseService: HouseService,
     private readonly sportEventRepository: SportEventRepository,
   ) {}
@@ -89,7 +89,7 @@ export class TipsService {
       );
 
     const houseId =
-      overrides.houseId ?? (await this.grokService.resolveHouseId(tip.text));
+      overrides.houseId ?? (await this.houseService.resolveHouseIdFromText(tip.text));
     if (!houseId)
       throw new BadRequestException(
         'Não reconheci a casa dessa tip. Escolha a casa em Editar.',
@@ -168,15 +168,27 @@ export class TipsService {
     const user = await this.usersService.findById(userId);
     const minPercentFilter =
       user?.minPercentFilter != null ? Number(user.minPercentFilter) : null;
+    const uid = userId as UserId;
+    const filter = { status, q };
+    // A casa da tip só existe como texto e é casada por nome com as casas
+    // cadastradas — isso não roda em SQL. Com filtro de casa, o banco devolve
+    // só o que passou em status e busca, e a casa é filtrada aqui. Sem ele (o
+    // caso comum), a página inteira sai do banco já cortada.
+    const filtraCasa = !!houseIds?.length;
 
-    // As casas entram aqui porque a casa da tip só existe como texto da
-    // mensagem: o houseId sai do mesmo casamento de nome que o Planilhar usa,
-    // e é ele que o filtro de casas da tela compara.
-    const [rows, banca, houses, candidatos] = await Promise.all([
-      this.tipsRepository.findSummaryForUser(userId as UserId, minPercentFilter),
+    const [counts, pendentes, pageRows, banca, houses, candidatos] = await Promise.all([
+      this.tipsRepository.countByStatus(uid, minPercentFilter),
+      // Só pra somar a stake das pendentes: é o conjunto pequeno (janela de 48h).
+      this.tipsRepository.findListRows(uid, minPercentFilter, { status: 'pending' }),
+      this.tipsRepository.findListRows(
+        uid,
+        minPercentFilter,
+        filter,
+        filtraCasa ? undefined : { limit: perPage, offset: (page - 1) * perPage },
+      ),
       this.usersService.getUserStake(userId),
       this.houseService.getAllHouses(),
-      // Uma consulta só pra lista inteira: o matcher compara nome em memória,
+      // Uma consulta só pra página inteira: o matcher compara nome em memória,
       // então a mesma janela de eventos serve todas as tips.
       this.findEventCandidates(),
     ]);
@@ -190,7 +202,8 @@ export class TipsService {
       return houseIdByName.get(name)!;
     };
 
-    const items: TipItemDto[] = rows.map((row) => {
+    type Row = (typeof pageRows)[number];
+    const toItem = (row: Row): TipItemDto => {
       // A entrega tem o número que o usuário já viu na DM, então ela manda.
       // Sem entrega (tip anterior ao vínculo, ou filtrada na hora do fan-out)
       // refaz a mesma conta — é o que o Planilhar usaria de qualquer forma, e
@@ -200,37 +213,27 @@ export class TipsService {
         computeStake(row.percent, row.text, banca);
       const odd = extractOddFromText(row.text);
       const houseName = extractHouseFromText(row.text);
-      const gameName = extractGameFromText(row.text);
-      const marketName = extractMarketFromText(row.text);
-      const sportName = extractSportFromText(row.text);
       const houseId = houseIdOf(houseName);
 
       return {
         id: Number(row.id),
         createdAt: row.createdAt,
-        status:
-          row.betId != null
-            ? 'planilhada'
-            : row.dismissalId != null
-              ? 'caiu'
-              : 'pending',
+        status: row.betId != null ? 'planilhada' : row.dismissalId != null ? 'caiu' : 'pending',
         betId: row.betId != null ? Number(row.betId) : null,
         // Nome cadastrado quando casou: o canal escreve "bet365", a lista de
         // apostas mostra "BET365" — a mesma casa com duas grafias na tela.
         house: houses?.find((h) => h.id === houseId)?.name ?? houseName,
         houseId,
-        game: gameName,
-        sport: sportName,
-        market: marketName,
+        game: extractGameFromText(row.text),
+        sport: extractSportFromText(row.text),
+        market: extractMarketFromText(row.text),
         odd,
         percent: row.percent != null ? Number(row.percent) : null,
         limit: extractLimitFromText(row.text),
         recommendedStake: stake,
         potentialProfit:
           extractPotentialProfitFromText(row.deliveryText ?? '') ??
-          (stake !== null && odd !== null
-            ? Number((stake * odd - stake).toFixed(2))
-            : null),
+          (stake !== null && odd !== null ? Number((stake * odd - stake).toFixed(2)) : null),
         link: extractLinkFromText(row.text),
         calcLink: extractCalcLinkFromEntities(row.text, row.entities),
         // Tip já planilhada carrega o horário que a aposta gravou na criação.
@@ -242,45 +245,32 @@ export class TipsService {
         // com a recomendação no fim). Sem entrega, mostra a do canal.
         text: row.deliveryText ?? row.text,
       };
-    });
-
-    const pendentes = items.filter((i) => i.status === 'pending');
-    const summary = {
-      pending: pendentes.length,
-      planilhadas: items.filter((i) => i.status === 'planilhada').length,
-      caidas: items.filter((i) => i.status === 'caiu').length,
-      pendingStake: pendentes.reduce((sum, i) => sum + (i.recommendedStake ?? 0), 0),
     };
 
-    // Mais recente primeiro: no bot a ordem crescente serve à numeração dos
-    // botões; numa tela de lista o que acabou de chegar tem que estar no topo.
-    // Busca casa com jogo e mercado — os dois campos que o card mostra em
-    // negrito, e o unico jeito de achar "aquela tip do Flamengo" numa fila
-    // longa. Como ja e' tudo em memoria aqui, nao vale query nova.
-    const termo = q?.trim().toLowerCase();
-    const bateBusca = (i: TipItemDto) =>
-      !termo ||
-      `${i.game ?? ''} ${i.market ?? ''}`.toLowerCase().includes(termo);
+    const summary = {
+      ...counts,
+      pendingStake: pendentes.map(toItem).reduce((sum, i) => sum + (i.recommendedStake ?? 0), 0),
+    };
 
     // Tip sem casa reconhecida fica de fora quando há filtro: o usuário pediu
     // casas específicas, e "não sei de qual é" não é uma delas.
-    const daCasa = (i: TipItemDto) =>
-      !houseIds?.length || (i.houseId !== null && houseIds.includes(i.houseId));
-
-    const filtered = items
-      .filter((i) => (!status || i.status === status) && bateBusca(i) && daCasa(i))
-      .reverse();
-
-    // Paginação em memória, não no SQL: a query já traz tips + apostas + caiu
-    // num join só pra poder classificar cada linha, e é dessa classificação que
-    // sai o filtro de aba. Cortar no banco exigiria repetir essa lógica em SQL.
-    const start = (page - 1) * perPage;
-    const pagina = filtered.slice(start, start + perPage);
+    let pagina: TipItemDto[];
+    let total: number;
+    if (filtraCasa) {
+      const daCasa = pageRows
+        .map(toItem)
+        .filter((i) => i.houseId !== null && houseIds.includes(i.houseId));
+      total = daCasa.length;
+      pagina = daCasa.slice((page - 1) * perPage, page * perPage);
+    } else {
+      pagina = pageRows.map(toItem);
+      total = await this.tipsRepository.countListRows(uid, minPercentFilter, filter);
+    }
 
     // O horário do jogo entra só agora, sobre a página já cortada. Casar nome
     // custa índice de tokens + Levenshtein sobre centenas de eventos; rodar
-    // isso no histórico inteiro (o map acima) travava o request. O cache
-    // constrói o índice uma vez pra página toda.
+    // isso no histórico inteiro travava o request. O cache constrói o índice
+    // uma vez pra página toda.
     const cache = createMatchCache();
     const data = pagina.map((item) => ({
       ...item,
@@ -292,7 +282,7 @@ export class TipsService {
     return {
       data,
       summary,
-      total: filtered.length,
+      total,
       page,
       perPage,
     };
@@ -307,7 +297,7 @@ export class TipsService {
         DIAS_ANTES_RETIDOS,
       );
     } catch (error) {
-      console.warn('[TIP_EVENT] result=error', (error as Error).message);
+      this.logger.warn(`[TIP_EVENT] result=error ${(error as Error).message}`);
       return [];
     }
   }
@@ -327,6 +317,16 @@ export class TipsService {
 
   async findById(tipId: number) {
     return this.tipsRepository.findById(tipId as TipId);
+  }
+
+  // Número do menu (badge de Tips). Só a contagem, com o mesmo filtro de % da
+  // lista: montar a lista inteira pra ler um número custaria o casamento de
+  // casas e eventos a cada troca de tela.
+  async countsForUser(userId: number) {
+    const user = await this.usersService.findById(userId);
+    const minPercentFilter =
+      user?.minPercentFilter != null ? Number(user.minPercentFilter) : null;
+    return this.tipsRepository.countByStatus(userId as UserId, minPercentFilter);
   }
 
   async getSummaryForUser(

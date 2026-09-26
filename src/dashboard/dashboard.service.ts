@@ -12,7 +12,18 @@ export class DashboardService {
   }
 
   async getMonthlySummary(userId: UserId, filter: DashboardQueryDto) {
-    return this.dashboardRepository.findMonthlySummary({ ...filter, userId });
+    const rows = await this.dashboardRepository.findMonthlySummary({ ...filter, userId });
+    return rows.map((r) => {
+      const profitMonth = Number(r.profitMonth);
+      const settledStake = Number(r.settledStake);
+      return {
+        month: r.month,
+        totalBets: Number(r.totalBets),
+        profitMonth,
+        settledStake,
+        roi: settledStake > 0 ? profitMonth / settledStake : 0,
+      };
+    });
   }
 
   async getProfitByHouse(userId: UserId, filter: DashboardQueryDto) {
@@ -71,6 +82,8 @@ export class DashboardService {
       this.getDashboardMetrics(userId, current),
       this.getDashboardMetrics(userId, {
         houseId: query.houseId,
+        houseIds: query.houseIds,
+        sportIds: query.sportIds,
         startDate: previousStartDate,
         endDate: previousEndDate,
       }),

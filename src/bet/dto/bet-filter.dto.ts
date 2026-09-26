@@ -1,7 +1,12 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsInt, IsDate, IsString, Min, Max } from 'class-validator';
+import { IsOptional, IsInt, IsDate, IsString, Min, Max, IsIn, IsBoolean } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
-import { toNumberArray } from '../../common/utils/dto-transform.util';
+import { toNumberArray, toStringArray } from '../../common/utils/dto-transform.util';
+
+// De onde a aposta veio: botão Planilhar de uma tip (tem tip_id), mensagem
+// avulsa pro bot, print lido no site, ou digitada à mão no site.
+export const BET_ORIGINS = ['tip', 'telegram', 'print', 'manual'] as const;
+export type BetOriginFilter = (typeof BET_ORIGINS)[number];
 
 export class BetFilterDto {
   @ApiPropertyOptional({ description: 'ID da aposta', type: Number, example: 123 })
@@ -57,6 +62,25 @@ export class BetFilterDto {
   @Transform(toNumberArray)
   @IsInt({ each: true })
   sportIds?: number[];
+
+  @ApiPropertyOptional({
+    description: 'Origem (múltipla seleção), separada por vírgula: tip, telegram, print, manual',
+    type: String,
+    example: 'tip,telegram',
+  })
+  @IsOptional()
+  @Transform(toStringArray)
+  @IsIn(BET_ORIGINS, { each: true })
+  origins?: BetOriginFilter[];
+
+  @ApiPropertyOptional({
+    description: 'Só apostas sem jogo identificado (sem casamento de evento)',
+    type: Boolean,
+  })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  unmatched?: boolean;
 
   @ApiPropertyOptional({ description: 'Busca textual (jogo, mercado ou esporte)', type: String })
   @IsOptional()

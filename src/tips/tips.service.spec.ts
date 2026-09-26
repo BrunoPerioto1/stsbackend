@@ -25,8 +25,35 @@ function tipRow(id: number, houseLine: string) {
   };
 }
 
+// Repositório falso com a mesma semântica do SQL: status e busca filtram,
+// mais recente primeiro, página por limit/offset.
+function fakeTipsRepository(rows: any[]) {
+  const statusOf = (r: any) => (r.betId != null ? 'planilhada' : r.dismissalId != null ? 'caiu' : 'pending');
+  const filtered = (f: { status?: string; q?: string }) =>
+    rows
+      .filter(
+        (r) =>
+          (!f.status || statusOf(r) === f.status) &&
+          (!f.q?.trim() || String(r.text).toLowerCase().includes(f.q.trim().toLowerCase())),
+      )
+      .sort((a, b) => +b.createdAt - +a.createdAt || b.id - a.id);
+  const count = (status: string) => rows.filter((r) => statusOf(r) === status).length;
+  return {
+    findListRows: jest.fn(async (_u: number, _m: number | null, f: any, page?: { limit: number; offset: number }) => {
+      const list = filtered(f);
+      return page ? list.slice(page.offset, page.offset + page.limit) : list;
+    }),
+    countListRows: jest.fn(async (_u: number, _m: number | null, f: any) => filtered(f).length),
+    countByStatus: jest.fn(async () => ({
+      pending: count('pending'),
+      planilhadas: count('planilhada'),
+      caidas: count('caiu'),
+    })),
+  };
+}
+
 function makeService(rows: any[], eventos: any[] = []) {
-  const tipsRepository = { findSummaryForUser: jest.fn().mockResolvedValue(rows) };
+  const tipsRepository = fakeTipsRepository(rows);
   const usersService = {
     findById: jest.fn().mockResolvedValue({ minPercentFilter: null }),
     getUserStake: jest.fn().mockResolvedValue(1000),
@@ -39,7 +66,6 @@ function makeService(rows: any[], eventos: any[] = []) {
   return new TipsService(
     tipsRepository as any,
     usersService as any,
-    {} as any,
     {} as any,
     houseService as any,
     sportEventRepository as any,
@@ -196,13 +222,12 @@ describe('tips: Planilhar do site', () => {
       findBetByTip: jest.fn().mockResolvedValue(undefined),
       createBet: jest.fn().mockImplementation((bet: object) => Promise.resolve({ id: 70, ...bet })),
     };
-    const grokService = { resolveHouseId: jest.fn().mockResolvedValue(3) };
+    const houseService = { resolveHouseIdFromText: jest.fn().mockResolvedValue(3) };
     const service = new TipsService(
       tipsRepository as any,
       usersService as any,
       betService as any,
-      grokService as any,
-      {} as any,
+      houseService as any,
       {} as any,
     );
     return { service, betService, usersService };
@@ -227,5 +252,44 @@ describe('tips: Planilhar do site', () => {
     betService.createBet.mockRejectedValue(new TipAlreadyPlanilhadaException());
     betService.findBetByTip.mockResolvedValueOnce(undefined).mockResolvedValueOnce({ id: 69 });
     await expect(service.planilharTip(4, 1)).resolves.toEqual({ bet: { id: 69 }, alreadyExisted: true });
+  });
+});
+
+describe('tips: paginação no banco', () => {
+  it('sem filtro de casa, pede só a página ao banco', async () => {
+    const rows = Array.from({ length: 50 }, (_, i) => tipRow(i + 1, 'Bet365'));
+    const service = makeService(rows);
+    const repo = (service as any).tipsRepository;
+    const res = await service.listForUser(1, { page: 2, perPage: 10 });
+    expect(res.data.map((t) => t.id)).toEqual([40, 39, 38, 37, 36, 35, 34, 33, 32, 31]);
+    expect(res.total).toBe(50);
+    expect(repo.findListRows).toHaveBeenCalledWith(1, null, expect.anything(), { limit: 10, offset: 10 });
+  });
+
+  it('busca e aba entram no filtro; contadores das abas não', async () => {
+    const rows = [
+      tipRow(1, 'Bet365'),
+      { ...tipRow(2, 'Bet365'), text: tipRow(2, 'Bet365').text.replace('Flamengo', 'Palmeiras'), betId: 9 },
+      { ...tipRow(3, 'Bet365'), dismissalId: 4 },
+    ];
+    const service = makeService(rows);
+    const res = await service.listForUser(1, { page: 1, perPage: 30, status: 'planilhada', q: 'palmeiras' });
+    expect(res.data.map((t) => t.id)).toEqual([2]);
+    expect(res.summary).toMatchObject({ pending: 1, planilhadas: 1, caidas: 1 });
+  });
+});
+
+describe('tips: contagem pro menu', () => {
+  it('conta por status sem montar a lista, com o filtro de % do usuário', async () => {
+    const rows = [
+      tipRow(1, 'Bet365'),
+      tipRow(2, 'Betano'),
+      { ...tipRow(3, 'Betano'), dismissalId: 9 },
+    ];
+    const service = makeService(rows);
+    const repo = (service as any).tipsRepository;
+    expect(await service.countsForUser(1)).toEqual({ pending: 2, planilhadas: 0, caidas: 1 });
+    expect(repo.countByStatus).toHaveBeenCalledWith(1, null);
+    expect(repo.findListRows).not.toHaveBeenCalled();
   });
 });

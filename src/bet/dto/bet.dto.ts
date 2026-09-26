@@ -1,7 +1,7 @@
 import { normalizeBetNumber } from '../bet-normalization';
-import { IsNumber, IsString, IsPositive, IsNotEmpty, IsOptional, IsArray, ArrayNotEmpty, IsEnum, ValidateIf, } from 'class-validator';
+import { IsNumber, IsString, IsPositive, IsNotEmpty, IsOptional, IsArray, ArrayNotEmpty, IsEnum, ValidateIf, IsBoolean } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Expose, Transform, Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { ResultIdEnum } from './result-id.enum';
 
 class CreateBetRequestDto {
@@ -89,6 +89,16 @@ class CreateBetRequestDto {
   @Type(() => Number)
   @IsNumber()
   tipId?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Campos preenchidos pela leitura de um print no site. Só rotula a origem (print x digitada); ' +
+      'a fonte continua sendo o site.',
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  fromImage?: boolean;
 }
 
 export class UpdateApostaDto {
@@ -177,7 +187,7 @@ export class FinalizarApostaDto {
     description: 'Valor recebido no cash-out (obrigatório quando resultId = CASHOUT)',
     example: 45.00,
   })
-  @ValidateIf((dto) => dto.resultId === ResultIdEnum.CASHOUT)
+  @ValidateIf((dto: FinalizarApostaDto) => dto.resultId === ResultIdEnum.CASHOUT)
   @IsNumber()
   cashoutValue?: number;
 }
@@ -192,7 +202,7 @@ export class DeleteMultipleBetsDto {
   @IsArray()
   @ArrayNotEmpty()
   @IsNumber({}, { each: true })
-  @Transform(({ value }) => Array.isArray(value) ? value.map(id => Number(id)) : value)
+  @Transform(({ value }: { value: unknown }) => (Array.isArray(value) ? value.map((id) => Number(id)) : value))
   betIds!: number[];
 }
 export class FinalizarMultiplasDto {
@@ -205,7 +215,7 @@ export class FinalizarMultiplasDto {
   @IsArray()
   @ArrayNotEmpty()
   @IsNumber({}, { each: true })
-  @Transform(({ value }) => Array.isArray(value) ? value.map(id => Number(id)) : value)
+  @Transform(({ value }: { value: unknown }) => (Array.isArray(value) ? value.map((id) => Number(id)) : value))
   betIds!: number[];
 
   @ApiProperty({

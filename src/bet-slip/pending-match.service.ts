@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { TipsService } from '../tips/tips.service';
 import {
@@ -33,6 +33,8 @@ interface TipSummaryRow {
 // chama passa um userId, seja o clique no bot ou a rota do app.
 @Injectable()
 export class PendingMatchService {
+  private readonly logger = new Logger(PendingMatchService.name);
+
   constructor(
     private readonly usersService: UsersService,
     private readonly tipsService?: TipsService,
@@ -86,7 +88,7 @@ export class PendingMatchService {
   // sugestao e melhor que erro.
   async findMatches(userId: number, bet: BetMatchInput) {
     const candidates = await this.loadCandidates(userId, bet.at).catch(() => {
-      console.warn('[BET_MATCH] pendentes_indisponiveis=true');
+      this.logger.warn('[BET_MATCH] pendentes_indisponiveis=true');
       return [] as PendingCandidate[];
     });
     return findBetMatches(bet, candidates);

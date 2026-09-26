@@ -20,6 +20,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { User } from '../common/decorators/user.decorator';
+import { AI_PARSE_LIMIT, RateLimitService } from '../common/rate-limit/rate-limit.service';
 import {
   BetSlipService,
   MAX_IMAGE_BYTES,
@@ -39,7 +40,10 @@ interface UploadedImage {
 @ApiTags('Apostas')
 @Controller('bets')
 export class BetSlipController {
-  constructor(private readonly betSlipService: BetSlipService) {}
+  constructor(
+    private readonly betSlipService: BetSlipService,
+    private readonly rateLimit: RateLimitService,
+  ) {}
 
   @Post('parse-image')
   @HttpCode(HttpStatus.OK)
@@ -88,6 +92,8 @@ export class BetSlipController {
       .filter((b): b is Buffer => !!b?.length);
     if (!buffers.length)
       throw new BadRequestException('Envie uma imagem no campo "image".');
+    // Cada leitura é uma chamada paga à OpenAI.
+    await this.rateLimit.consume(`ai:user:${userId}`, AI_PARSE_LIMIT);
     return this.betSlipService.parseImage({
       userId,
       buffers,

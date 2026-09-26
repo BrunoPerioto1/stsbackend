@@ -32,6 +32,10 @@ export default interface UsersTable {
   telegramUsername: ColumnType<string | null, string | null | undefined, string | null>; // @ sem o arroba; null = sem @ ou nao vinculado
   accessUntil: ColumnType<Date | null, Date | null | undefined, Date | null>; // NULL = sem prazo
   tipsGroupRemovedAt: ColumnType<Date | null, Date | null | undefined, Date | null>; // ban do grupo Tips pelo painel; NULL = dentro ou convidado de volta
+  paymentClaimedAt: ColumnType<Date | null, Date | null | undefined, Date | null>; // "Ja paguei" na renovacao; NULL = nao avisou (ou ja liberado)
+  passwordResetCodeHash: ColumnType<string | null, string | null | undefined, string | null>; // bcrypt do codigo mandado pelo bot
+  passwordResetExpiresAt: ColumnType<Date | null, Date | null | undefined, Date | null>;
+  passwordResetAttempts: ColumnType<number, number | undefined, number>;
 }
 
 export type User = Selectable<UsersTable>; // SELECT

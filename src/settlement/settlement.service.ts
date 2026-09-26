@@ -146,15 +146,63 @@ export class SettlementService {
     };
   }
 
-  /** Contadores da fila, pra tela nao depender da resposta do ultimo compute. */
+  // Teto de lotes por chamada automatica: a function da Vercel morre em 60s,
+  // e o que sobrar entra na proxima chamada (a fila e' drenada em ordem).
+  private static readonly LOTES_POR_CHAMADA = 5;
+
+  /**
+   * Drena a fila em lotes. Sugestao nao grava resultado nenhum, entao calcular
+   * sem clique e' seguro: quem decide continua sendo o usuario, na tela.
+   */
+  async computeAll(userId: UserId) {
+    const total = { analyzed: 0, suggested: 0, undecided: 0, hasMore: false };
+    for (let lote = 0; lote < SettlementService.LOTES_POR_CHAMADA; lote++) {
+      const resultado = await this.computeSuggestions(userId);
+      total.analyzed += resultado.analyzed;
+      total.suggested += resultado.suggested;
+      total.undecided += resultado.undecided;
+      total.hasMore = resultado.hasMore;
+      if (!resultado.hasMore) break;
+    }
+    return total;
+  }
+
+  /**
+   * Contadores da fila, pra tela nao depender da resposta do ultimo compute.
+   *
+   * Com placar esperando calculo, calcula antes de contar: o badge do menu so'
+   * contava sugestao ja' calculada, e o usuario precisava entrar na tela e
+   * clicar pra descobrir que tinha aposta pronta.
+   */
   async queue(userId: UserId) {
-    const counts = await this.repository.queue(userId);
+    let counts = await this.repository.queue(userId);
+    let computed = 0;
+    if (counts.settleable > 0) {
+      computed = (await this.computeAll(userId)).analyzed;
+      counts = await this.repository.queue(userId);
+    }
     return {
       ...counts,
+      // Quantas acabaram de ser calculadas: a tela recarrega a lista quando >0.
+      computed,
       // Sobrou candidato: a tela oferece "calcular proximo lote" em vez de dar
       // a impressao de que nao ha mais nada esperando.
       hasMore: counts.settleable > 0,
     };
+  }
+
+  /**
+   * Fim do job de placar: calcula pra todo mundo com aposta pendente. Devolve
+   * so' quem ganhou sugestao nova, que e' quem recebe o aviso no bot.
+   */
+  async computeForAllUsers() {
+    const userIds = await this.repository.findUsersWithPendingBets();
+    const comNovidade: { userId: UserId; suggested: number }[] = [];
+    for (const userId of userIds) {
+      const { suggested } = await this.computeAll(userId);
+      if (suggested > 0) comNovidade.push({ userId, suggested });
+    }
+    return comNovidade;
   }
 
   async listSuggestions(userId: UserId) {

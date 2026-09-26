@@ -1,5 +1,4 @@
-import type { Message } from 'telegraf/types';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { TipsService } from '../tips/tips.service';
 import { BetTextService } from './bet-text.service';
@@ -15,9 +14,10 @@ import {
   extractOddFromText,
 } from './utils/tip-extractors.util';
 import { parseCallbackAction } from './utils/callback-parsing.util';
+import { callbackData, callbackMessage, senderId, type BotContext } from './utils/bot-context';
+import { frontUrl } from '../common/utils/front-url';
+import { errorArgs } from '../common/utils/log';
 
-// Não existe rota por aposta no front — o botão leva pra lista de apostas.
-const BETS_URL = 'https://stsfront.vercel.app/bets';
 
 // Dispatcher de callback_query: os botões da cópia individual (Planilhar /
 // Editar / Aposta Caiu / Voltar) e os da lista compacta do /pendentes
@@ -29,6 +29,7 @@ export class TelegramCallbackService {
   // Este lock cobre a corrida; a checagem de estado logo abaixo cobre o
   // clique tardio (mensagem antiga, item ja resolvido).
   private readonly inFlight = new Set<string>();
+  private readonly logger = new Logger(TelegramCallbackService.name);
 
   constructor(
     private readonly usersService: UsersService,
@@ -42,7 +43,7 @@ export class TelegramCallbackService {
   // Redesenha a mensagem-lista no lugar. `editMessageText` reclama quando o
   // conteudo nao mudou — nesse caso nao ha o que corrigir, so ignora.
   private async refreshList(
-    ctx: any,
+    ctx: BotContext,
     user: { id: number; minPercentFilter?: number | null },
     page: number,
     undo?: Parameters<PendentesService['buildMessage']>[2],
@@ -60,16 +61,16 @@ export class TelegramCallbackService {
       });
     } catch (err) {
       if (!String(err).includes('message is not modified'))
-        console.error('❌ Erro ao atualizar lista de pendentes:', err);
+        this.logger.error(...errorArgs('Erro ao atualizar lista de pendentes', err));
     }
   }
 
-  async handle(ctx: any) {
-    const query = ctx.callbackQuery;
-    const msg = query.message;
+  async handle(ctx: BotContext) {
+    const msg = callbackMessage(ctx);
     const text: string | undefined = msg?.text ?? msg?.caption;
     const isMedia = !!msg?.photo;
-    const { action, args } = parseCallbackAction(query.data as string);
+    const { action, args } = parseCallbackAction(callbackData(ctx) ?? '');
+    const fromId = senderId(ctx);
     const tipId = args[0] ?? null;
 
     if (action === 'noop') {
@@ -95,12 +96,13 @@ export class TelegramCallbackService {
       // usuário confirmou que é a mesma aposta de uma pendência) vem em
       // args[2]. No card de tip o tipId continua sendo o args[0].
       const linkTipId = isTs ? (args[2] ?? undefined) : (tipId ?? undefined);
-      const previewMessage = msg as Message.TextMessage;
+      // Com texto, a mensagem existe (o texto saiu dela).
+      const previewMessage = msg!;
       const original = previewMessage.reply_to_message;
       const isAudio = original && ('voice' in original || 'audio' in original);
       // Clique duplo no mesmo card criaria duas apostas: a checagem por tip
       // ainda não vê nada gravado quando o segundo callback entra.
-      const lock = `planilhar:${previewMessage.chat.id}:${msg.message_id}`;
+      const lock = `planilhar:${previewMessage.chat.id}:${previewMessage.message_id}`;
       if (this.inFlight.has(lock)) {
         await ctx.answerCbQuery('⏳ Já estou planilhando essa aposta.');
         return;
@@ -109,7 +111,7 @@ export class TelegramCallbackService {
       try {
         const user =
           isTs && linkTipId
-            ? await this.usersService.findByTelegramUserId(ctx.from.id)
+            ? await this.usersService.findByTelegramUserId(fromId)
             : null;
         if (isTs && linkTipId) {
           const existing =
@@ -122,7 +124,7 @@ export class TelegramCallbackService {
         await this.betTextService.processBetText(
           ctx,
           text,
-          msg.message_id,
+          previewMessage.message_id,
           linkTipId,
           isTs && tipId ? new Date(tipId * 1000) : undefined,
           {
@@ -156,7 +158,7 @@ export class TelegramCallbackService {
         const doneKeyboard = vinculado
           ? {
               inline_keyboard: [
-                [{ text: '📊 Ver aposta', url: BETS_URL }],
+                [{ text: '📊 Ver aposta', url: frontUrl('/bets') }],
                 [
                   {
                     text: '↩️ Desfazer',
@@ -183,7 +185,7 @@ export class TelegramCallbackService {
           await ctx.answerCbQuery('✅ Essa aposta já está planilhada.');
           return;
         }
-        console.error('❌ Erro ao planilhar via callback:', err);
+        this.logger.error(...errorArgs('❌ Erro ao planilhar via callback', err));
         await ctx.answerCbQuery(
           '❌ Erro ao planilhar. Veja o chat para detalhes.',
         );
@@ -201,12 +203,12 @@ export class TelegramCallbackService {
         await ctx.answerCbQuery('❌ Referência inválida.');
         return;
       }
-      const user = await this.usersService.findByTelegramUserId(ctx.from.id);
+      const user = await this.usersService.findByTelegramUserId(fromId);
       if (!user) {
         await ctx.answerCbQuery('❌ Conta não vinculada.');
         return;
       }
-      const lock = `img_desfazer:${msg.chat.id}:${msg.message_id}`;
+      const lock = `img_desfazer:${msg!.chat.id}:${msg!.message_id}`;
       if (this.inFlight.has(lock)) {
         await ctx.answerCbQuery('⏳ Já estou desfazendo.');
         return;
@@ -243,7 +245,7 @@ export class TelegramCallbackService {
             : '❌ A aposta não está mais lá — talvez já tenha sido apagada.',
         );
       } catch (err) {
-        console.error('❌ Erro ao desfazer print vinculado:', err);
+        this.logger.error(...errorArgs('❌ Erro ao desfazer print vinculado', err));
         await ctx.answerCbQuery('❌ Não deu pra desfazer.');
       } finally {
         this.inFlight.delete(lock);
@@ -259,7 +261,7 @@ export class TelegramCallbackService {
       const currentOdd = extractOddFromText(text);
       const currentLimit = extractLimitFromText(text);
       const currentHouse = extractHouseFromText(text);
-      const header = `✏️ Editar aposta #${msg.message_id}|${isMedia ? 'p' : 't'}|${tipId ?? ''}`;
+      const header = `✏️ Editar aposta #${msg!.message_id}|${isMedia ? 'p' : 't'}|${tipId ?? ''}`;
       const preamble = `${header}\n🏷 Odd atual: ${currentOdd ?? '?'}\n🚦 Limite atual: ${currentLimit ?? '?'}\n🏠 Casa atual: ${currentHouse ?? '?'}\n${EDIT_PROMPT_INSTRUCTIONS}\n\n`;
       await ctx.answerCbQuery();
       try {
@@ -272,10 +274,7 @@ export class TelegramCallbackService {
           },
         );
       } catch (err) {
-        console.error(
-          '⚠️ Falha ao mandar prompt de edição com blockquote, caindo pra texto simples:',
-          err,
-        );
+        this.logger.error(...errorArgs('⚠️ Falha ao mandar prompt de edição com blockquote, caindo pra texto simples', err));
         await ctx.reply(`${preamble}${text}`, {
           reply_markup: { force_reply: true },
           link_preview_options: { is_disabled: true },
@@ -314,13 +313,13 @@ export class TelegramCallbackService {
           });
         if (tipId !== null) {
           const user = await this.usersService.findByTelegramUserId(
-            ctx.from.id,
+            fromId,
           );
           if (user) await this.tipsService.dismissTip(tipId, user.id);
         }
         await ctx.answerCbQuery('❌ Marcado como aposta caiu!');
       } catch (err) {
-        console.error('❌ Erro ao marcar aposta caiu:', err);
+        this.logger.error(...errorArgs('❌ Erro ao marcar aposta caiu', err));
         await ctx.answerCbQuery('❌ Erro ao marcar.');
       }
       return;
@@ -347,13 +346,13 @@ export class TelegramCallbackService {
           });
         if (tipId !== null) {
           const user = await this.usersService.findByTelegramUserId(
-            ctx.from.id,
+            fromId,
           );
           if (user) await this.tipsService.undismissTip(tipId, user.id);
         }
         await ctx.answerCbQuery('↩️ Voltando');
       } catch (err) {
-        console.error('❌ Erro ao voltar:', err);
+        this.logger.error(...errorArgs('❌ Erro ao voltar', err));
         await ctx.answerCbQuery('❌ Erro ao voltar.');
       }
       return;
@@ -363,7 +362,7 @@ export class TelegramCallbackService {
     // nenhuma tip.
     if (action === 'lista_pagina') {
       const page = args[0] ?? 0;
-      const user = await this.usersService.findByTelegramUserId(ctx.from.id);
+      const user = await this.usersService.findByTelegramUserId(fromId);
       if (!user) {
         await ctx.answerCbQuery('❌ Conta não vinculada.');
         return;
@@ -378,7 +377,7 @@ export class TelegramCallbackService {
         });
         await ctx.answerCbQuery();
       } catch (err) {
-        console.error('❌ Erro ao trocar página de pendentes:', err);
+        this.logger.error(...errorArgs('❌ Erro ao trocar página de pendentes', err));
         await ctx.answerCbQuery('❌ Erro ao trocar página.');
       }
       return;
@@ -399,7 +398,7 @@ export class TelegramCallbackService {
         return;
       }
       const page = args[1] ?? 0;
-      const user = await this.usersService.findByTelegramUserId(ctx.from.id);
+      const user = await this.usersService.findByTelegramUserId(fromId);
       if (!user) {
         await ctx.answerCbQuery('❌ Conta não vinculada.');
         return;
@@ -460,7 +459,7 @@ export class TelegramCallbackService {
             await this.betTextService.processBetText(
               ctx,
               delivery?.text ?? tip.text,
-              delivery?.messageId ?? msg.message_id,
+              delivery?.messageId ?? msg?.message_id,
               tipId,
             );
             await this.tipFanoutService.markDeliveredMessage(
@@ -478,7 +477,7 @@ export class TelegramCallbackService {
             }
             // processBetText ja respondeu no chat com o motivo; o toast so
             // aponta pra la, mas o log guarda a causa.
-            console.error('❌ Erro ao planilhar do /pendentes:', err);
+            this.logger.error(...errorArgs('❌ Erro ao planilhar do /pendentes', err));
             await ctx.answerCbQuery(
               `❌ ${label}: não deu pra planilhar. Veja a resposta no chat.`,
             );
@@ -502,7 +501,7 @@ export class TelegramCallbackService {
       }
       const page = args[1] ?? 0;
       const wasCaiu = args[2] === 1;
-      const user = await this.usersService.findByTelegramUserId(ctx.from.id);
+      const user = await this.usersService.findByTelegramUserId(fromId);
       if (!user) {
         await ctx.answerCbQuery('❌ Conta não vinculada.');
         return;
@@ -526,7 +525,7 @@ export class TelegramCallbackService {
           );
         }
       } catch (err) {
-        console.error('❌ Erro ao desfazer:', err);
+        this.logger.error(...errorArgs('❌ Erro ao desfazer', err));
         await ctx.answerCbQuery('❌ Não deu pra desfazer.');
       } finally {
         this.inFlight.delete(lock);

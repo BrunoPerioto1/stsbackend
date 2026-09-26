@@ -30,7 +30,6 @@ import { UpdateApostaDto } from '../bet/dto/bet.dto';
 import {
   FinalizarApostaDto,
   FinalizarMultiplasDto,
-  BetItem,
   PaginatedBetsResponseDto,
 } from './dto/bet.dto';
 import { BetFilterDto } from './dto/bet-filter.dto';
@@ -59,8 +58,13 @@ export class BetController {
   ) {
     // tipId não faz parte da aposta em si — é o vínculo com a pendência, que o
     // createBet já sabe gravar (mesmo caminho do "PLANILHADO" do bot).
-    const { tipId, ...bet } = apostaData;
-    return this.betService.createBet({ ...bet, userId }, tipId);
+    // fromImage só rotula a origem (print lido x digitada): source e
+    // sourceType vindos do payload seguem ignorados, quem decide é o servidor.
+    const { tipId, fromImage, ...bet } = apostaData;
+    return this.betService.createBet({ ...bet, userId }, tipId, {
+      source: 'app',
+      sourceType: fromImage ? 'image' : 'manual',
+    });
   }
 
   @Get()
@@ -77,6 +81,33 @@ export class BetController {
     @User('userId') userId: number,
   ) {
     return this.betService.findBets({ ...filters, userId });
+  }
+
+  @Get('monthly-summary')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Quantidade e lucro por mês, com os mesmos filtros da lista',
+    description: 'A tela agrupada mostra os meses daqui e só busca as linhas do mês aberto.',
+  })
+  async monthlySummary(
+    @Query() filters: BetFilterDto,
+    @User('userId') userId: number,
+  ) {
+    return this.betService.getMonthlySummary({ ...filters, userId });
+  }
+
+  @Get('totals')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Totais do filtro (apostado, lucro, ROI, acerto), com os mesmos filtros da lista',
+  })
+  async totals(
+    @Query() filters: BetFilterDto,
+    @User('userId') userId: number,
+  ) {
+    return this.betService.getTotals({ ...filters, userId });
   }
 
   @Put('finalize-multiple')

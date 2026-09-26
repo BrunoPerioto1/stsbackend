@@ -3,10 +3,10 @@ import {
   BadGatewayException,
   Injectable,
   UnprocessableEntityException,
+  Logger,
 } from '@nestjs/common';
 import { BetSlipParserService } from './bet-slip-parser.service';
 import { PendingMatchService } from './pending-match.service';
-import { GrokService } from '../telegram/grok.service';
 import { HouseService } from '../house/house.service';
 import { missingBetFields } from '../telegram/utils/bet-preview.util';
 import type { ParsedBetSlipDto } from './dto/parse-image.dto';
@@ -65,10 +65,11 @@ function describeAiFailure(reason: string): string {
 
 @Injectable()
 export class BetSlipService {
+  private readonly logger = new Logger(BetSlipService.name);
+
   constructor(
     private readonly parser: BetSlipParserService,
     private readonly pendingMatchService: PendingMatchService,
-    private readonly grokService: GrokService,
     private readonly houseService: HouseService,
   ) {}
 
@@ -114,7 +115,7 @@ export class BetSlipService {
       });
     } catch (err) {
       const reason = (err as Error).message;
-      console.error('[BET_SLIP_PARSE] status=error reason=%s', reason);
+      this.logger.error(`[BET_SLIP_PARSE] status=error reason=${reason}`);
       // O motivo vai junto de propósito: sem ele a tela só sabe dizer "não
       // consegui" e o usuário não tem o que fazer com isso — timeout pede
       // outra tentativa, chave ausente é problema do servidor.
@@ -135,7 +136,7 @@ export class BetSlipService {
 
     const houseName = houseHint?.trim() || extracted.casa || null;
     const houseId = houseName
-      ? await this.grokService.resolveHouseId(`🏠 ${houseName}`)
+      ? await this.houseService.resolveHouseIdFromText(`🏠 ${houseName}`)
       : null;
     const house = houseId
       ? (((await this.houseService.getAllHouses()) ?? []).find(

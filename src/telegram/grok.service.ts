@@ -1,20 +1,23 @@
-import { BET_EXTRACTION_RULES } from '../bet/bet-normalization';
-import { Injectable } from '@nestjs/common';
+import { BET_EXTRACTION_RULES, type RawBetData } from '../bet/bet-normalization';
+import { Injectable, Logger } from '@nestjs/common';
 import Groq from 'groq-sdk';
-import * as dotenv from 'dotenv';
-import { HouseService } from '../house/house.service';
-import { matchHouseIdByName } from '../common/utils/house-match.util';
-dotenv.config();
 
 @Injectable()
 export class GrokService {
-  private groq: Groq;
+  private readonly logger = new Logger(GrokService.name);
 
-  constructor(private readonly houseService: HouseService) {
-    const apiKey = process.env.GROQ_API_KEY;
-    if (!apiKey) throw new Error('❌ GROQ_API_KEY não definido no .env');
+  private groq?: Groq;
 
-    this.groq = new Groq({ apiKey });
+  // Cliente criado no primeiro uso. Antes o construtor exigia GROQ_API_KEY e,
+  // sem ela, a API inteira não subia — inclusive rotas que nunca usam o Groq.
+  // Só o parse de texto fora do padrão precisa dele.
+  private client(): Groq {
+    if (!this.groq) {
+      const apiKey = process.env.GROQ_API_KEY;
+      if (!apiKey) throw new Error('GROQ_API_KEY_AUSENTE');
+      this.groq = new Groq({ apiKey });
+    }
+    return this.groq;
   }
 
   private extractJson(text: string): string | null {
@@ -29,7 +32,9 @@ export class GrokService {
     try {
       JSON.parse(stripped);
       return stripped;
-    } catch {}
+    } catch {
+      // Não é JSON puro: tenta achar um objeto dentro do texto.
+    }
 
     const match = stripped.match(/\{[\s\S]*\}/);
     if (match) {
@@ -37,32 +42,15 @@ export class GrokService {
       try {
         JSON.parse(candidate);
         return candidate;
-      } catch {}
+      } catch {
+        // Nem o trecho entre chaves é JSON: desiste abaixo.
+      }
     }
 
     return null;
   }
 
-  async resolveHouseId(message: string): Promise<number | null> {
-    if (!message) return null;
-
-    const houseMatch = message.match(/🏠\s*(.+)/);
-    let rawHouseName = houseMatch?.[1];
-
-    if (!rawHouseName) {
-      // Formato SOBRECARGA/AVISO: sem emoji — o nome da casa é a primeira
-      // linha não vazia logo após o cabeçalho SOBRECARGA/AVISO.
-      const lines = message.split('\n').map((l) => l.trim()).filter(Boolean);
-      const headerIndex = lines.findIndex((l) => /^(SOBRECARGA|AVISO)$/i.test(l));
-      if (headerIndex !== -1) rawHouseName = lines[headerIndex + 1];
-    }
-    if (!rawHouseName) return null;
-
-    const houses = await this.houseService.getAllHouses();
-    return matchHouseIdByName(rawHouseName, houses ?? []);
-  }
-
-  async parseBetMessage(message: string, houseId: number | null): Promise<any> {
+  async parseBetMessage(message: string, houseId: number | null): Promise<RawBetData | null> {
     const prompt = `Você é um parser de mensagens de apostas.
 ${BET_EXTRACTION_RULES}
 Receberá um texto e deve devolver APENAS um objeto JSON válido, sem explicações.
@@ -106,7 +94,7 @@ O cálculo da stake será feito no servidor.
 Mensagem:
 ${message}`;
 
-    const chatCompletion = await this.groq.chat.completions.create({
+    const chatCompletion = await this.client().chat.completions.create({
       model: 'openai/gpt-oss-120b',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0,
@@ -120,10 +108,9 @@ ${message}`;
     const extracted = this.extractJson(aiText);
 
     try {
-      const obj = JSON.parse(extracted ?? aiText);
-      return obj;
+      return JSON.parse(extracted ?? aiText) as RawBetData;
     } catch {
-      console.warn(
+      this.logger.warn(
         '[VALIDATION_FAILED] stage=extraction code=IA_JSON_INVALIDO',
       );
       throw new Error('IA_JSON_INVALIDO');

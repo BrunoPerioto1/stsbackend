@@ -4,10 +4,8 @@ import { ExtractJwt, Strategy } from "passport-jwt";
 import { UsersRepository } from "../../infra/repository/users.repository";
 import type { UserId } from "../../db_types/Users";
 import { assertAccess } from "../../users/access";
+import type { JwtPayload } from "./jwt-payload";
 
-import * as dotenv from 'dotenv';
-
-dotenv.config();
 
 
 
@@ -25,9 +23,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: any) {
+  async validate(payload: JwtPayload): Promise<JwtPayload> {
     const currentTimestamp = Date.now() / 1000;
-    if (payload.exp < currentTimestamp) {
+    if (payload.exp !== undefined && payload.exp < currentTimestamp) {
       throw new UnauthorizedException("TokenExpiredError");
     }
     // Um SELECT por PK por request: o token vale 1d e quem vence/é desativado

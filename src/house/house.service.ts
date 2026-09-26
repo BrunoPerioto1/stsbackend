@@ -4,6 +4,7 @@ import { FindAllHousesDTO } from './dto/house.dto';
 import { HouseFilterRequestDto } from './dto/house.filter.dto';
 import type { UserId } from '../db_types/Users';
 import type { BettingHouseId } from '../db_types/BettingHouse';
+import { matchHouseIdByName } from '../common/utils/house-match.util';
 
 @Injectable()
 export class HouseService {
@@ -86,6 +87,29 @@ export class HouseService {
 
   async getAllHouses(): Promise<FindAllHousesDTO[]> {
     return this.houseRepository.findAllHouses();
+  }
+
+  /**
+   * Casa da aposta a partir do texto ("🏠 Betano", ou a linha depois de
+   * SOBRECARGA/AVISO), casada por nome/apelido com as cadastradas. Morava no
+   * GrokService, o que obrigava Tips e bilhete a instanciarem o cliente do Groq
+   * (e a exigir a chave dele) só pra comparar string.
+   */
+  async resolveHouseIdFromText(message: string): Promise<number | null> {
+    if (!message) return null;
+
+    let rawHouseName = message.match(/🏠\s*(.+)/)?.[1];
+    if (!rawHouseName) {
+      // Formato SOBRECARGA/AVISO: sem emoji — o nome da casa é a primeira
+      // linha não vazia logo após o cabeçalho SOBRECARGA/AVISO.
+      const lines = message.split('\n').map((l) => l.trim()).filter(Boolean);
+      const headerIndex = lines.findIndex((l) => /^(SOBRECARGA|AVISO)$/i.test(l));
+      if (headerIndex !== -1) rawHouseName = lines[headerIndex + 1];
+    }
+    if (!rawHouseName) return null;
+
+    const houses = await this.getAllHouses();
+    return matchHouseIdByName(rawHouseName, houses ?? []);
   }
 
   async getHouseRanking(userId: number, startDate?: string, endDate?: string, minBets = 20) {

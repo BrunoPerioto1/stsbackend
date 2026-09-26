@@ -3,7 +3,7 @@ import {
   type BetOrigin,
   type RawBetData,
 } from '../bet/bet-normalization';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { GrokService } from './grok.service';
 import { BetService, TipAlreadyPlanilhadaException } from '../bet/bet.service';
 import { CreateBetDto } from '../bet/dto/bet.dto';
@@ -12,40 +12,47 @@ import { HouseService } from '../house/house.service';
 import { TipFanoutService } from './tip-fanout.service';
 import {
   EDIT_PROMPT_INSTRUCTIONS,
-  UNLINKED_INSTRUCTIONS,
+  unlinkedInstructions,
 } from './messages.const';
 import {
-  extractGameFromText,
-  extractHouseFromText,
   extractLimitFromText,
-  extractMarketFromText,
   extractOddFromText,
   extractPercent,
   extractRecommendedStakeFromText,
   extractStakeFromText,
   parseBetLocal,
 } from './utils/tip-extractors.util';
-import {
-  findBetMatches,
-  MATCH_MAX_AGE_MS,
-  type PendingCandidate,
-} from '../bet-slip/matching.util';
+import { findBetMatches, type PendingCandidate } from '../bet-slip/matching.util';
 import { TipsService } from '../tips/tips.service';
 import { BetSlipParserService } from '../bet-slip/bet-slip-parser.service';
 import { PendingMatchService } from '../bet-slip/pending-match.service';
 import { BetAudioService, MAX_AUDIO_BYTES } from './bet-audio.service';
-import {
-  buildBetPreview,
-  missingBetFields,
-  type PreviewMatch,
-} from './utils/bet-preview.util';
+import { buildBetPreview, missingBetFields } from './utils/bet-preview.util';
 import type { Context } from 'telegraf';
+import type { InlineKeyboardMarkup } from 'telegraf/types';
+import { callbackMessage, senderId, type BotContext } from './utils/bot-context';
+import {
+  AI_PARSE_LIMIT,
+  RateLimitedException,
+  RateLimitService,
+} from '../common/rate-limit/rate-limit.service';
 import type { Message } from 'telegraf/types';
+import { errorArgs } from '../common/utils/log';
 
 // Transforma texto livre (DM ou tip) numa aposta salva, e trata o fluxo de
 // edição de odd/limite/casa que acontece antes disso (prompt de "✏️ Editar").
+// A foto do bilhete, com o que o fluxo de print lê.
+export type BetPhotoMessage = {
+  message_id: number;
+  date: number;
+  caption?: string;
+  photo: { file_id: string; width: number; height: number }[];
+};
+
 @Injectable()
 export class BetTextService {
+  private readonly logger = new Logger(BetTextService.name);
+
   constructor(
     private readonly grokService: GrokService,
     private readonly betService: BetService,
@@ -56,7 +63,23 @@ export class BetTextService {
     private readonly betAudioService: BetAudioService,
     private readonly pendingMatchService: PendingMatchService,
     private readonly tipsService?: TipsService,
+    private readonly rateLimit?: RateLimitService,
   ) {}
+
+  // Print e áudio custam uma chamada à OpenAI cada. Devolve o aviso pra quem
+  // passou do limite, ou null quando pode seguir.
+  private async aiLimitMessage(ctx: BotContext): Promise<string | null> {
+    // Sem contador (testes) não há o que esperar: o "Analisando…" sai na hora.
+    if (!this.rateLimit) return null;
+    try {
+      await this.rateLimit.consume(`ai:tg:${ctx.from?.id}`, AI_PARSE_LIMIT);
+      return null;
+    } catch (error) {
+      if (error instanceof RateLimitedException)
+        return `⏳ Muitas leituras seguidas. ${(error.getResponse() as { message: string }).message}`;
+      throw error;
+    }
+  }
 
 
   // Parsing + criação da aposta. Reaproveitado tanto pelo texto livre em DM
@@ -64,7 +87,7 @@ export class BetTextService {
   // grupo Tips. Quando vem de um clique (replyToMessageId presente), a
   // confirmação sai como resposta à própria tip, em vez de mensagem solta.
   async processBetText(
-    ctx: any,
+    ctx: BotContext,
     userMessage: string,
     replyToMessageId?: number,
     tipId?: number,
@@ -73,7 +96,7 @@ export class BetTextService {
   ) {
     try {
       const resolvedHouseId =
-        await this.grokService.resolveHouseId(userMessage);
+        await this.houseService.resolveHouseIdFromText(userMessage);
 
       // Caminho rápido: os dois formatos conhecidos (emoji e SOBRECARGA/
       // AVISO) são posicionais, então dá pra extrair tudo com regex e pular
@@ -92,7 +115,7 @@ export class BetTextService {
       const odd = normalized.odd ?? NaN;
 
       const percent = extractPercent(userMessage);
-      const user = await this.usersService.findByTelegramUserId(ctx.from.id);
+      const user = await this.usersService.findByTelegramUserId(senderId(ctx));
       if (!user) throw new Error('UNLINKED');
 
       // O card entregue já traz a stake calculada na hora da entrega
@@ -161,7 +184,7 @@ export class BetTextService {
         const house = houses.find((h) => h.id === aposta.houseId);
         if (house) houseName = house.name;
       } catch (err) {
-        console.error('Erro ao buscar casa:', err);
+        this.logger.error(...errorArgs('Erro ao buscar casa', err));
       }
 
       const emBrasilia = (data: Date) =>
@@ -202,12 +225,12 @@ export class BetTextService {
       // Clique duplo que passou pelo lock em memória (outra instância): o
       // banco recusou a segunda aposta. Quem chamou responde "já planilhada".
       if (err instanceof TipAlreadyPlanilhadaException) throw err;
-      console.error('[VALIDATION_FAILED] stage=telegram_bet', err);
+      this.logger.warn(`[VALIDATION_FAILED] stage=telegram_bet ${(err as Error).message}`);
       const extra = replyToMessageId
         ? { reply_parameters: { message_id: replyToMessageId } }
         : undefined;
       if ((err as Error).message === 'UNLINKED') {
-        await ctx.reply(UNLINKED_INSTRUCTIONS, extra);
+        await ctx.reply(unlinkedInstructions(), extra);
       } else if ((err as Error).message === 'SEM_BANCA') {
         await ctx.reply(
           '❌ Você ainda não definiu sua banca, então não dá pra calcular a stake dessa tip.\nUse /stake VALOR (ex.: /stake 2000) e clique em Planilhar de novo.',
@@ -233,10 +256,10 @@ export class BetTextService {
   // O truque pra não duplicar nada: em vez de inventar um estado novo entre
   // preview e clique, monta o MESMO card de texto emoji que o callback de
   // planilhar já sabe reler (🏠/🆚/⚽/📌/🏷 + 💰 Stake). Nada é gravado aqui.
-  async handleDeepBetPhoto(ctx: any) {
-    const preview = ctx.callbackQuery?.message;
+  async handleDeepBetPhoto(ctx: BotContext) {
+    const preview = callbackMessage(ctx);
     const photo = preview?.reply_to_message;
-    if (!photo?.photo?.length || !photo.caption || !photo.date) {
+    if (!preview || !photo?.photo?.length || !photo.caption || !photo.date) {
       await ctx.answerCbQuery(
         'Não encontrei a foto original. Envie novamente com a legenda.',
       );
@@ -250,11 +273,16 @@ export class BetTextService {
     }
     const keyboard = preview.reply_markup;
     if (
-      !keyboard?.inline_keyboard?.some((row: any[]) =>
-        row.some((button) => button.callback_data === 'bet_image_deep'),
+      !keyboard?.inline_keyboard?.some((row) =>
+        row.some((button) => 'callback_data' in button && button.callback_data === 'bet_image_deep'),
       )
     ) {
       await ctx.answerCbQuery('Esta análise já foi solicitada.');
+      return;
+    }
+    const limited = await this.aiLimitMessage(ctx);
+    if (limited) {
+      await ctx.answerCbQuery(limited.slice(0, 200), { show_alert: true });
       return;
     }
     await ctx.answerCbQuery('Analisando a foto novamente…');
@@ -268,9 +296,9 @@ export class BetTextService {
       return;
     }
     try {
-      await this.handleBetPhoto(ctx, photo, true);
+      await this.handleBetPhoto(ctx, photo as unknown as BetPhotoMessage, true);
     } catch (err) {
-      console.error('❌ Erro na análise profunda:', (err as Error).message);
+      this.logger.error(`Erro na análise profunda: ${(err as Error).message}`);
       await ctx.editMessageReplyMarkup(keyboard);
       await ctx.reply(
         '⚠️ A análise profunda não conseguiu concluir a leitura. O preview anterior foi mantido. Tente novamente ou envie um print mais legível.',
@@ -279,13 +307,19 @@ export class BetTextService {
     }
   }
 
-  async handleBetPhoto(ctx: any, msg: any, deep = false) {
+  async handleBetPhoto(ctx: BotContext, msg: BetPhotoMessage, deep = false) {
     const caption = String(msg.caption ?? '').trim();
     if (!caption) {
       await ctx.reply(
         '📸 Informe o nome da casa na legenda da imagem. Ex.: Ginga',
         { reply_parameters: { message_id: msg.message_id } },
       );
+      return;
+    }
+    // A análise profunda já contou o uso no clique (handleDeepBetPhoto).
+    const limited = deep || !this.rateLimit ? null : await this.aiLimitMessage(ctx);
+    if (limited) {
+      await ctx.reply(limited, { reply_parameters: { message_id: msg.message_id } });
       return;
     }
 
@@ -317,32 +351,36 @@ export class BetTextService {
     const noticePromise = deep
       ? Promise.resolve(null)
       : measure('feedback', () => ctx.reply('⏳ Analisando a foto…', extra))
-          .then((m: any) => m as { message_id: number })
+          .then((m) => ({ message_id: m.message_id }))
           .catch(() => {
-            console.warn('[BET_IMAGE_FLOW] feedback_failed=true');
+            this.logger.warn('[BET_IMAGE_FLOW] feedback_failed=true');
             return null;
           });
     const pendentesPromise = measure('pendentes', async () => {
-      const user = await this.usersService.findByTelegramUserId(ctx.from.id);
+      const user = await this.usersService.findByTelegramUserId(senderId(ctx));
       if (!user) return [] as PendingCandidate[];
       return this.pendingMatchService.loadCandidates(
         user.id,
-        new Date((msg.date as number) * 1000),
+        new Date(msg.date * 1000),
       );
     }).catch((err) => {
-      console.warn('[BET_MATCH] pendentes_indisponiveis=true');
+      this.logger.warn('[BET_MATCH] pendentes_indisponiveis=true');
       throw err;
     });
     pendentesPromise.catch(() => {});
 
-    const reply = async (text: string, options: any = {}) =>
+    const chatId = ctx.chat?.id;
+    const reply = async (
+      text: string,
+      options: { reply_parameters?: unknown; reply_markup?: InlineKeyboardMarkup } = {},
+    ) =>
       measure('preview', async () => {
         const { reply_parameters: _replyParameters, ...editOptions } = options;
         if (deep) return ctx.editMessageText(text, editOptions);
         const notice = await noticePromise;
-        if (notice)
+        if (notice && chatId !== undefined)
           return ctx.telegram.editMessageText(
-            ctx.chat.id,
+            chatId,
             notice.message_id,
             undefined,
             text,
@@ -355,7 +393,7 @@ export class BetTextService {
       // Só casa e download bloqueiam a IA. A IA só roda com casa válida.
       const [house, photo] = await Promise.allSettled([
         measure('house', () =>
-          this.grokService.resolveHouseId(`🏠 ${caption}`),
+          this.houseService.resolveHouseIdFromText(`🏠 ${caption}`),
         ),
         (async () => {
           const fileId = pickPhotoSize<{
@@ -363,10 +401,10 @@ export class BetTextService {
             width: number;
             height: number;
           }>(msg.photo).file_id;
-          const link: any = await measure('get_file', () =>
+          const link = await measure('get_file', () =>
             ctx.telegram.getFileLink(fileId),
           );
-          const url = link.href ?? String(link);
+          const url = link.href;
           const imageBuffer = await measure('download', async () => {
             const res = await fetch(url);
             if (!res.ok) throw new Error(`download ${res.status}`);
@@ -398,9 +436,8 @@ export class BetTextService {
         );
       } catch (err) {
         const reason = (err as Error).message;
-        console.error(
-          `❌ Erro ao reconhecer print (chatId=${ctx.chat?.id} messageId=${msg.message_id}):`,
-          reason,
+        this.logger.error(
+          `Erro ao reconhecer print (chatId=${ctx.chat?.id} messageId=${msg.message_id}): ${reason}`,
         );
         if (deep) throw err;
         await reply(
@@ -442,7 +479,7 @@ export class BetTextService {
                 house: caption,
                 odd: extracted.odd ?? NaN,
                 stake: extracted.stake ?? NaN,
-                at: new Date((msg.date as number) * 1000),
+                at: new Date((msg.date) * 1000),
               },
               pendentes.value,
             ).map(({ candidate, score }) => ({
@@ -451,7 +488,7 @@ export class BetTextService {
               label: candidate.game || `#${candidate.tipId}`,
             }))
           : [];
-      const preview = buildBetPreview(extracted, caption, msg.date as number, {
+      const preview = buildBetPreview(extracted, caption, msg.date, {
         deep,
         allowDeep: !deep,
         matches,
@@ -459,7 +496,7 @@ export class BetTextService {
       await reply(preview.text, { reply_markup: preview.reply_markup });
       status = 'ok';
     } finally {
-      console.log(
+      this.logger.log(
         `[BET_IMAGE_FLOW] chat_id=${ctx.chat?.id} message_id=${msg.message_id} mode=${deep ? 'deep' : 'standard'} status=${status} ` +
           Object.entries(timings)
             .map(([stage, duration]) => `${stage}_ms=${duration}`)
@@ -476,6 +513,11 @@ export class BetTextService {
     const startedAt = performance.now();
     const chatId = ctx.chat?.id;
     if (chatId === undefined) return;
+    const limited = this.rateLimit ? await this.aiLimitMessage(ctx) : null;
+    if (limited) {
+      await ctx.reply(limited, { reply_parameters: { message_id: msg.message_id } });
+      return;
+    }
     const audio = 'voice' in msg ? msg.voice : msg.audio;
     const extra = { reply_parameters: { message_id: msg.message_id } };
     let feedback: Message.TextMessage | undefined;
@@ -500,7 +542,7 @@ export class BetTextService {
       try {
         feedback = await ctx.reply('⏳ Analisando o áudio…', extra);
       } catch {
-        console.warn('[BET_AUDIO_TOTAL] feedback_failed=true');
+        this.logger.warn('[BET_AUDIO_TOTAL] feedback_failed=true');
       }
 
       const downloadStart = performance.now();
@@ -544,7 +586,7 @@ export class BetTextService {
         }
         audioBuffer = Buffer.concat(chunks);
       } finally {
-        console.log(
+        this.logger.log(
           `[BET_AUDIO_DOWNLOAD] message_id=${msg.message_id} duration_ms=${Math.round(performance.now() - downloadStart)}`,
         );
       }
@@ -558,7 +600,7 @@ export class BetTextService {
         await this.betAudioService.extractBetFromTranscript(transcript);
       const faltando = missingBetFields(extracted);
       const houseId = extracted.casa
-        ? await this.grokService.resolveHouseId(`🏠 ${extracted.casa}`)
+        ? await this.houseService.resolveHouseIdFromText(`🏠 ${extracted.casa}`)
         : null;
       if (!houseId) faltando.unshift('Casa');
       if (faltando.length) {
@@ -574,7 +616,7 @@ export class BetTextService {
       await reply(preview.text, preview.reply_markup);
       status = 'ok';
     } catch (error) {
-      console.error(
+      this.logger.error(
         `[BET_AUDIO_ERROR] message_id=${msg.message_id} type=${error instanceof Error ? error.name : 'unknown'}`,
       );
       await reply(
@@ -583,7 +625,7 @@ export class BetTextService {
           : 'Não consegui entender este áudio. Tente enviar novamente falando os dados da aposta.',
       );
     } finally {
-      console.log(
+      this.logger.log(
         `[BET_AUDIO_TOTAL] message_id=${msg.message_id} status=${status} duration_ms=${Math.round(performance.now() - startedAt)}`,
       );
     }
@@ -594,7 +636,7 @@ export class BetTextService {
   // (subir o limite pode liberar mais stake); só a odd mudando mantém a stake
   // e refaz o lucro potencial. Card sem 🎯 (sem banca, AVISO) fica como está.
   private async refreshRecommendation(
-    ctx: any,
+    ctx: BotContext,
     text: string,
     limitChanged: boolean,
   ): Promise<string> {
@@ -603,7 +645,7 @@ export class BetTextService {
 
     const percent = extractPercent(text);
     if (limitChanged && percent !== null) {
-      const user = await this.usersService.findByTelegramUserId(ctx.from.id);
+      const user = await this.usersService.findByTelegramUserId(senderId(ctx));
       const banca = user
         ? await this.usersService.getUserStake(user.id)
         : null;
@@ -629,7 +671,7 @@ export class BetTextService {
   // Resposta (reply) a um prompt de "✏️ Editar": extrai a odd/limite novos e
   // o texto original (embutido no próprio prompt) e edita só essa mensagem.
   async handleEditReply(
-    ctx: any,
+    ctx: BotContext,
     promptText: string,
     headerMatch: RegExpMatchArray,
     replyText: string,
@@ -714,10 +756,12 @@ export class BetTextService {
       );
     }
 
+    // Resposta a um prompt do bot: sempre vem de um chat.
+    const chatId = ctx.chat!.id;
     try {
       if (isMedia) {
         await ctx.telegram.editMessageCaption(
-          ctx.chat.id,
+          chatId,
           originalMessageId,
           undefined,
           novoTexto,
@@ -727,7 +771,7 @@ export class BetTextService {
         );
       } else {
         await ctx.telegram.editMessageText(
-          ctx.chat.id,
+          chatId,
           originalMessageId,
           undefined,
           novoTexto,
@@ -740,7 +784,7 @@ export class BetTextService {
         reply_parameters: { message_id: originalMessageId },
       });
     } catch (err) {
-      console.error('❌ Erro ao editar aposta individual:', err);
+      this.logger.error(...errorArgs('Erro ao editar aposta individual', err));
       await ctx.reply('❌ Erro ao atualizar. Tenta de novo.');
     }
   }

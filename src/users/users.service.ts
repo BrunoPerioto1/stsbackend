@@ -3,7 +3,12 @@ import * as bcrypt from 'bcrypt';
 import { UsersRepository } from '../infra/repository/users.repository';
 import { UserDto } from './dto/user.dto';
 import { extendAccess } from './access';
-import { CreateUserRequestDTO, UpdateUserRequestDTO } from './dto/request.dto';
+import {
+  CreateUserRequestDTO,
+  MAX_PERCENT_FILTER,
+  MIN_PERCENT_FILTER,
+  UpdateUserRequestDTO,
+} from './dto/request.dto';
 import { CreateUserResponseDTO } from './dto/response.dto';
 import type { UserId, UpdateUser } from '../db_types/Users';
 import type { RoleId } from '../db_types/Roles';
@@ -12,6 +17,20 @@ import type { RoleId } from '../db_types/Roles';
 // corpo da requisição, qualquer um criava (ou promovia) a própria conta como
 // admin — por isso os 12 usuários existentes estavam todos em role 1.
 const DEFAULT_ROLE_ID = 3 as RoleId; // roles.name = 'user'
+
+// O que nunca sai da API: hash da senha e o do código de "Esqueci a senha".
+// Antes só o passwordHash era tirado, e cada coluna nova de segredo teria que
+// lembrar de entrar aqui.
+function publicUser<T extends { passwordHash: string }>(row: T) {
+  const {
+    passwordHash: _passwordHash,
+    passwordResetCodeHash: _resetHash,
+    passwordResetExpiresAt: _resetExpires,
+    passwordResetAttempts: _resetAttempts,
+    ...safe
+  } = row as T & { passwordResetCodeHash?: unknown; passwordResetExpiresAt?: unknown; passwordResetAttempts?: unknown };
+  return safe;
+}
 
 @Injectable()
 export class UsersService {
@@ -50,9 +69,12 @@ export class UsersService {
     return user ?? null;
   }
 
-  async deleteAccount(userId: number): Promise<void> {
+  async deleteAccount(userId: number, password: string): Promise<void> {
     const user = await this.usersRepository.findById(userId as UserId);
     if (!user) throw new BadRequestException('Usuário não encontrado.');
+    if (!(await bcrypt.compare(password, user.passwordHash))) {
+      throw new UnauthorizedException('Senha incorreta');
+    }
     await this.usersRepository.deleteUserAndData(userId as UserId);
   }
 
@@ -64,16 +86,21 @@ export class UsersService {
       throw new BadRequestException('E-mail já cadastrado');
     }
 
-    const existingUsername = await this.usersRepository.findByUsername(
-      params.username,
-    );
-    if (existingUsername) {
-      throw new BadRequestException('Username já cadastrado');
+    // A tela de cadastro não pede username (pedia o "Nome" e usava como
+    // username único: dois "Bruno" colidiam). Sem username no corpo, o servidor
+    // gera um livre a partir do nome ou do e-mail.
+    let username = params.username?.trim();
+    if (username) {
+      if (await this.usersRepository.findByUsername(username)) {
+        throw new BadRequestException('Username já cadastrado');
+      }
+    } else {
+      username = await this.freeUsername(params.fullName || params.email.split('@')[0]);
     }
 
     const passwordHash = await bcrypt.hash(params.password, 10);
     const created = await this.usersRepository.insertUser({
-      username: params.username,
+      username,
       email: params.email,
       passwordHash,
       roleId: DEFAULT_ROLE_ID,
@@ -82,16 +109,31 @@ export class UsersService {
       accessUntil: extendAccess(null, Number(process.env.TRIAL_DAYS ?? 0)),
     });
 
-    const { passwordHash: _, ...safe } = created as any;
-    return safe as CreateUserResponseDTO;
+    return publicUser(created) as unknown as CreateUserResponseDTO;
+  }
+
+  // "Bruno Souza" → "bruno.souza", "bruno.souza2", "bruno.souza3"... Cabe na
+  // coluna (50) com folga pro sufixo.
+  private async freeUsername(source: string): Promise<string> {
+    const base =
+      source
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '.')
+        .replace(/^\.+|\.+$/g, '')
+        .slice(0, 40) || 'usuario';
+    for (let n = 1; n < 1000; n++) {
+      const candidate = n === 1 ? base : `${base}${n}`;
+      if (!(await this.usersRepository.findByUsername(candidate))) return candidate;
+    }
+    return `${base}${Date.now()}`;
   }
 
   async getMe(userId: number): Promise<Omit<UserDto, 'passwordHash'>> {
     const user = await this.usersRepository.findById(userId as UserId);
     if (!user) throw new BadRequestException('Usuário não encontrado.');
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { passwordHash, ...safe } = user as any;
-    return safe;
+    return publicUser(user);
   }
 
   async updateMe(
@@ -110,7 +152,11 @@ export class UsersService {
     }
     if (params.dashboardPreferences !== undefined)
       fields.dashboardPreferences = params.dashboardPreferences;
-    if (params.username) fields.username = params.username;
+    if (params.username) {
+      const dono = await this.usersRepository.findByUsername(params.username);
+      if (dono && dono.id !== userId) throw new BadRequestException('Username já cadastrado');
+      fields.username = params.username;
+    }
     if (params.email) fields.email = params.email;
     if (params.fullName !== undefined) fields.fullName = params.fullName;
     if (params.stake !== undefined) fields.stake = params.stake;
@@ -124,9 +170,7 @@ export class UsersService {
       fields,
     );
     if (!updated) throw new BadRequestException('Erro ao atualizar usuário.');
-    // eslint-disable-next-line @typescript-eslint/no-unused_vars
-    const { passwordHash, ...safe } = updated as any;
-    return safe;
+    return publicUser(updated);
   }
   /**
    * Confirma o código gerado no app. Só o bot chama, com o `ctx.from.id` que o
@@ -207,7 +251,10 @@ export class UsersService {
     telegramUserId: number,
     value: number | null,
   ): Promise<boolean> {
-    if (value !== null && (!Number.isFinite(value) || value < 0)) {
+    if (
+      value !== null &&
+      (!Number.isFinite(value) || value < MIN_PERCENT_FILTER || value > MAX_PERCENT_FILTER)
+    ) {
       throw new Error('Filtro de porcentagem inválido.');
     }
     return this.usersRepository.updateMinPercentFilter(telegramUserId, value);

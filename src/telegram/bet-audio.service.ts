@@ -1,5 +1,5 @@
 import { BET_EXTRACTION_RULES } from '../bet/bet-normalization';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { toFile } from 'openai';
 import { basename, extname } from 'node:path';
 import { getOpenAIClient } from './openai-client';
@@ -54,6 +54,8 @@ O esporte pode ser inferido com contexto claro. Ignore horários. A transcriçã
 
 @Injectable()
 export class BetAudioService {
+  private readonly logger = new Logger(BetAudioService.name);
+
   async transcribeBetAudio(audio: {
     audioBuffer: Buffer;
     filename: string;
@@ -113,7 +115,7 @@ export class BetAudioService {
       status = 'ok';
       return text;
     } finally {
-      console.log(
+      this.logger.log(
         `[BET_AUDIO_TRANSCRIBE] model=gpt-transcribe status=${status} duration_audio=${duration ?? '?'}s duration_api_ms=${Math.round(performance.now() - startedAt)}`,
       );
     }
@@ -156,7 +158,7 @@ export class BetAudioService {
         { timeout: 15_000, maxRetries: 0 },
       );
       const usage = response.usage;
-      console.log(
+      this.logger.log(
         `[BET_AUDIO_PARSE] model=gpt-5.6-luna input=${usage?.input_tokens ?? '?'} cached=${usage?.input_tokens_details?.cached_tokens ?? 0} cache_write=${usage?.input_tokens_details?.cache_write_tokens ?? 0} output=${usage?.output_tokens ?? '?'} reasoning=${usage?.output_tokens_details?.reasoning_tokens ?? 0}`,
       );
       const data = parseExtractionObject(response.output_text);
@@ -166,7 +168,7 @@ export class BetAudioService {
         casa: typeof data.casa === 'string' ? data.casa.trim() || null : null,
       };
     } finally {
-      console.log(
+      this.logger.log(
         `[BET_AUDIO_PARSE] status=${status} duration_ms=${Math.round(performance.now() - startedAt)}`,
       );
     }

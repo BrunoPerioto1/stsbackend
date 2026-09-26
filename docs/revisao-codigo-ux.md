@@ -62,8 +62,6 @@ typecheck limpo, 46 testes passando e 7 warnings de lint.
   "Username já cadastrado".
 - [ ] **Conta nova cai em "Seu acesso venceu"** com `TRIAL_DAYS=0`
   (`sts/src/pages/RenovarPage.tsx:35`). Texto certo: "Ative sua conta".
-- [ ] **PIX sem identificação do pagante.** Gerar PIX copia-e-cola (BR Code
-  estático) com valor e `txid` do usuário; botão "Já paguei" avisando o admin.
 - [ ] **Login revela e-mails cadastrados** (`attemptsLeft` só para conta que
   existe, `src/auth/auth.service.ts:77`). Decidir se é aceitável.
 - [ ] **"Esqueci a senha" é um toast** (`sts/src/components/auth/LoginForm.tsx:67`);
@@ -74,9 +72,7 @@ typecheck limpo, 46 testes passando e 7 warnings de lint.
 
 ## 3. Segurança
 
-- [ ] **Token do bot na URL do webhook** (`src/telegram/telegram.controller.ts:20`)
-  aparece nos logs da Vercel. Usar `secret_token` no `setWebhook` e validar o
-  header `X-Telegram-Bot-Api-Secret-Token`.
+
 - [ ] **Pool do Postgres sem SSL** (`src/infra/db/db.ts:6`), salvo `PGSSLMODE` na Vercel.
 - [ ] **Excluir conta só pede o token** (`src/users/users.service.ts:53`); pedir a senha.
 - [ ] **CORS aberto** (`src/create-app.ts:15`); restringir ao domínio do front.
@@ -89,8 +85,6 @@ typecheck limpo, 46 testes passando e 7 warnings de lint.
 - [ ] **`schema.sql` não sobe o banco atual**: faltam `tips`, `tip_dismissals`,
   `tip_deliveries`, `bets.tip_id` e o índice único de `(chat_id, message_id)`.
   Migrations sem tabela de controle.
-- [ ] **Rodar local desloca 3h.** Colunas `TIMESTAMP` sem fuso + `pg` usando o fuso
-  da máquina. Paliativo: `TZ=UTC` no `.env`. Definitivo: `timestamptz`.
 - [ ] `bets.odd DECIMAL(5,2)` limita a 999,99 e arredonda odd de 3 casas.
 
 ## 5. Desempenho
@@ -107,8 +101,7 @@ typecheck limpo, 46 testes passando e 7 warnings de lint.
 
 ## 6. Qualidade de código
 
-- [ ] **CI rodando testes** (hoje só existe o cron do SofaScore): `tsc`, `jest`,
-  `eslint`, `vite build` em push/PR nos dois repositórios.
+
 - [ ] Tipagem: front com `"strict": false`, back com `noImplicitAny: false` e `ctx: any`.
 - [ ] `GrokService` instanciado 3x e derruba a API se faltar `GROQ_API_KEY`
   (`src/telegram/grok.service.ts:15`); mover `resolveHouseId` pro `HouseService`.
@@ -121,37 +114,51 @@ typecheck limpo, 46 testes passando e 7 warnings de lint.
 
 ## 7. Front: detalhes visuais
 
-- [ ] **Tabela do AdminUsers corta colunas** entre 640px e ~1450px: grid de ~1104px
+- [x] **Tabela do AdminUsers corta colunas** entre 640px e ~1450px: grid de ~1104px
   com `overflow-hidden` no `AdminPanel` (`sts/src/components/admin/AdminUsers.tsx:19`).
   Usar `overflow-x-auto` ou trocar `sm:` por `xl:`.
-- [ ] **Sidebar com 256px e margem de 248px**
+- [x] **Sidebar com 256px e margem de 248px**
   (`sts/src/components/layout/AppSidebar.tsx:100`, `AppShell.tsx:58`); estado
-  recolhido não persiste.
-- [ ] **Dashboard desktop busca o período anterior e não mostra**; filtro por casa
+  recolhido não persiste. *Largura numa constante só (`SIDEBAR_WIDTH`) e
+  recolhido salvo em `localStorage`.*
+- [x] **Dashboard desktop busca o período anterior e não mostra**; filtro por casa
   sem UI e mandando `house_id` (`sts/src/api/routes/get-dashboard-daily.ts:4`).
-- [ ] Conferência com verde/vermelho fixos (ignora as cores de Preferências).
-- [ ] CSV "Resumo mensal" promete ROI e não tem.
+  *Régua de KPIs mostra "vs. anterior" (`lib/dashboard-kpi-delta.ts`); filtros
+  de casa e esporte no header, enviados como `houseIds`/`sportIds`.*
+- [x] Conferência com verde/vermelho fixos (ignora as cores de Preferências).
+- [x] CSV "Resumo mensal" promete ROI e não tem. *`/dashboard/monthly-summary`
+  devolve `settledStake` e `roi`; o CSV ganhou as colunas.*
 
 ---
 
 ## 8. UX nas telas existentes
 
-- **Tips** (186 pendentes no print): separar "ainda dá tempo" de "jogo já começou"
+- [x] **Tips** (186 pendentes no print): separar "ainda dá tempo" de "jogo já começou"
   pelo `eventStartAt`; ordenar pelo início ("começa em 40 min"); ação "marcar
   todas as começadas como caiu"; badge de Tips no menu.
-- **Apostas**: faixa com totais do filtro (apostado, lucro, ROI, acerto); filtro por
+  *Fila pendente em três blocos (`lib/tip-schedule.ts`), relógio de 1 min;
+  badge via `GET /tips/counts`.*
+- [x] **Apostas**: faixa com totais do filtro (apostado, lucro, ROI, acerto); filtro por
   origem e por "sem jogo identificado"; badge só para jogo que acabou e segue pendente.
-- **Casas**: "em aberto" e "disponível" separados; "18 negativas" vira botão pra
+  *`GET /bets/totals`; filtros `origins` (tip, telegram, print, manual) e `unmatched`
+  (print x digitada via `fromImage` no POST; apostas antigas do site contam como digitadas);
+  badge do menu usa `overdue` do `/settlement/queue` (placar coletado, início
+  há mais de 3h, ou sem jogo casado e planilhada há mais de 1 dia).*
+- [x] **Casas**: "em aberto" e "disponível" separados; "18 negativas" vira botão pra
   conciliar; editar/excluir movimentação; agrupar com saldo / paradas / sem uso.
-- **Dashboard**: comparativo no desktop; filtro por casa e esporte; estado vazio
-  vira checklist.
-- **Conferência**: cálculo automático; aviso no bot "N apostas prontas pra conferir".
-- **Telegram (Perfil)**: deep link `t.me/betbpbot?start=<código>` vincula com um toque.
-- **Login / renovação**: recuperar senha pelo Telegram; PIX copia-e-cola; "Já paguei".
-- **Admin Usuários**: ativar/desativar; confirmar promoção a admin; filtro
+  *`PATCH`/`DELETE /transactions/:id` (excluir pede confirmação); "A conferir"
+  filtra a lista e cada casa tem "Conciliar" (abre em Saldo real); grupos
+  Em uso / Paradas / Sem uso (`lib/house-groups.ts`).*
+- [x] **Dashboard**: comparativo no desktop; filtro por casa e esporte; estado vazio
+  vira checklist. *Filtros só no desktop; banca acumulada segue o total.*
+- [x] **Conferência**: cálculo automático; aviso no bot "N apostas prontas pra conferir".
+- [x] **Telegram (Perfil)**: deep link `t.me/betbpbot?start=<código>` vincula com um toque.
+- [x] **Login / renovação**: recuperar senha pelo Telegram; PIX copia-e-cola; "Já paguei".
+- [x] **Admin Usuários**: ativar/desativar; confirmar promoção a admin; filtro
   "vence em 7 dias".
-- **Mobile**: PWA (manifest) para instalar; Web Share Target no Android abre a
-  Nova aposta direto do print compartilhado.
+- [x] **Mobile**: PWA (manifest) para instalar; Web Share Target no Android abre a
+  Nova aposta direto do print compartilhado. *`public/manifest.webmanifest` +
+  `public/sw.js` (sem cache do app, só recebe o POST do compartilhamento).*
 
 ## 9. Telas novas
 

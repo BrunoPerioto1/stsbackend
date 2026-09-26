@@ -1,9 +1,11 @@
-import { Inject, Injectable } from '@nestjs/common';
+import type { MessageEntity } from 'telegraf/types';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Telegraf } from 'telegraf';
 import { TELEGRAM_BOT } from './telegram-bot.provider';
 import { UsersService } from '../users/users.service';
 import { TipsService } from '../tips/tips.service';
 import { TipsGroupService } from './tips-group.service';
+import { forEachWithConcurrency } from '../common/utils/concurrency';
 import {
   extractLimitFromText,
   extractOddFromText,
@@ -14,6 +16,15 @@ import {
   TIP_BOILERPLATE_PATTERNS,
   stripBoilerplateParagraphs,
 } from './utils/tip-text.util';
+import { errorArgs } from '../common/utils/log';
+
+// DMs ao mesmo tempo no fan-out. O Telegram aceita ~30/s por bot; 8 em voo
+// deixa folga pro resto do bot continuar respondendo.
+const FANOUT_CONCURRENCY = 8;
+
+// Mesma regra do UsersService.getUserStake: zero ou vazio é "sem banca".
+const bancaDefinida = (stake: number | string | null | undefined) =>
+  stake != null && Number(stake) > 0 ? Number(stake) : null;
 
 const NO_BANKROLL_LINE =
   '🎯 Defina sua banca com /stake VALOR pra receber a recomendação de aposta.';
@@ -24,6 +35,8 @@ const NO_BANKROLL_LINE =
 // mensagem quando o usuário resolve pela lista em vez de clicar nela direto.
 @Injectable()
 export class TipFanoutService {
+  private readonly logger = new Logger(TipFanoutService.name);
+
   constructor(
     @Inject(TELEGRAM_BOT) private readonly bot: Telegraf,
     private readonly usersService: UsersService,
@@ -69,7 +82,7 @@ export class TipFanoutService {
     chatId: number,
     messageId: number,
     hasMedia: boolean,
-    entities?: any[],
+    entities?: MessageEntity[],
   ) {
     const rawPercent = extractPercent(text);
     const isAviso = isAvisoMessage(text);
@@ -81,7 +94,7 @@ export class TipFanoutService {
     const hasOdd = extractOddFromText(text) !== null;
     const showKeyboard = !isAviso || hasOdd;
     const percent = showKeyboard ? rawPercent : null;
-    console.log(
+    this.logger.log(
       `📨 handleTipsMessage: percent=${percent} isAviso=${isAviso} hasMedia=${hasMedia} showKeyboard=${showKeyboard}`,
     );
     if (rawPercent === null && !isAviso) return;
@@ -98,7 +111,7 @@ export class TipFanoutService {
     // Reentrega do webhook (o Telegram repete quando a resposta demora): a
     // primeira entrega já fez o fan-out, repetir mandaria a DM duas vezes.
     if (!created) {
-      console.log(`📨 handleTipsMessage: tip ${tip.id} já registrada, fan-out ignorado`);
+      this.logger.log(`📨 handleTipsMessage: tip ${tip.id} já registrada, fan-out ignorado`);
       return;
     }
 
@@ -107,18 +120,20 @@ export class TipFanoutService {
     const { text: baseText, entities: baseEntities } =
       stripBoilerplateParagraphs(text, entities, TIP_BOILERPLATE_PATTERNS);
 
-    for (const user of users) {
-      if (
-        percent !== null &&
-        user.minPercentFilter !== null &&
-        percent < Number(user.minPercentFilter)
-      )
-        continue;
+    const destinatarios = users.filter(
+      (user) =>
+        percent === null ||
+        user.minPercentFilter === null ||
+        percent >= Number(user.minPercentFilter),
+    );
 
-      const stillMember = await this.tipsGroup.isMember(
-        user.telegramUserId as number,
-      );
-      if (!stillMember) continue;
+    // Em paralelo, com teto: um de cada vez, a última DM chegava segundos
+    // depois da primeira. Cada envio já trata o próprio erro.
+    await forEachWithConcurrency(destinatarios, FANOUT_CONCURRENCY, async (user) => {
+      const stillMember = await this.tipsGroup
+        .isMember(user.telegramUserId as number)
+        .catch(() => false);
+      if (!stillMember) return;
 
       await this.sendTipCopyToUser(
         user,
@@ -132,7 +147,7 @@ export class TipFanoutService {
         limit,
         showKeyboard,
       );
-    }
+    });
   }
 
   // Manda a cópia individual de uma tip (com recomendação de aposta calculada
@@ -141,19 +156,21 @@ export class TipFanoutService {
   // precisa de id e percent; texto/casa/odd sempre vêm recalculados a partir
   // de baseText/originalText, nunca de campos extras da tip.
   async sendTipCopyToUser(
-    user: { id: number; telegramUserId: number | null },
+    // `stake` vem pronto do fan-out (a query já traz); o reenvio avulso não
+    // tem e busca.
+    user: { id: number; telegramUserId: number | null; stake?: number | string | null },
     tip: { id: number; percent: number | null },
     chatId: number,
     messageId: number,
     hasMedia: boolean,
     baseText: string,
-    baseEntities: any,
+    baseEntities: MessageEntity[] | undefined,
     originalText: string,
     limit: number | null,
     showKeyboard = true,
   ) {
     let outgoingText = baseText;
-    let outgoingEntities: any = baseEntities;
+    let outgoingEntities: MessageEntity[] | undefined = baseEntities;
     // NUMERIC do Postgres volta como string via pg — mesmo pra uma tip que
     // acabou de ser inserida com um number — então normaliza antes de fazer
     // conta com isso (division/toFixed em cima de string não estoura, mas
@@ -161,7 +178,11 @@ export class TipFanoutService {
     const percent = tip.percent !== null ? Number(tip.percent) : null;
     try {
       const userStake =
-        percent !== null ? await this.usersService.getUserStake(user.id) : null;
+        percent === null
+          ? null
+          : 'stake' in user
+            ? bancaDefinida(user.stake)
+            : await this.usersService.getUserStake(user.id);
       if (percent !== null && userStake === null) {
         // Sem banca não existe recomendação: o Planilhar pede o /stake em vez
         // de gravar uma stake calculada sobre um valor inventado.
@@ -199,7 +220,7 @@ export class TipFanoutService {
         } else {
           outgoingText = `${baseText}\n\n${recommendationLine}`;
         }
-        console.log(
+        this.logger.log(
           `🎯 Recomendação calculada (userId=${user.id}, telegramUserId=${user.telegramUserId}): banca=${userStake} percent=${percent} limit=${limit} -> R$${recommendationValue}`,
         );
       }
@@ -242,10 +263,7 @@ export class TipFanoutService {
         });
       }
     } catch (err) {
-      console.error(
-        `⚠️ Não foi possível enviar tip para o usuário (telegramUserId=${user.telegramUserId}):`,
-        err,
-      );
+      this.logger.error(...errorArgs(`⚠️ Não foi possível enviar tip para o usuário (telegramUserId=${user.telegramUserId})`, err));
     }
   }
 
@@ -263,7 +281,8 @@ export class TipFanoutService {
     const { text: baseText, entities: baseEntities } =
       stripBoilerplateParagraphs(
         tip.text,
-        tip.entities ?? undefined,
+        // Gravadas do próprio update do Telegram (recordTip): são MessageEntity.
+        (tip.entities ?? undefined) as MessageEntity[] | undefined,
         TIP_BOILERPLATE_PATTERNS,
       );
     const limit = extractLimitFromText(tip.text);
@@ -333,10 +352,7 @@ export class TipFanoutService {
         );
       }
     } catch (err) {
-      console.error(
-        `⚠️ Não foi possível atualizar a mensagem original da tip (tipId=${tipId}):`,
-        err,
-      );
+      this.logger.error(...errorArgs(`⚠️ Não foi possível atualizar a mensagem original da tip (tipId=${tipId})`, err));
     }
   }
 }

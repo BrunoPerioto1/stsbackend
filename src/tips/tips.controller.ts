@@ -41,6 +41,12 @@ export class TipsController {
     return this.tipsService.listForUser(userId, filters);
   }
 
+  @Get('counts')
+  @ApiOperation({ summary: 'Quantas tips o usuário tem em cada status (badge do menu)' })
+  async counts(@User('userId') userId: number) {
+    return this.tipsService.countsForUser(userId);
+  }
+
   @Post(':id/planilhar')
   @ApiOperation({
     summary: 'Cria a aposta a partir da tip, igual ao botão Planilhar do bot',

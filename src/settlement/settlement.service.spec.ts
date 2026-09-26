@@ -187,13 +187,40 @@ describe('queue', () => {
       queue: { pending: 40, settleable: 18, suggestions: 12, undecided: 3 },
     });
 
-    await expect(service.queue(1 as any)).resolves.toEqual({
+    await expect(service.queue(1 as any)).resolves.toMatchObject({
       pending: 40,
       settleable: 18,
       suggestions: 12,
       undecided: 3,
       hasMore: true,
     });
+  });
+
+  it('calcula antes de contar quando tem placar esperando', async () => {
+    const { service, repository } = makeService({
+      settleable: [aposta(1, 'Mais de 2.5 gols', 2, 1)],
+    });
+    repository.queue
+      .mockResolvedValueOnce({ pending: 1, settleable: 1, suggestions: 0, undecided: 0 })
+      .mockResolvedValueOnce({ pending: 1, settleable: 0, suggestions: 1, undecided: 0 });
+
+    await expect(service.queue(1 as any)).resolves.toEqual({
+      pending: 1,
+      settleable: 0,
+      suggestions: 1,
+      undecided: 0,
+      computed: 1,
+      hasMore: false,
+    });
+    expect(repository.saveSuggestions).toHaveBeenCalledTimes(1);
+  });
+
+  it('sem placar novo nao recalcula nada', async () => {
+    const { service, repository } = makeService({
+      queue: { pending: 3, settleable: 0, suggestions: 2, undecided: 0 },
+    });
+    await expect(service.queue(1 as any)).resolves.toMatchObject({ computed: 0 });
+    expect(repository.findSettleable).not.toHaveBeenCalled();
   });
 
   it('fila drenada nao oferece proximo lote', async () => {

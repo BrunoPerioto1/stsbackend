@@ -1,15 +1,13 @@
-import { Controller, Get, Post, Body, Param, ParseIntPipe, Query, Header } from '@nestjs/common';
+import { Controller, Get, Param, ParseIntPipe, Query, Header } from '@nestjs/common';
 import {
   ApiOperation,
   ApiResponse,
   ApiTags,
-  ApiBadRequestResponse,
   ApiNotFoundResponse,
   ApiQuery,
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { HouseService } from './house.service';
-import { InsufficientBalanceErrorDto } from '../infra/dto/error-response.dto';
 import { HouseFilterRequestDto } from './dto/house.filter.dto';
 import { UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';

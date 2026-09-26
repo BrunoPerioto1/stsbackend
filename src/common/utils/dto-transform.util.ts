@@ -9,3 +9,12 @@ export function toNumberArray({ value }: { value: unknown }) {
     .map(Number)
     .filter((n) => !Number.isNaN(n));
 }
+
+// Mesma convenção pra listas de texto ("tip,telegram").
+export function toStringArray({ value }: { value: unknown }): unknown {
+  if (typeof value !== 'string') return value;
+  return value
+    .split(',')
+    .map((v) => v.trim())
+    .filter((v) => v.length > 0);
+}

@@ -16,6 +16,7 @@ import { BetAudioService } from '../telegram/bet-audio.service';
 import { TipFanoutService } from '../telegram/tip-fanout.service';
 import { PendentesService } from '../telegram/pendentes.service';
 import { TelegramCallbackService } from '../telegram/telegram-callback.service';
+import { RateLimitModule } from './rate-limit.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { TelegramCallbackService } from '../telegram/telegram-callback.service';
     TipsModule,
     BetSlipModule,
     TelegramBotModule,
+    RateLimitModule,
   ],
   controllers: [TelegramController, AccessController],
   providers: [

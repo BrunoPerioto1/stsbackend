@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsISO8601, IsInt, IsPositive } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
+import { toNumberArray } from '../../common/utils/dto-transform.util';
 import { BettingHouseId } from '../../db_types/BettingHouse';
 
 export class DashboardQueryDto {
@@ -14,6 +15,26 @@ export class DashboardQueryDto {
   @IsInt()
   @IsPositive()
   houseId?: BettingHouseId;
+
+  @ApiPropertyOptional({
+    description: 'IDs de casa (múltipla seleção), separados por vírgula',
+    type: String,
+    example: '3,7',
+  })
+  @IsOptional()
+  @Transform(toNumberArray)
+  @IsInt({ each: true })
+  houseIds?: number[];
+
+  @ApiPropertyOptional({
+    description: 'IDs de esporte (múltipla seleção), separados por vírgula',
+    type: String,
+    example: '1,4',
+  })
+  @IsOptional()
+  @Transform(toNumberArray)
+  @IsInt({ each: true })
+  sportIds?: number[];
 
   @ApiPropertyOptional({
     description: 'Data de início para filtrar os dados do dashboard',

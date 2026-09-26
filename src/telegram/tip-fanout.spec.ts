@@ -1,5 +1,8 @@
 import { TipFanoutService } from './tip-fanout.service';
 import { BotCommandsService } from './bot-commands.service';
+import type { BotContext } from './utils/bot-context';
+
+const asCtx = (ctx: object) => ctx as unknown as BotContext;
 
 const TIP = ['🏠 Bet365', '🆚 Flamengo x Vasco', '⚽️ Futebol', '📌 Over 2.5', '🏷 1.90', '🛑 1.5%'].join('\n');
 
@@ -66,19 +69,31 @@ describe('/stake', () => {
       findByTelegramUserId: jest.fn().mockResolvedValue({ id: 1 }),
       updateUserStake: jest.fn().mockResolvedValue(true),
     };
-    const service = new BotCommandsService(usersService as any, {} as any);
-    await service.handleStake({
-      message: { text: `/stake ${arg}` },
-      from: { id: 10 },
-      reply: jest.fn(),
-    });
+    const service = new BotCommandsService(usersService as any, {} as any, {} as any);
+    await service.handleStake(asCtx({ message: { text: `/stake ${arg}` }, from: { id: 10 }, reply: jest.fn() }));
     expect(usersService.updateUserStake).toHaveBeenCalledWith(1, expected);
   });
 
   it('recusa valor que não é número', async () => {
     const usersService = { findByTelegramUserId: jest.fn(), updateUserStake: jest.fn() };
-    const service = new BotCommandsService(usersService as any, {} as any);
-    await service.handleStake({ message: { text: '/stake abc' }, from: { id: 10 }, reply: jest.fn() });
+    const service = new BotCommandsService(usersService as any, {} as any, {} as any);
+    await service.handleStake(asCtx({ message: { text: '/stake abc' }, from: { id: 10 }, reply: jest.fn() }));
     expect(usersService.updateUserStake).not.toHaveBeenCalled();
+  });
+});
+
+describe('fan-out: banca e envio', () => {
+  it('usa a banca que veio na query, sem um SELECT por usuário', async () => {
+    const { service, bot, usersService } = setupFanout();
+    usersService.getUsersForTipsFanout.mockResolvedValue([
+      { id: 1, telegramUserId: 10, minPercentFilter: null, stake: '2000' },
+      { id: 2, telegramUserId: 20, minPercentFilter: '3', stake: '2000' },
+    ]);
+    await service.handleTipsMessage(TIP, -100, 50, false);
+    expect(usersService.getUserStake).not.toHaveBeenCalled();
+    // O de filtro 3% não recebe uma tip de 1,5%.
+    expect(bot.telegram.sendMessage).toHaveBeenCalledTimes(1);
+    const [, text] = bot.telegram.sendMessage.mock.calls[0] as [number, string];
+    expect(text).toContain('R$ 30,00');
   });
 });

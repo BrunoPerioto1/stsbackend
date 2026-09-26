@@ -1,4 +1,8 @@
 import { BotCommandsService } from './bot-commands.service';
+import type { BotContext } from './utils/bot-context';
+
+// Contexto parcial: só o que o porteiro lê.
+const asCtx = (ctx: object) => ctx as unknown as BotContext;
 
 const DAY = 86_400_000;
 
@@ -6,7 +10,7 @@ function setup(user: object | null) {
   const usersService = {
     findByTelegramUserId: jest.fn().mockResolvedValue(user),
   };
-  const service = new BotCommandsService(usersService as any, {} as any);
+  const service = new BotCommandsService(usersService as any, {} as any, {} as any);
   return { service, usersService };
 }
 
@@ -32,7 +36,7 @@ describe('blockIfNoAccess', () => {
     });
     const ctx = privateMessage('Flamengo vence @1.80 50');
 
-    await expect(service.blockIfNoAccess(ctx)).resolves.toBe(true);
+    await expect(service.blockIfNoAccess(asCtx(ctx))).resolves.toBe(true);
     const [text, extra] = ctx.reply.mock.calls[0] as [
       string,
       {
@@ -60,7 +64,7 @@ describe('blockIfNoAccess', () => {
       reply: jest.fn(),
     };
 
-    await expect(service.blockIfNoAccess(ctx)).resolves.toBe(true);
+    await expect(service.blockIfNoAccess(asCtx(ctx))).resolves.toBe(true);
     expect(ctx.answerCbQuery).toHaveBeenCalledWith(
       expect.stringContaining('chave-teste'),
       { show_alert: true },
@@ -72,7 +76,7 @@ describe('blockIfNoAccess', () => {
     const { service } = setup({ isActive: false, accessUntil: null });
     const ctx = privateMessage('/pendentes');
 
-    await expect(service.blockIfNoAccess(ctx)).resolves.toBe(true);
+    await expect(service.blockIfNoAccess(asCtx(ctx))).resolves.toBe(true);
     const [text] = ctx.reply.mock.calls[0] as [string];
     expect(text).toContain('desativada');
     expect(text).not.toContain('chave-teste');
@@ -85,7 +89,7 @@ describe('blockIfNoAccess', () => {
       null,
     ]) {
       const { service } = setup(user);
-      await expect(service.blockIfNoAccess(privateMessage('oi'))).resolves.toBe(
+      await expect(service.blockIfNoAccess(asCtx(privateMessage('oi')))).resolves.toBe(
         false,
       );
     }
@@ -97,10 +101,10 @@ describe('blockIfNoAccess', () => {
       accessUntil: new Date(Date.now() - DAY),
     });
     await expect(
-      service.blockIfNoAccess(privateMessage('/start')),
+      service.blockIfNoAccess(asCtx(privateMessage('/start'))),
     ).resolves.toBe(false);
     await expect(
-      service.blockIfNoAccess(privateMessage('/vincular 123456')),
+      service.blockIfNoAccess(asCtx(privateMessage('/vincular 123456'))),
     ).resolves.toBe(false);
     expect(usersService.findByTelegramUserId).not.toHaveBeenCalled();
   });
@@ -108,18 +112,17 @@ describe('blockIfNoAccess', () => {
   it('grupo de Tips e banco fora do ar: passa', async () => {
     const { service } = setup(null);
     await expect(
-      service.blockIfNoAccess({
-        chat: { type: 'supergroup' },
-        from: { id: 7, is_bot: true },
-      }),
+      service.blockIfNoAccess(
+        asCtx({ chat: { type: 'supergroup' }, from: { id: 7, is_bot: true } }),
+      ),
     ).resolves.toBe(false);
 
     const usersService = {
       findByTelegramUserId: jest.fn().mockRejectedValue(new Error('db')),
     };
-    const failing = new BotCommandsService(usersService as any, {} as any);
+    const failing = new BotCommandsService(usersService as any, {} as any, {} as any);
     jest.spyOn(console, 'error').mockImplementation(() => undefined);
-    await expect(failing.blockIfNoAccess(privateMessage('oi'))).resolves.toBe(
+    await expect(failing.blockIfNoAccess(asCtx(privateMessage('oi')))).resolves.toBe(
       false,
     );
   });

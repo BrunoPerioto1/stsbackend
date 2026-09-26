@@ -13,22 +13,22 @@ export const TIP_BOILERPLATE_PATTERNS: RegExp[] = [
   /planilhar com shark track/i,
 ];
 
-interface SimpleEntity {
-  type: string;
+// Qualquer entidade do Telegram (link, negrito...): só offset e tamanho
+// importam aqui; o resto do objeto passa adiante intacto.
+interface PositionedEntity {
   offset: number;
   length: number;
-  [key: string]: any;
 }
 
 // Remove parágrafos inteiros (separados por linha em branco) que batem com
 // algum dos padrões, e realinha as entidades (links, negrito, etc.) dos
 // parágrafos que sobraram pros novos offsets — senão os links dos
 // parágrafos mantidos ficam apontando pro lugar errado do texto.
-export function stripBoilerplateParagraphs(
+export function stripBoilerplateParagraphs<E extends PositionedEntity>(
   text: string,
-  entities: SimpleEntity[] | undefined,
+  entities: E[] | undefined,
   patterns: RegExp[],
-): { text: string; entities: SimpleEntity[] | undefined } {
+): { text: string; entities: E[] | undefined } {
   const parts = text.split('\n\n');
   const paragraphs: { start: number; end: number; content: string }[] = [];
   let idx = 0;
@@ -44,7 +44,7 @@ export function stripBoilerplateParagraphs(
 
   if (!entities) return { text: newText, entities };
 
-  const newEntities: SimpleEntity[] = [];
+  const newEntities: E[] = [];
   let newIdx = 0;
   for (const p of kept) {
     const shift = p.start - newIdx;

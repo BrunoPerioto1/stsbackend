@@ -1,7 +1,7 @@
-import { Controller, Post, Req, UseGuards, NotFoundException } from '@nestjs/common';
+import { Controller, Post, UseGuards, NotFoundException } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { randomInt } from 'crypto';
-import { Request } from 'express';
+import { User } from '../common/decorators/user.decorator';
 import { UsersRepository } from '../infra/repository/users.repository';
 import type { UserId } from '../db_types/Users';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
@@ -39,8 +39,8 @@ export class TelegramLinkController {
   @ApiBearerAuth()
   @Post('link-telegram')
   @UseGuards(AuthGuard('jwt'))
-  async generateLinkCode(@Req() req: Request): Promise<{ code: string; expiresAt: string }> {
-    const userId = (req.user as any).userId as UserId;
+  async generateLinkCode(@User('userId') id: number): Promise<{ code: string; expiresAt: string }> {
+    const userId = id as UserId;
     const user = await this.usersRepository.findById(userId);
     if (!user) {
       throw new NotFoundException('Usuário não encontrado.');

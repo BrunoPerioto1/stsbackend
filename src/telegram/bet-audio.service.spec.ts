@@ -181,7 +181,8 @@ function setup() {
     grok as unknown as Deps[0],
     save as unknown as Deps[1],
     {} as Deps[2],
-    {} as Deps[3],
+    // A casa sai do HouseService; o mock fica no objeto grok pros asserts.
+    { resolveHouseIdFromText: grok.resolveHouseId } as unknown as Deps[3],
     {} as Deps[4],
     {} as Deps[5],
     audio as unknown as Deps[6],
@@ -359,6 +360,7 @@ describe('Entrada de áudio no preview comum', () => {
       text as unknown as Deps[2],
       { isTipsGroup: () => false } as unknown as Deps[3],
       {} as Deps[4],
+      {} as Deps[5],
     ).onModuleInit();
     for (const field of ['voice', 'audio']) {
       const ctx = {

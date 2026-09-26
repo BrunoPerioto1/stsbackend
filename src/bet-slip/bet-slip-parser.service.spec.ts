@@ -1,4 +1,6 @@
+import { Logger } from '@nestjs/common';
 import { normalizeExtraction } from './bet-slip-parser.service';
+import type { BotContext } from '../telegram/utils/bot-context';
 import { BetAudioService } from '../telegram/bet-audio.service';
 import { BetTextService, pickPhotoSize } from '../telegram/bet-text.service';
 import { TelegramService } from '../telegram/telegram.service';
@@ -57,10 +59,10 @@ describe('extractStakeFromText', () => {
 // teste aqui toca OpenAI, Groq, Telegram ou banco.
 function buildService(overrides: Record<string, any> = {}) {
   const deps = {
-    grokService: { resolveHouseId: jest.fn().mockResolvedValue(7) },
+    grokService: {},
     betService: { createBet: jest.fn() },
     usersService: {},
-    houseService: {},
+    houseService: { resolveHouseIdFromText: jest.fn().mockResolvedValue(7) },
     tipFanoutService: {},
     betSlipParser: { extractBetFromImage: jest.fn() },
     ...overrides,
@@ -81,8 +83,10 @@ function buildService(overrides: Record<string, any> = {}) {
   return { service, deps };
 }
 
+// Contexto parcial do Telegraf: só o que o fluxo de print usa, com os mocks
+// visíveis pro teste.
 function buildCtx() {
-  return {
+  const ctx = {
     chat: { id: 1 },
     from: { id: 2 },
     reply: jest.fn().mockResolvedValue({ message_id: 11 }),
@@ -94,13 +98,17 @@ function buildCtx() {
         .mockResolvedValue(new URL('https://api.telegram.org/file/photo.jpg')),
     },
   };
+  return ctx as unknown as typeof ctx & BotContext;
 }
 
 const photoMsg = {
   message_id: 10,
   date: 1_757_000_000,
   caption: 'Ginga',
-  photo: [{ file_id: 'small' }, { file_id: 'big' }],
+  photo: [
+    { file_id: 'small', width: 320, height: 240 },
+    { file_id: 'big', width: 1280, height: 960 },
+  ],
 };
 
 describe('BetTextService.handleBetPhoto', () => {
@@ -129,7 +137,7 @@ describe('BetTextService.handleBetPhoto', () => {
 
   it('recusa casa desconhecida antes de chamar a IA', async () => {
     const { service, deps } = buildService({
-      grokService: { resolveHouseId: jest.fn().mockResolvedValue(null) },
+      houseService: { resolveHouseIdFromText: jest.fn().mockResolvedValue(null) },
     });
     const ctx = buildCtx();
 
@@ -198,7 +206,7 @@ describe('BetTextService.handleBetPhoto', () => {
       odd: 3,
     });
     expect(extractStakeFromText(text)).toBe(14.83);
-    expect(deps.grokService.resolveHouseId).toHaveBeenCalledWith('🏠 Ginga');
+    expect(deps.houseService.resolveHouseIdFromText).toHaveBeenCalledWith('🏠 Ginga');
   });
 
   it('avisa sem stack trace quando a OpenAI falha', async () => {
@@ -223,7 +231,7 @@ describe('BetTextService.handleBetPhoto', () => {
       resolveHouse = resolve;
     });
     const { service, deps } = buildService({
-      grokService: { resolveHouseId: jest.fn().mockReturnValue(house) },
+      houseService: { resolveHouseIdFromText: jest.fn().mockReturnValue(house) },
     });
     deps.betSlipParser.extractBetFromImage.mockResolvedValue({
       evento: 'Cruz Azul x Flamengo',
@@ -232,7 +240,7 @@ describe('BetTextService.handleBetPhoto', () => {
       odd: 1.73,
       stake: 15000,
     });
-    const log = jest.spyOn(console, 'log').mockImplementation(() => {});
+    const log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
     const ctx = buildCtx();
     const pending = service.handleBetPhoto(ctx, photoMsg);
     expect(ctx.reply).toHaveBeenCalledWith('⏳ Analisando a foto…', {
@@ -296,6 +304,7 @@ it('inicializa handlers sem registrar webhook nem chamar rede', () => {
   };
   const service = new TelegramService(
     bot as any,
+    {} as any,
     {} as any,
     {} as any,
     {} as any,

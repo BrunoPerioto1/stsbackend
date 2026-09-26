@@ -99,7 +99,7 @@ describe('AdminService.updateUser — grupo Tips', () => {
     });
     await service.updateUser(1, 16, { tipsGroup: 'remove' });
 
-    expect(tipsGroup.remove).toHaveBeenCalledWith(77);
+    expect(tipsGroup.remove).toHaveBeenCalledWith(77, 16);
     const [id, fields] = usersRepository.updateUser.mock.calls[0] as [
       number,
       { tipsGroupRemovedAt: Date },

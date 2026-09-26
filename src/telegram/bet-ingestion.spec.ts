@@ -1,4 +1,5 @@
 import { BetTextService } from './bet-text.service';
+import type { BotContext } from './utils/bot-context';
 import { TelegramCallbackService } from './telegram-callback.service';
 import { BetService, TipAlreadyPlanilhadaException } from '../bet/bet.service';
 import { BetRepository } from '../infra/repository/bet.repository';
@@ -39,6 +40,9 @@ describe('Telegram ingestion through existing house resolver', () => {
       users as unknown as Dependencies[2],
       {
         getAllHouses: jest.fn().mockResolvedValue([{ id: 7, name: 'Betfair' }]),
+        // A casa sai do HouseService; o mock segue no objeto grok pra os testes
+        // continuarem lendo grok.resolveHouseId.
+        resolveHouseIdFromText: grok.resolveHouseId,
       } as unknown as Dependencies[3],
       {} as Dependencies[4],
       {} as Dependencies[5],
@@ -48,7 +52,7 @@ describe('Telegram ingestion through existing house resolver', () => {
         findMatches: jest.fn().mockResolvedValue([]),
       } as any,
     );
-    const ctx = {
+    const raw = {
       from: { id: 20 },
       chat: { id: 30 },
       message: { message_id: 5, date: 1757000000 },
@@ -56,6 +60,8 @@ describe('Telegram ingestion through existing house resolver', () => {
       answerCbQuery: jest.fn(),
       editMessageText: jest.fn(),
     };
+    // Contexto parcial do Telegraf, com os mocks visíveis pro teste.
+    const ctx = raw as unknown as typeof raw & BotContext;
     return { service, grok, repository, ctx, users };
   }
   it('uses resolved house ID instead of AI-provided ID for free text', async () => {
@@ -115,7 +121,7 @@ describe('Telegram ingestion through existing house resolver', () => {
             reply_to_message: { message_id: 5 },
           },
         },
-      });
+      } as unknown as BotContext);
       expect(grok.resolveHouseId).toHaveBeenCalledWith(preview.text);
       expect(repository.create).toHaveBeenCalledWith(
         expect.objectContaining({
