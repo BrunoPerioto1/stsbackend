@@ -23,7 +23,6 @@ import {
   parseBetLocal,
 } from './utils/tip-extractors.util';
 import { findBetMatches, type PendingCandidate } from '../bet-slip/matching.util';
-import { TipsService } from '../tips/tips.service';
 import { BetSlipParserService } from '../bet-slip/bet-slip-parser.service';
 import { PendingMatchService } from '../bet-slip/pending-match.service';
 import { BetAudioService, MAX_AUDIO_BYTES } from './bet-audio.service';
@@ -62,7 +61,6 @@ export class BetTextService {
     private readonly betSlipParser: BetSlipParserService,
     private readonly betAudioService: BetAudioService,
     private readonly pendingMatchService: PendingMatchService,
-    private readonly tipsService?: TipsService,
     private readonly rateLimit?: RateLimitService,
   ) {}
 
