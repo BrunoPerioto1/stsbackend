@@ -34,9 +34,9 @@ export default tseslint.config(
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_', ignoreRestSiblings: true },
       ],
-      // Formatação é aviso, não erro: o CI barra bug, não estilo. O código
-      // antigo nunca passou pelo prettier, e reformatar tudo de uma vez
-      // enterraria qualquer diff de verdade.
+      // Formatação é aviso, não erro: o CI barra bug, não estilo. A
+      // reformatação geral foi num commit só, listado em
+      // .git-blame-ignore-revs pra não sujar o blame.
       'prettier/prettier': 'warn',
     },
   },
