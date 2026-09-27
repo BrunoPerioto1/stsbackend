@@ -1,15 +1,25 @@
 import { normalizeBetNumber } from '../bet-normalization';
-import { IsNumber, IsString, IsPositive, IsNotEmpty, IsOptional, IsArray, ArrayNotEmpty, IsEnum, ValidateIf, IsBoolean } from 'class-validator';
+import {
+  IsNumber,
+  IsString,
+  IsPositive,
+  IsNotEmpty,
+  IsOptional,
+  IsArray,
+  ArrayNotEmpty,
+  IsEnum,
+  ValidateIf,
+  IsBoolean,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import { ResultIdEnum } from './result-id.enum';
 
 class CreateBetRequestDto {
-  
-  @ApiProperty({  
+  @ApiProperty({
     description: 'Game or sporting event name',
     example: 'Flamengo vs Palmeiras',
-    required: true
+    required: true,
   })
   @IsString()
   @IsNotEmpty()
@@ -17,8 +27,8 @@ class CreateBetRequestDto {
 
   @ApiProperty({
     description: 'Bet stake amount',
-    example: 50.00,
-    required: true
+    example: 50.0,
+    required: true,
   })
   @Transform(({ value }) => normalizeBetNumber(value))
   @IsNumber()
@@ -27,8 +37,8 @@ class CreateBetRequestDto {
 
   @ApiProperty({
     description: 'Bet odds',
-    example: 2.50,
-    required: true
+    example: 2.5,
+    required: true,
   })
   @Transform(({ value }) => normalizeBetNumber(value))
   @IsNumber()
@@ -38,7 +48,7 @@ class CreateBetRequestDto {
   @ApiProperty({
     description: 'Sportsbook ID',
     example: 1,
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsNumber()
@@ -47,7 +57,7 @@ class CreateBetRequestDto {
   @ApiProperty({
     description: 'Betting market',
     example: 'Match result',
-    required: true
+    required: true,
   })
   @IsString()
   @IsNotEmpty()
@@ -56,7 +66,7 @@ class CreateBetRequestDto {
   @ApiProperty({
     description: 'Sport',
     example: 'Soccer',
-    required: true
+    required: true,
   })
   @IsString()
   @IsNotEmpty()
@@ -65,14 +75,15 @@ class CreateBetRequestDto {
   @ApiProperty({
     description: 'Bet date and time (optional)',
     example: '2024-01-15T20:00:00Z',
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsString()
   betTime?: string;
 
   @ApiPropertyOptional({
-    description: 'User ID who placed the bet (preenchido automaticamente a partir do token)',
+    description:
+      'User ID who placed the bet (preenchido automaticamente a partir do token)',
   })
   @IsOptional()
   @IsNumber()
@@ -105,7 +116,7 @@ export class UpdateApostaDto {
   @ApiProperty({
     description: 'Nome do jogo ou evento esportivo',
     example: 'Flamengo vs Palmeiras',
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsString()
@@ -114,22 +125,22 @@ export class UpdateApostaDto {
 
   @ApiProperty({
     description: 'Valor da aposta',
-    example: 50.00,
-    required: false
+    example: 50.0,
+    required: false,
   })
   @IsOptional()
-  @Transform(({ value }) => value === '' ? undefined : Number(value))
+  @Transform(({ value }) => (value === '' ? undefined : Number(value)))
   @IsNumber()
   @IsPositive()
   stake?: number;
 
   @ApiProperty({
     description: 'Odd da aposta',
-    example: 2.50,
-    required: false
+    example: 2.5,
+    required: false,
   })
   @IsOptional()
-  @Transform(({ value }) => value === '' ? undefined : Number(value))
+  @Transform(({ value }) => (value === '' ? undefined : Number(value)))
   @IsNumber()
   @IsPositive()
   odd?: number;
@@ -137,7 +148,7 @@ export class UpdateApostaDto {
   @ApiProperty({
     description: 'ID da casa de apostas',
     example: 1,
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsNumber()
@@ -146,7 +157,7 @@ export class UpdateApostaDto {
   @ApiProperty({
     description: 'Mercado da aposta',
     example: 'Resultado Final',
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsString()
@@ -156,7 +167,7 @@ export class UpdateApostaDto {
   @ApiProperty({
     description: 'Esporte da aposta',
     example: 'Futebol',
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsString()
@@ -166,7 +177,7 @@ export class UpdateApostaDto {
   @ApiProperty({
     description: 'Data e hora da aposta',
     example: '2024-01-15T20:00:00Z',
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsString()
@@ -178,16 +189,19 @@ export class FinalizarApostaDto {
     description: 'ID do resultado da aposta',
     enum: ResultIdEnum,
     example: ResultIdEnum.WON,
-    required: true
+    required: true,
   })
   @IsEnum(ResultIdEnum)
   resultId!: ResultIdEnum;
 
   @ApiPropertyOptional({
-    description: 'Valor recebido no cash-out (obrigatório quando resultId = CASHOUT)',
-    example: 45.00,
+    description:
+      'Valor recebido no cash-out (obrigatório quando resultId = CASHOUT)',
+    example: 45.0,
   })
-  @ValidateIf((dto: FinalizarApostaDto) => dto.resultId === ResultIdEnum.CASHOUT)
+  @ValidateIf(
+    (dto: FinalizarApostaDto) => dto.resultId === ResultIdEnum.CASHOUT,
+  )
   @IsNumber()
   cashoutValue?: number;
 }
@@ -197,12 +211,14 @@ export class DeleteMultipleBetsDto {
     description: 'Array de IDs das apostas a serem deletadas',
     example: [1, 2, 3],
     required: true,
-    type: [Number]
+    type: [Number],
   })
   @IsArray()
   @ArrayNotEmpty()
   @IsNumber({}, { each: true })
-  @Transform(({ value }: { value: unknown }) => (Array.isArray(value) ? value.map((id) => Number(id)) : value))
+  @Transform(({ value }: { value: unknown }) =>
+    Array.isArray(value) ? value.map((id) => Number(id)) : value,
+  )
   betIds!: number[];
 }
 export class FinalizarMultiplasDto {
@@ -210,19 +226,21 @@ export class FinalizarMultiplasDto {
     description: 'Array de IDs das apostas a serem finalizadas',
     example: [1, 2, 3],
     required: true,
-    type: [Number]
+    type: [Number],
   })
   @IsArray()
   @ArrayNotEmpty()
   @IsNumber({}, { each: true })
-  @Transform(({ value }: { value: unknown }) => (Array.isArray(value) ? value.map((id) => Number(id)) : value))
+  @Transform(({ value }: { value: unknown }) =>
+    Array.isArray(value) ? value.map((id) => Number(id)) : value,
+  )
   betIds!: number[];
 
   @ApiProperty({
     description: 'ID do resultado das apostas',
     enum: ResultIdEnum,
     example: ResultIdEnum.WON,
-    required: true
+    required: true,
   })
   @IsEnum(ResultIdEnum)
   @Transform(({ value }) => Number(value))
@@ -245,7 +263,9 @@ export class BetItem {
   @ApiProperty({ description: 'ID da casa de apostas', nullable: true })
   houseId!: number | null;
 
-  @ApiProperty({ description: 'Mercado da aposta (ex: "Resultado Final", "Over/Under")' })
+  @ApiProperty({
+    description: 'Mercado da aposta (ex: "Resultado Final", "Over/Under")',
+  })
   market!: string;
 
   @ApiProperty({ description: 'Esporte da aposta (ex: "Futebol", "Tênis")' })
@@ -254,7 +274,10 @@ export class BetItem {
   @ApiProperty({ description: 'Lucro ou prejuízo da aposta' })
   profit!: number | null;
 
-  @ApiPropertyOptional({ description: 'Valor recebido no cash-out, quando aplicável', nullable: true })
+  @ApiPropertyOptional({
+    description: 'Valor recebido no cash-out, quando aplicável',
+    nullable: true,
+  })
   cashoutValue?: number | null;
 
   @ApiProperty({ description: 'Data e hora em que a aposta foi criada' })
@@ -270,22 +293,23 @@ export class BetItem {
   @ApiPropertyOptional({ description: 'ID do resultado da aposta' })
   resultId?: number;
 
-  @ApiPropertyOptional({ description: 'Nome do resultado (WON, LOST, PENDING, etc.)' })
+  @ApiPropertyOptional({
+    description: 'Nome do resultado (WON, LOST, PENDING, etc.)',
+  })
   resultName?: string;
 }
 
-
 export class PaginatedBetsResponseDto {
-  @ApiPropertyOptional({ description: "Número total de páginas", example: 10 })
+  @ApiPropertyOptional({ description: 'Número total de páginas', example: 10 })
   totalPages?: number;
 
-  @ApiProperty({ description: "Total de registros da consulta", example: 125 })
+  @ApiProperty({ description: 'Total de registros da consulta', example: 125 })
   total?: number;
 
   @ApiPropertyOptional({
     type: [BetItem],
-    description: "Lista de apostas",
-    isArray: true
+    description: 'Lista de apostas',
+    isArray: true,
   })
   @Type(() => BetItem)
   data?: BetItem[];

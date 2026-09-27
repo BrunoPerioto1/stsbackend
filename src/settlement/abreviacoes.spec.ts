@@ -25,7 +25,10 @@ describe('abreviacoes', () => {
     ['Paderborn DNB', 'paderborn +0 - handicap asiatico'],
     ['Corinthians DC', 'corinthians ou empate'],
     ['Marrocos 3+ gols', 'marrocos mais de 2.5 gols'],
-    ['Resultado da partida + Total de gols', 'resultado da partida e total de gols'],
+    [
+      'Resultado da partida + Total de gols',
+      'resultado da partida e total de gols',
+    ],
     ['Total de Gols (incluindo linhas Asiáticas)', 'total de gols'],
     // "o" antes de tempo não é linha.
     ['Palmeiras vence o 1º tempo', 'palmeiras vence 1o tempo'],
@@ -83,17 +86,36 @@ describe('liquidação com abreviação', () => {
   });
 
   it('resultado e total com a linha repetida no rótulo', () => {
-    expect(liquida('Colômbia e Mais de 2.5 / Resultado da partida + Total de gols 2.5', 3, 0)).toBe(R.WON);
+    expect(
+      liquida(
+        'Colômbia e Mais de 2.5 / Resultado da partida + Total de gols 2.5',
+        3,
+        0,
+      ),
+    ).toBe(R.WON);
     expect(liquida('Colômbia mais de 2.5 - 1x2 e total', 1, 0)).toBe(R.LOST);
   });
 
   it('segunda linha herda o "mais de"', () => {
     const com = (escanteios: number) =>
-      settleBet('Over 2.5 gols e 9.5 cantos', TIMES, { home: 2, away: 1 }, 'finished', {
-        sport: 'football',
-        scoreScope: 'REGULATION',
-        teamStats: [{ scope: 'REGULATION', metric: 'corners', home: escanteios, away: 4 }],
-      } as never).resultId;
+      settleBet(
+        'Over 2.5 gols e 9.5 cantos',
+        TIMES,
+        { home: 2, away: 1 },
+        'finished',
+        {
+          sport: 'football',
+          scoreScope: 'REGULATION',
+          teamStats: [
+            {
+              scope: 'REGULATION',
+              metric: 'corners',
+              home: escanteios,
+              away: 4,
+            },
+          ],
+        } as never,
+      ).resultId;
     expect(com(6)).toBe(R.WON);
     expect(com(5)).toBe(R.LOST);
   });
@@ -101,13 +123,31 @@ describe('liquidação com abreviação', () => {
 
 describe('formato em lista com a métrica repetida', () => {
   it('Mais de 2.5 Gols / Mais de 4.5 Cartões / Total de Gols / Total de Cartões', () => {
-    expect(liquida('Mais de 2.5 Gols / Mais de 1.5 gols na partida / Total de Gols / Total de gols', 1, 1)).toBe(R.LOST);
-    expect(liquida('Mais de 2.5 Gols / Mais de 1.5 gols na partida / Total de Gols / Total de gols', 2, 1)).toBe(R.WON);
+    expect(
+      liquida(
+        'Mais de 2.5 Gols / Mais de 1.5 gols na partida / Total de Gols / Total de gols',
+        1,
+        1,
+      ),
+    ).toBe(R.LOST);
+    expect(
+      liquida(
+        'Mais de 2.5 Gols / Mais de 1.5 gols na partida / Total de Gols / Total de gols',
+        2,
+        1,
+      ),
+    ).toBe(R.WON);
   });
 });
 
 describe('múltipla de vitórias com rótulo à parte', () => {
-  const leg = (position: number, home: string, away: string, h: number, a: number) => ({
+  const leg = (
+    position: number,
+    home: string,
+    away: string,
+    h: number,
+    a: number,
+  ) => ({
     position,
     teams: { home, away },
     score: { home: h, away: a },
@@ -121,8 +161,16 @@ describe('múltipla de vitórias com rótulo à parte', () => {
     'Brasil vence / Escócia vence / Resultado Final',
     'Brasil vence, Escócia vence',
   ])('%s', (market) => {
-    expect(selecoesDaMultipla(game, market)).toEqual(['Brasil - Resultado final', 'Escócia - Resultado final']);
-    expect(settleMultiEvent(game, market, [leg(0, 'Brasil', 'Haiti', 3, 0), leg(1, 'Scotland', 'Greece', 0, 1)]).resultId).toBe(R.LOST);
+    expect(selecoesDaMultipla(game, market)).toEqual([
+      'Brasil - Resultado final',
+      'Escócia - Resultado final',
+    ]);
+    expect(
+      settleMultiEvent(game, market, [
+        leg(0, 'Brasil', 'Haiti', 3, 0),
+        leg(1, 'Scotland', 'Greece', 0, 1),
+      ]).resultId,
+    ).toBe(R.LOST);
   });
 });
 
@@ -133,13 +181,24 @@ describe('jogador sem rótulo', () => {
     playerStats: {
       complete: true,
       items: Object.entries(valores).map(([metric, value]) => ({
-        scope: 'REGULATION', name: 'Kylian Mbappé', participantId: '1', played: true, metric, value,
+        scope: 'REGULATION',
+        name: 'Kylian Mbappé',
+        participantId: '1',
+        played: true,
+        metric,
+        value,
       })),
     },
   });
   const TIMES_JOGADOR = { home: 'Real Madrid', away: 'Getafe' };
   const com = (market: string, valores: Record<string, number>) =>
-    settleBet(market, TIMES_JOGADOR, { home: 2, away: 0 }, 'finished', stats(valores) as never).resultId;
+    settleBet(
+      market,
+      TIMES_JOGADOR,
+      { home: 2, away: 0 },
+      'finished',
+      stats(valores) as never,
+    ).resultId;
 
   it.each([
     'Kylian Mbappé anytime',
@@ -155,19 +214,34 @@ describe('jogador sem rótulo', () => {
 
   it('assistência e gol ou assistência', () => {
     expect(com('Kylian Mbappé dar assistência', { assists: 0 })).toBe(R.LOST);
-    expect(com('Kylian Mbappé marcar ou dar assistência - Jogador para marcar ou dar assistência', { goals: 0, assists: 1 })).toBe(R.WON);
-    expect(com('Kylian Mbappé marca ou assiste', { goals: 0, assists: 0 })).toBe(R.LOST);
+    expect(
+      com(
+        'Kylian Mbappé marcar ou dar assistência - Jogador para marcar ou dar assistência',
+        { goals: 0, assists: 1 },
+      ),
+    ).toBe(R.WON);
+    expect(
+      com('Kylian Mbappé marca ou assiste', { goals: 0, assists: 0 }),
+    ).toBe(R.LOST);
   });
 
   it('chutes e chutes a gol', () => {
-    expect(com('Kylian Mbappé mais de 0.5 chutes no gol', { shotsOnTarget: 1 })).toBe(R.WON);
-    expect(com('Kylian Mbappé +0.5 - Finalizações no gol', { shotsOnTarget: 0 })).toBe(R.LOST);
+    expect(
+      com('Kylian Mbappé mais de 0.5 chutes no gol', { shotsOnTarget: 1 }),
+    ).toBe(R.WON);
+    expect(
+      com('Kylian Mbappé +0.5 - Finalizações no gol', { shotsOnTarget: 0 }),
+    ).toBe(R.LOST);
     expect(com('Kylian Mbappé mais de 2.5 chutes', { shots: 3 })).toBe(R.WON);
   });
 
   it('faltas, defesas e desarmes', () => {
-    expect(com('Kylian Mbappé comete 2 ou mais faltas', { fouls: 2 })).toBe(R.WON);
-    expect(com('Kylian Mbappé sofre 3+ faltas', { foulsSuffered: 2 })).toBe(R.LOST);
+    expect(com('Kylian Mbappé comete 2 ou mais faltas', { fouls: 2 })).toBe(
+      R.WON,
+    );
+    expect(com('Kylian Mbappé sofre 3+ faltas', { foulsSuffered: 2 })).toBe(
+      R.LOST,
+    );
     expect(com('Kylian Mbappé mais de 3.5 defesas', { saves: 4 })).toBe(R.WON);
     expect(com('Kylian Mbappé 1+ - Desarmes', { tackles: 0 })).toBe(R.LOST);
   });
@@ -178,6 +252,8 @@ describe('jogador sem rótulo', () => {
   });
 
   it('sujeito coletivo não vira jogador', () => {
-    expect(abreviacoes(normalize('Ambos times marcarem'))).not.toContain('marcar a qualquer momento');
+    expect(abreviacoes(normalize('Ambos times marcarem'))).not.toContain(
+      'marcar a qualquer momento',
+    );
   });
 });

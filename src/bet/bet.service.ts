@@ -116,7 +116,9 @@ export class BetService {
         pernas,
       };
     } catch (error) {
-      this.logger.warn(`[EVENT_MATCH] result=error ${(error as Error).message}`);
+      this.logger.warn(
+        `[EVENT_MATCH] result=error ${(error as Error).message}`,
+      );
       return vazio;
     }
   }
@@ -190,7 +192,8 @@ export class BetService {
     try {
       result = await this.betRepository.create(newBet);
     } catch (error) {
-      if (isTipUniqueViolation(error)) throw new TipAlreadyPlanilhadaException();
+      if (isTipUniqueViolation(error))
+        throw new TipAlreadyPlanilhadaException();
       throw error;
     }
 
@@ -204,7 +207,9 @@ export class BetService {
       try {
         await this.betRepository.saveBetEvents(result.id, pernas);
       } catch (error) {
-        this.logger.warn(`[EVENT_MATCH] result=legs_error ${(error as Error).message}`);
+        this.logger.warn(
+          `[EVENT_MATCH] result=legs_error ${(error as Error).message}`,
+        );
       }
     }
 
@@ -292,7 +297,9 @@ export class BetService {
       try {
         await this.betRepository.replaceBetEvents(updated.id, pernas);
       } catch (error) {
-        this.logger.warn(`[EVENT_MATCH] result=legs_error ${(error as Error).message}`);
+        this.logger.warn(
+          `[EVENT_MATCH] result=legs_error ${(error as Error).message}`,
+        );
       }
     }
     return updated;

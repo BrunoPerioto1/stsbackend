@@ -48,7 +48,8 @@ export class UpdateAdminUserDTO {
 
   @ApiProperty({
     required: false,
-    description: 'false desativa a conta (sem login, sem API, sem tips); true reativa',
+    description:
+      'false desativa a conta (sem login, sem API, sem tips); true reativa',
   })
   @IsOptional()
   @IsBoolean()

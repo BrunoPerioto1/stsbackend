@@ -12,4 +12,8 @@ export enum ResultIdEnum {
 // mas nao entra em ganha/perdida: a taxa de acerto e' ganhas / (ganhas + perdidas).
 export const WON_RESULT_IDS = [ResultIdEnum.WON, ResultIdEnum.HALF_WON];
 export const LOST_RESULT_IDS = [ResultIdEnum.LOST, ResultIdEnum.HALF_LOST];
-export const SETTLED_RESULT_IDS = [...WON_RESULT_IDS, ...LOST_RESULT_IDS, ResultIdEnum.CASHOUT];
+export const SETTLED_RESULT_IDS = [
+  ...WON_RESULT_IDS,
+  ...LOST_RESULT_IDS,
+  ResultIdEnum.CASHOUT,
+];

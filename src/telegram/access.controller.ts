@@ -12,7 +12,12 @@ import {
   UseGuards,
   Logger,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiExcludeEndpoint, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiExcludeEndpoint,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { User } from '../common/decorators/user.decorator';
 import { Telegraf } from 'telegraf';
@@ -58,11 +63,16 @@ export class AccessController {
   // 402, devolve também o PIX copia-e-cola desta conta (valor + txid), se ela
   // é nova ou vencida e se já avisou que pagou.
   @Get('billing')
-  @ApiOperation({ summary: 'Chave PIX e preço; com token, o PIX copia-e-cola da conta' })
+  @ApiOperation({
+    summary: 'Chave PIX e preço; com token, o PIX copia-e-cola da conta',
+  })
   async billing(@Query() query: BillingQueryDTO) {
     const userId = readPayToken(query.token);
-    const user = userId ? await this.usersRepository.findById(userId as UserId) : undefined;
-    if (!user) return { ...billingInfo(), status: null, paymentClaimedAt: null };
+    const user = userId
+      ? await this.usersRepository.findById(userId as UserId)
+      : undefined;
+    if (!user)
+      return { ...billingInfo(), status: null, paymentClaimedAt: null };
     return {
       ...billingInfo(user.id),
       status: accessStatus(user),
@@ -78,14 +88,20 @@ export class AccessController {
   @ApiOperation({ summary: 'PIX copia-e-cola da conta logada' })
   async myBilling(@User('userId') userId: number) {
     const user = await this.usersRepository.findById(userId as UserId);
-    return { ...billingInfo(userId), status: null, paymentClaimedAt: user?.paymentClaimedAt ?? null };
+    return {
+      ...billingInfo(userId),
+      status: null,
+      paymentClaimedAt: user?.paymentClaimedAt ?? null,
+    };
   }
 
   @Post('paid/me')
   @HttpCode(HttpStatus.OK)
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth('jwt')
-  @ApiOperation({ summary: 'Avisa o admin que a conta logada pagou a renovação' })
+  @ApiOperation({
+    summary: 'Avisa o admin que a conta logada pagou a renovação',
+  })
   async paidMe(@User('userId') userId: number) {
     return { result: await this.paymentClaim.claim(userId) };
   }
@@ -96,9 +112,15 @@ export class AccessController {
   @ApiOperation({ summary: 'Avisa o admin que o pagamento foi feito' })
   async paid(@Body() body: PaymentClaimDTO) {
     const userId = readPayToken(body.token);
-    if (!userId) throw new UnauthorizedException('Link de pagamento vencido. Entre de novo.');
+    if (!userId)
+      throw new UnauthorizedException(
+        'Link de pagamento vencido. Entre de novo.',
+      );
     const result = await this.paymentClaim.claim(userId);
-    if (result === 'inactive') throw new BadRequestException('Conta desativada. Fale com o administrador.');
+    if (result === 'inactive')
+      throw new BadRequestException(
+        'Conta desativada. Fale com o administrador.',
+      );
     if (result === 'not_found') throw new UnauthorizedException();
     return { result };
   }
@@ -135,7 +157,12 @@ export class AccessController {
           },
         );
       } catch (error) {
-        this.logger.error(...errorArgs(`⚠️ Aviso de vencimento falhou (userId=${user.id})`, error));
+        this.logger.error(
+          ...errorArgs(
+            `⚠️ Aviso de vencimento falhou (userId=${user.id})`,
+            error,
+          ),
+        );
       }
     }
 
@@ -149,7 +176,9 @@ export class AccessController {
             `💰 Vencimentos:\n${summary.join('\n')}`,
           )
           .catch((error) =>
-            this.logger.error(...errorArgs('⚠️ Resumo de vencimentos falhou', error)),
+            this.logger.error(
+              ...errorArgs('⚠️ Resumo de vencimentos falhou', error),
+            ),
           );
       }
     }

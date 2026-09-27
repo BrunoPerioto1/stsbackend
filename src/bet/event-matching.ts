@@ -218,15 +218,15 @@ const ALIASES: Record<string, string> = {
 // nao decompoem, e a limpeza de `[^a-z0-9 ]` as apagaria, partindo o nome em
 // dois tokens ("Kobenhavn" virava "k benhavn" e nao casava com nada).
 const LETRAS_ESTRANGEIRAS: Record<string, string> = {
-  'ø': 'o',
-  'æ': 'ae',
-  'œ': 'oe',
-  'ß': 'ss',
-  'ð': 'd',
-  'đ': 'd',
-  'þ': 'th',
-  'ł': 'l',
-  'ı': 'i',
+  ø: 'o',
+  æ: 'ae',
+  œ: 'oe',
+  ß: 'ss',
+  ð: 'd',
+  đ: 'd',
+  þ: 'th',
+  ł: 'l',
+  ı: 'i',
 };
 
 export function normalizeTeamName(value: string): string {
@@ -433,7 +433,11 @@ function buildPreparo(elegiveis: CandidateEvent[]): Preparo {
 
 // Uniao, nao intersecao: o evento entra se QUALQUER lado der sinal, e a
 // pontuacao depois e' que exige os dois lados baterem.
-function shortlist(home: string, away: string, preparo: Preparo): CandidateEvent[] {
+function shortlist(
+  home: string,
+  away: string,
+  preparo: Preparo,
+): CandidateEvent[] {
   const achados = new Set<CandidateEvent>();
   for (const chave of chavesDeBusca([home, away])) {
     const eventos = preparo.porChave.get(chave);
@@ -502,8 +506,16 @@ function scoreEvent(
 ): number {
   // Os dois lados precisam casar. E' o que impede "Botafogo-PB" de virar
   // "Botafogo-SP": o adversario nao bate.
-  const chavesHome = teamKeys(evento.homeName, evento.homeShort, evento.homeCode);
-  const chavesAway = teamKeys(evento.awayName, evento.awayShort, evento.awayCode);
+  const chavesHome = teamKeys(
+    evento.homeName,
+    evento.homeShort,
+    evento.homeCode,
+  );
+  const chavesAway = teamKeys(
+    evento.awayName,
+    evento.awayShort,
+    evento.awayCode,
+  );
   const idHome = teamId(evento, 'home');
   const idAway = teamId(evento, 'away');
 
@@ -540,7 +552,8 @@ function matchConfronto(
   // parecida e' chute: nao da pra saber qual pedaco era o hifen. Mesma regra
   // do desempate entre eventos — data errada e' pior que nenhuma.
   const outro = achados.find((m) => m.externalId !== melhor.externalId);
-  if (outro && melhor.confidence - outro.confidence < AMBIGUITY_MARGIN) return null;
+  if (outro && melhor.confidence - outro.confidence < AMBIGUITY_MARGIN)
+    return null;
 
   return melhor;
 }
@@ -551,7 +564,10 @@ function matchLados(lados: Lados, preparo: Preparo): EventMatch | null {
   if (!home || !away) return null;
 
   const pontuados = shortlist(home, away, preparo)
-    .map((evento) => ({ evento, score: scoreEvent(home, away, evento, preparo.index) }))
+    .map((evento) => ({
+      evento,
+      score: scoreEvent(home, away, evento, preparo.index),
+    }))
     .sort((a, b) => b.score - a.score);
 
   const melhor = pontuados[0];

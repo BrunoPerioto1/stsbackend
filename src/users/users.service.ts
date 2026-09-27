@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { UsersRepository } from '../infra/repository/users.repository';
 import { UserDto } from './dto/user.dto';
@@ -28,7 +32,11 @@ function publicUser<T extends { passwordHash: string }>(row: T) {
     passwordResetExpiresAt: _resetExpires,
     passwordResetAttempts: _resetAttempts,
     ...safe
-  } = row as T & { passwordResetCodeHash?: unknown; passwordResetExpiresAt?: unknown; passwordResetAttempts?: unknown };
+  } = row as T & {
+    passwordResetCodeHash?: unknown;
+    passwordResetExpiresAt?: unknown;
+    passwordResetAttempts?: unknown;
+  };
   return safe;
 }
 
@@ -95,7 +103,9 @@ export class UsersService {
         throw new BadRequestException('Username já cadastrado');
       }
     } else {
-      username = await this.freeUsername(params.fullName || params.email.split('@')[0]);
+      username = await this.freeUsername(
+        params.fullName || params.email.split('@')[0],
+      );
     }
 
     const passwordHash = await bcrypt.hash(params.password, 10);
@@ -125,7 +135,8 @@ export class UsersService {
         .slice(0, 40) || 'usuario';
     for (let n = 1; n < 1000; n++) {
       const candidate = n === 1 ? base : `${base}${n}`;
-      if (!(await this.usersRepository.findByUsername(candidate))) return candidate;
+      if (!(await this.usersRepository.findByUsername(candidate)))
+        return candidate;
     }
     return `${base}${Date.now()}`;
   }
@@ -154,7 +165,8 @@ export class UsersService {
       fields.dashboardPreferences = params.dashboardPreferences;
     if (params.username) {
       const dono = await this.usersRepository.findByUsername(params.username);
-      if (dono && dono.id !== userId) throw new BadRequestException('Username já cadastrado');
+      if (dono && dono.id !== userId)
+        throw new BadRequestException('Username já cadastrado');
       fields.username = params.username;
     }
     if (params.email) fields.email = params.email;
@@ -177,18 +189,32 @@ export class UsersService {
    * próprio Telegram garante — por isso não existe mais rota HTTP pra isto: ela
    * aceitava qualquer telegramUserId e deixava chutar os 10^6 códigos.
    */
-  async confirmTelegramLink(code: string, telegramUserId: number, telegramUsername: string | null = null) {
-    const owner = await this.usersRepository.findByTelegramLinkCode(code.trim());
-    const expiresAt = owner?.telegramLinkExpiresAt ? new Date(owner.telegramLinkExpiresAt) : null;
+  async confirmTelegramLink(
+    code: string,
+    telegramUserId: number,
+    telegramUsername: string | null = null,
+  ) {
+    const owner = await this.usersRepository.findByTelegramLinkCode(
+      code.trim(),
+    );
+    const expiresAt = owner?.telegramLinkExpiresAt
+      ? new Date(owner.telegramLinkExpiresAt)
+      : null;
     if (!owner || !expiresAt || expiresAt.getTime() < Date.now()) {
       throw new BadRequestException('Código inválido ou expirado.');
     }
 
     if (await this.usersRepository.findByTelegramUserId(telegramUserId)) {
-      throw new BadRequestException('Este ID do Telegram já está vinculado a outra conta.');
+      throw new BadRequestException(
+        'Este ID do Telegram já está vinculado a outra conta.',
+      );
     }
 
-    await this.usersRepository.linkTelegram(owner.id, telegramUserId, telegramUsername);
+    await this.usersRepository.linkTelegram(
+      owner.id,
+      telegramUserId,
+      telegramUsername,
+    );
   }
 
   async setPassword(userId: number, password: string) {
@@ -243,8 +269,14 @@ export class UsersService {
     return this.usersRepository.findLinkedForTipsFanout();
   }
 
-  async syncTelegramUsername(telegramUserId: number, telegramUsername: string | null) {
-    await this.usersRepository.syncTelegramUsername(telegramUserId, telegramUsername);
+  async syncTelegramUsername(
+    telegramUserId: number,
+    telegramUsername: string | null,
+  ) {
+    await this.usersRepository.syncTelegramUsername(
+      telegramUserId,
+      telegramUsername,
+    );
   }
 
   async setMinPercentFilter(
@@ -253,7 +285,9 @@ export class UsersService {
   ): Promise<boolean> {
     if (
       value !== null &&
-      (!Number.isFinite(value) || value < MIN_PERCENT_FILTER || value > MAX_PERCENT_FILTER)
+      (!Number.isFinite(value) ||
+        value < MIN_PERCENT_FILTER ||
+        value > MAX_PERCENT_FILTER)
     ) {
       throw new Error('Filtro de porcentagem inválido.');
     }

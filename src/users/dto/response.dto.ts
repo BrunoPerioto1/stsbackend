@@ -28,5 +28,3 @@ export class CreateUserResponseDTO {
   @ApiProperty({ required: false })
   lastLogin?: Date | null;
 }
-
-

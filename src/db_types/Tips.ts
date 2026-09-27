@@ -1,6 +1,6 @@
-import type { ColumnType, Insertable, Selectable, Updateable } from "kysely";
+import type { ColumnType, Insertable, Selectable, Updateable } from 'kysely';
 
-export type TipId = number & { __type: "TipId" };
+export type TipId = number & { __type: 'TipId' };
 
 export interface TipEntity {
   type: string;

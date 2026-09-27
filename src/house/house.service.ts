@@ -18,8 +18,14 @@ export class HouseService {
     return house;
   }
 
-  async getAllHousesBalanceWithFilter(filter: HouseFilterRequestDto, userId: number) {
-    const rows = await this.houseRepository.findAllHousesBalance(userId as UserId, filter);
+  async getAllHousesBalanceWithFilter(
+    filter: HouseFilterRequestDto,
+    userId: number,
+  ) {
+    const rows = await this.houseRepository.findAllHousesBalance(
+      userId as UserId,
+      filter,
+    );
 
     return rows.map((row) => {
       const totalDeposit = Number(row.totalDeposit);
@@ -102,8 +108,13 @@ export class HouseService {
     if (!rawHouseName) {
       // Formato SOBRECARGA/AVISO: sem emoji — o nome da casa é a primeira
       // linha não vazia logo após o cabeçalho SOBRECARGA/AVISO.
-      const lines = message.split('\n').map((l) => l.trim()).filter(Boolean);
-      const headerIndex = lines.findIndex((l) => /^(SOBRECARGA|AVISO)$/i.test(l));
+      const lines = message
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean);
+      const headerIndex = lines.findIndex((l) =>
+        /^(SOBRECARGA|AVISO)$/i.test(l),
+      );
       if (headerIndex !== -1) rawHouseName = lines[headerIndex + 1];
     }
     if (!rawHouseName) return null;
@@ -112,7 +123,12 @@ export class HouseService {
     return matchHouseIdByName(rawHouseName, houses ?? []);
   }
 
-  async getHouseRanking(userId: number, startDate?: string, endDate?: string, minBets = 20) {
+  async getHouseRanking(
+    userId: number,
+    startDate?: string,
+    endDate?: string,
+    minBets = 20,
+  ) {
     const rows = await this.houseRepository.findHouseRanking(
       userId as UserId,
       startDate ? new Date(startDate) : undefined,
@@ -141,5 +157,4 @@ export class HouseService {
       })
       .filter((h) => h.settledBets >= minBets);
   }
-
 }

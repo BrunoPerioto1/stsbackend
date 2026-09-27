@@ -32,7 +32,9 @@ function setup(rows: ReturnType<typeof tip>[]) {
     findBetByTip: jest.fn().mockResolvedValue(undefined),
     deleteBetByTip: jest.fn().mockResolvedValue({ id: 7 }),
   };
-  const betTextService = { processBetText: jest.fn().mockResolvedValue(undefined) };
+  const betTextService = {
+    processBetText: jest.fn().mockResolvedValue(undefined),
+  };
   const pendentes = new PendentesService(tipsService as never);
   type Dependencies = ConstructorParameters<typeof TelegramCallbackService>;
   const callback = new TelegramCallbackService(
@@ -47,7 +49,9 @@ function setup(rows: ReturnType<typeof tip>[]) {
   );
   const ctx = {
     from: { id: 20 },
-    callbackQuery: { message: { text: 'lista', message_id: 3, chat: { id: 30 } } },
+    callbackQuery: {
+      message: { text: 'lista', message_id: 3, chat: { id: 30 } },
+    },
     answerCbQuery: jest.fn().mockResolvedValue(undefined),
     editMessageText: jest.fn().mockResolvedValue(undefined),
   };
@@ -69,8 +73,16 @@ describe('lista do /pendentes', () => {
     const labels = keyboard.inline_keyboard.map((row: any[]) =>
       row.map((b) => b.text),
     );
-    expect(labels[0]).toEqual(['1️⃣ ✅ Planilhar', '1️⃣ ❌ Caiu', '1️⃣ ✏️ Editar']);
-    expect(labels[1]).toEqual(['2️⃣ ✅ Planilhar', '2️⃣ ❌ Caiu', '2️⃣ ✏️ Editar']);
+    expect(labels[0]).toEqual([
+      '1️⃣ ✅ Planilhar',
+      '1️⃣ ❌ Caiu',
+      '1️⃣ ✏️ Editar',
+    ]);
+    expect(labels[1]).toEqual([
+      '2️⃣ ✅ Planilhar',
+      '2️⃣ ❌ Caiu',
+      '2️⃣ ✏️ Editar',
+    ]);
   });
 
   it('numera seguindo a página, não a posição na tela', async () => {
@@ -104,7 +116,9 @@ describe('lista do /pendentes', () => {
       label: 'Jogo',
     });
     expect(text).toBe('🎉 Nada pendente!');
-    expect(keyboard.inline_keyboard[0][0].callback_data).toBe('lista_desfazer:5:0:1');
+    expect(keyboard.inline_keyboard[0][0].callback_data).toBe(
+      'lista_desfazer:5:0:1',
+    );
   });
 });
 
@@ -113,7 +127,10 @@ describe('callbacks do /pendentes', () => {
     const { callback, ctx, betTextService } = setup([tip(1)]);
     let release!: () => void;
     betTextService.processBetText.mockImplementation(
-      () => new Promise<void>((resolve) => { release = resolve; }),
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
     );
 
     const first = callback.handle(click('lista_planilhar:1:0', ctx));
@@ -123,12 +140,17 @@ describe('callbacks do /pendentes', () => {
     await first;
 
     expect(betTextService.processBetText).toHaveBeenCalledTimes(1);
-    expect(ctx.answerCbQuery).toHaveBeenCalledWith('⏳ Já estou processando esse item.');
+    expect(ctx.answerCbQuery).toHaveBeenCalledWith(
+      '⏳ Já estou processando esse item.',
+    );
   });
 
   it('não replanilha uma tip que já virou aposta', async () => {
     const { callback, ctx, betService, betTextService } = setup([tip(1)]);
-    betService.findBetByTip.mockResolvedValue({ id: 7, game: 'Real Madrid x Barcelona' });
+    betService.findBetByTip.mockResolvedValue({
+      id: 7,
+      game: 'Real Madrid x Barcelona',
+    });
 
     await callback.handle(click('lista_planilhar:1:0', ctx));
 
@@ -142,9 +164,13 @@ describe('callbacks do /pendentes', () => {
     const { callback, ctx, betService } = setup([tip(1)]);
 
     await callback.handle(click('lista_planilhar:1:0', ctx));
-    expect(ctx.answerCbQuery).toHaveBeenCalledWith('✅ Real Madrid x Barcelona planilhada!');
+    expect(ctx.answerCbQuery).toHaveBeenCalledWith(
+      '✅ Real Madrid x Barcelona planilhada!',
+    );
     const [, options] = ctx.editMessageText.mock.calls.at(-1) as [string, any];
-    expect(JSON.stringify(options.reply_markup)).toContain('lista_desfazer:1:0:0');
+    expect(JSON.stringify(options.reply_markup)).toContain(
+      'lista_desfazer:1:0:0',
+    );
 
     await callback.handle(click('lista_desfazer:1:0:0', ctx));
     expect(betService.deleteBetByTip).toHaveBeenCalledWith(1, 10);

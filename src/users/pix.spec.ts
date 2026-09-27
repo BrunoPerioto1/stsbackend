@@ -57,7 +57,9 @@ describe('payToken da renovação', () => {
   it('recusa token adulterado ou vencido', () => {
     const token = createPayToken(42);
     expect(readPayToken(token.replace(/^42\./, '43.'))).toBeNull();
-    expect(readPayToken(createPayToken(42, Date.now() - 2 * 86_400_000))).toBeNull();
+    expect(
+      readPayToken(createPayToken(42, Date.now() - 2 * 86_400_000)),
+    ).toBeNull();
     expect(readPayToken('lixo')).toBeNull();
     expect(readPayToken(undefined)).toBeNull();
   });
@@ -68,13 +70,19 @@ describe('accessStatus', () => {
 
   it('conta que nunca pagou é nova, não vencida', () => {
     process.env.TRIAL_DAYS = '0';
-    expect(accessStatus({ isActive: true, accessUntil: createdAt, createdAt })).toBe('new');
+    expect(
+      accessStatus({ isActive: true, accessUntil: createdAt, createdAt }),
+    ).toBe('new');
   });
 
   it('depois de liberada uma vez, vencer é vencer', () => {
     process.env.TRIAL_DAYS = '0';
     expect(
-      accessStatus({ isActive: true, accessUntil: new Date('2026-09-20T12:00:00Z'), createdAt }),
+      accessStatus({
+        isActive: true,
+        accessUntil: new Date('2026-09-20T12:00:00Z'),
+        createdAt,
+      }),
     ).toBe('expired');
   });
 });

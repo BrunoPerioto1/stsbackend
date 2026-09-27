@@ -1,5 +1,13 @@
-import { IsNumber, IsString, IsPositive, IsNotEmpty, IsOptional, IsIn, MaxLength } from "class-validator";
-import { ApiProperty } from "@nestjs/swagger";
+import {
+  IsNumber,
+  IsString,
+  IsPositive,
+  IsNotEmpty,
+  IsOptional,
+  IsIn,
+  MaxLength,
+} from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 
 export enum TransactionTypeEnum {
   DEPOSIT = 1,
@@ -7,12 +15,11 @@ export enum TransactionTypeEnum {
   ADJUSTMENT = 3,
 }
 
-
 export class NewTransactionDto {
   @ApiProperty({
     description: 'ID da casa de apostas',
     example: 1,
-    required: true
+    required: true,
   })
   @IsNumber()
   @IsPositive()
@@ -21,7 +28,7 @@ export class NewTransactionDto {
   @ApiProperty({
     description: 'ID do tipo de transação (1=Depósito, 2=Saque, 3=Ajuste)',
     example: 1,
-    required: true
+    required: true,
   })
   @IsNumber()
   @IsPositive()
@@ -29,8 +36,8 @@ export class NewTransactionDto {
 
   @ApiProperty({
     description: 'Valor da transação',
-    example: 100.50,
-    required: true
+    example: 100.5,
+    required: true,
   })
   @IsNumber()
   value!: number;
@@ -38,7 +45,7 @@ export class NewTransactionDto {
   @ApiProperty({
     description: 'Descrição da transação',
     example: 'Depósito via Pix',
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsString()
@@ -48,28 +55,43 @@ export class NewTransactionDto {
   @ApiProperty({
     description: 'ID do usuário que realizou a transação',
     example: 42,
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsNumber()
   userId?: number;
 }
 
-
 // Edição parcial: só o que mudou. O sinal do valor segue a mesma regra da
 // criação (saque sempre negativo), então o front manda o valor como digitado.
 export class UpdateTransactionDto {
-  @ApiProperty({ description: 'Tipo (1=Depósito, 2=Saque, 3=Ajuste)', example: 1, required: false })
+  @ApiProperty({
+    description: 'Tipo (1=Depósito, 2=Saque, 3=Ajuste)',
+    example: 1,
+    required: false,
+  })
   @IsOptional()
-  @IsIn([TransactionTypeEnum.DEPOSIT, TransactionTypeEnum.WITHDRAWAL, TransactionTypeEnum.ADJUSTMENT])
+  @IsIn([
+    TransactionTypeEnum.DEPOSIT,
+    TransactionTypeEnum.WITHDRAWAL,
+    TransactionTypeEnum.ADJUSTMENT,
+  ])
   transactionTypeId?: number;
 
-  @ApiProperty({ description: 'Valor da movimentação', example: 100.5, required: false })
+  @ApiProperty({
+    description: 'Valor da movimentação',
+    example: 100.5,
+    required: false,
+  })
   @IsOptional()
   @IsNumber()
   value?: number;
 
-  @ApiProperty({ description: 'Descrição', example: 'Depósito via Pix', required: false })
+  @ApiProperty({
+    description: 'Descrição',
+    example: 'Depósito via Pix',
+    required: false,
+  })
   @IsOptional()
   @IsString()
   @MaxLength(255)

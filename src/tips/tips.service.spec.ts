@@ -15,7 +15,13 @@ function tipRow(id: number, houseLine: string) {
   return {
     id,
     createdAt: new Date('2026-09-01T12:00:00Z'),
-    text: [`🏠 ${houseLine}`, '🆚 Flamengo x Vasco', '⚽️ Futebol', '📌 Over 2.5', '🏷 1.90'].join(NL),
+    text: [
+      `🏠 ${houseLine}`,
+      '🆚 Flamengo x Vasco',
+      '⚽️ Futebol',
+      '📌 Over 2.5',
+      '🏷 1.90',
+    ].join(NL),
     percent: 1,
     isAviso: false,
     betId: null,
@@ -28,22 +34,34 @@ function tipRow(id: number, houseLine: string) {
 // Repositório falso com a mesma semântica do SQL: status e busca filtram,
 // mais recente primeiro, página por limit/offset.
 function fakeTipsRepository(rows: any[]) {
-  const statusOf = (r: any) => (r.betId != null ? 'planilhada' : r.dismissalId != null ? 'caiu' : 'pending');
+  const statusOf = (r: any) =>
+    r.betId != null ? 'planilhada' : r.dismissalId != null ? 'caiu' : 'pending';
   const filtered = (f: { status?: string; q?: string }) =>
     rows
       .filter(
         (r) =>
           (!f.status || statusOf(r) === f.status) &&
-          (!f.q?.trim() || String(r.text).toLowerCase().includes(f.q.trim().toLowerCase())),
+          (!f.q?.trim() ||
+            String(r.text).toLowerCase().includes(f.q.trim().toLowerCase())),
       )
       .sort((a, b) => +b.createdAt - +a.createdAt || b.id - a.id);
-  const count = (status: string) => rows.filter((r) => statusOf(r) === status).length;
+  const count = (status: string) =>
+    rows.filter((r) => statusOf(r) === status).length;
   return {
-    findListRows: jest.fn(async (_u: number, _m: number | null, f: any, page?: { limit: number; offset: number }) => {
-      const list = filtered(f);
-      return page ? list.slice(page.offset, page.offset + page.limit) : list;
-    }),
-    countListRows: jest.fn(async (_u: number, _m: number | null, f: any) => filtered(f).length),
+    findListRows: jest.fn(
+      async (
+        _u: number,
+        _m: number | null,
+        f: any,
+        page?: { limit: number; offset: number },
+      ) => {
+        const list = filtered(f);
+        return page ? list.slice(page.offset, page.offset + page.limit) : list;
+      },
+    ),
+    countListRows: jest.fn(
+      async (_u: number, _m: number | null, f: any) => filtered(f).length,
+    ),
     countByStatus: jest.fn(async () => ({
       pending: count('pending'),
       planilhadas: count('planilhada'),
@@ -62,7 +80,9 @@ function makeService(rows: any[], eventos: any[] = []) {
   // Cache de eventos vazio por padrão: o horário do jogo é consultivo e a
   // maioria destes testes é sobre extração/filtro. Quem cobre o casamento em
   // si é event-matching.spec.
-  const sportEventRepository = { findCandidates: jest.fn().mockResolvedValue(eventos) };
+  const sportEventRepository = {
+    findCandidates: jest.fn().mockResolvedValue(eventos),
+  };
   return new TipsService(
     tipsRepository as any,
     usersService as any,
@@ -82,7 +102,11 @@ describe('casamento de nome de casa', () => {
 });
 
 describe('tips: filtro de casas', () => {
-  const rows = [tipRow(1, 'Bet365'), tipRow(2, 'Superbet Brasil'), tipRow(3, 'Betano')];
+  const rows = [
+    tipRow(1, 'Bet365'),
+    tipRow(2, 'Superbet Brasil'),
+    tipRow(3, 'Betano'),
+  ];
 
   it('devolve o houseId resolvido em cada tip', async () => {
     const service = makeService(rows);
@@ -92,7 +116,11 @@ describe('tips: filtro de casas', () => {
 
   it('filtra por múltiplas casas', async () => {
     const service = makeService(rows);
-    const res = await service.listForUser(1, { page: 1, perPage: 30, houseIds: [3, 9] });
+    const res = await service.listForUser(1, {
+      page: 1,
+      perPage: 30,
+      houseIds: [3, 9],
+    });
     expect(res.data.map((t) => t.id).sort()).toEqual([1, 3]);
     expect(res.total).toBe(2);
   });
@@ -100,7 +128,11 @@ describe('tips: filtro de casas', () => {
   it('sem houseIds mantém a lista inteira, e o resumo ignora o filtro', async () => {
     const service = makeService(rows);
     const semFiltro = await service.listForUser(1, { page: 1, perPage: 30 });
-    const comFiltro = await service.listForUser(1, { page: 1, perPage: 30, houseIds: [3] });
+    const comFiltro = await service.listForUser(1, {
+      page: 1,
+      perPage: 30,
+      houseIds: [3],
+    });
     expect(semFiltro.data).toHaveLength(3);
     expect(comFiltro.summary.pending).toBe(3);
     expect(comFiltro.total).toBe(1);
@@ -126,13 +158,19 @@ describe('tips: horário do jogo', () => {
   }
 
   it('devolve o início do jogo quando o confronto casa com o cache', async () => {
-    const service = makeService([tipRow(1, 'Bet365')], [evento('Flamengo', 'Vasco')]);
+    const service = makeService(
+      [tipRow(1, 'Bet365')],
+      [evento('Flamengo', 'Vasco')],
+    );
     const res = await service.listForUser(1, { page: 1, perPage: 30 });
     expect(res.data[0].eventStartAt).toEqual(JOGO);
   });
 
   it('fica null quando o cache não tem o confronto', async () => {
-    const service = makeService([tipRow(1, 'Bet365')], [evento('Santos', 'Corinthians')]);
+    const service = makeService(
+      [tipRow(1, 'Bet365')],
+      [evento('Santos', 'Corinthians')],
+    );
     const res = await service.listForUser(1, { page: 1, perPage: 30 });
     expect(res.data[0].eventStartAt).toBeNull();
   });
@@ -210,19 +248,36 @@ describe('tips: janela de busca de eventos', () => {
 });
 
 describe('tips: Planilhar do site', () => {
-  const TEXT = ['🏠 Bet365', '🆚 Flamengo x Vasco', '⚽️ Futebol', '📌 Over 2.5', '🏷 1.90', '🛑 1.5%'].join(NL);
+  const TEXT = [
+    '🏠 Bet365',
+    '🆚 Flamengo x Vasco',
+    '⚽️ Futebol',
+    '📌 Over 2.5',
+    '🏷 1.90',
+    '🛑 1.5%',
+  ].join(NL);
 
   function setup(deliveryText: string | null) {
     const tipsRepository = {
-      findById: jest.fn().mockResolvedValue({ id: 4, text: TEXT, percent: '1.5' }),
-      findDelivery: jest.fn().mockResolvedValue(deliveryText ? { text: deliveryText } : undefined),
+      findById: jest
+        .fn()
+        .mockResolvedValue({ id: 4, text: TEXT, percent: '1.5' }),
+      findDelivery: jest
+        .fn()
+        .mockResolvedValue(deliveryText ? { text: deliveryText } : undefined),
     };
     const usersService = { getUserStake: jest.fn().mockResolvedValue(5000) };
     const betService = {
       findBetByTip: jest.fn().mockResolvedValue(undefined),
-      createBet: jest.fn().mockImplementation((bet: object) => Promise.resolve({ id: 70, ...bet })),
+      createBet: jest
+        .fn()
+        .mockImplementation((bet: object) =>
+          Promise.resolve({ id: 70, ...bet }),
+        ),
     };
-    const houseService = { resolveHouseIdFromText: jest.fn().mockResolvedValue(3) };
+    const houseService = {
+      resolveHouseIdFromText: jest.fn().mockResolvedValue(3),
+    };
     const service = new TipsService(
       tipsRepository as any,
       usersService as any,
@@ -234,24 +289,35 @@ describe('tips: Planilhar do site', () => {
   }
 
   it('usa a stake que a entrega mostrou, não a banca de agora', async () => {
-    const { service, betService, usersService } = setup(`${TEXT}${NL}${NL}🎯 Recomendação de aposta: R$ 12,34`);
+    const { service, betService, usersService } = setup(
+      `${TEXT}${NL}${NL}🎯 Recomendação de aposta: R$ 12,34`,
+    );
     await service.planilharTip(4, 1);
-    expect(betService.createBet.mock.calls[0][0]).toMatchObject({ stake: 12.34 });
+    expect(betService.createBet.mock.calls[0][0]).toMatchObject({
+      stake: 12.34,
+    });
     expect(usersService.getUserStake).not.toHaveBeenCalled();
   });
 
   it('sem banca e sem entrega, pede o valor em vez de inventar', async () => {
     const { service, betService, usersService } = setup(null);
     usersService.getUserStake.mockResolvedValue(null);
-    await expect(service.planilharTip(4, 1)).rejects.toThrow('Não consegui calcular a stake');
+    await expect(service.planilharTip(4, 1)).rejects.toThrow(
+      'Não consegui calcular a stake',
+    );
     expect(betService.createBet).not.toHaveBeenCalled();
   });
 
   it('clique duplo barrado pelo índice devolve a aposta que já existe', async () => {
     const { service, betService } = setup(null);
     betService.createBet.mockRejectedValue(new TipAlreadyPlanilhadaException());
-    betService.findBetByTip.mockResolvedValueOnce(undefined).mockResolvedValueOnce({ id: 69 });
-    await expect(service.planilharTip(4, 1)).resolves.toEqual({ bet: { id: 69 }, alreadyExisted: true });
+    betService.findBetByTip
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ id: 69 });
+    await expect(service.planilharTip(4, 1)).resolves.toEqual({
+      bet: { id: 69 },
+      alreadyExisted: true,
+    });
   });
 });
 
@@ -261,21 +327,39 @@ describe('tips: paginação no banco', () => {
     const service = makeService(rows);
     const repo = (service as any).tipsRepository;
     const res = await service.listForUser(1, { page: 2, perPage: 10 });
-    expect(res.data.map((t) => t.id)).toEqual([40, 39, 38, 37, 36, 35, 34, 33, 32, 31]);
+    expect(res.data.map((t) => t.id)).toEqual([
+      40, 39, 38, 37, 36, 35, 34, 33, 32, 31,
+    ]);
     expect(res.total).toBe(50);
-    expect(repo.findListRows).toHaveBeenCalledWith(1, null, expect.anything(), { limit: 10, offset: 10 });
+    expect(repo.findListRows).toHaveBeenCalledWith(1, null, expect.anything(), {
+      limit: 10,
+      offset: 10,
+    });
   });
 
   it('busca e aba entram no filtro; contadores das abas não', async () => {
     const rows = [
       tipRow(1, 'Bet365'),
-      { ...tipRow(2, 'Bet365'), text: tipRow(2, 'Bet365').text.replace('Flamengo', 'Palmeiras'), betId: 9 },
+      {
+        ...tipRow(2, 'Bet365'),
+        text: tipRow(2, 'Bet365').text.replace('Flamengo', 'Palmeiras'),
+        betId: 9,
+      },
       { ...tipRow(3, 'Bet365'), dismissalId: 4 },
     ];
     const service = makeService(rows);
-    const res = await service.listForUser(1, { page: 1, perPage: 30, status: 'planilhada', q: 'palmeiras' });
+    const res = await service.listForUser(1, {
+      page: 1,
+      perPage: 30,
+      status: 'planilhada',
+      q: 'palmeiras',
+    });
     expect(res.data.map((t) => t.id)).toEqual([2]);
-    expect(res.summary).toMatchObject({ pending: 1, planilhadas: 1, caidas: 1 });
+    expect(res.summary).toMatchObject({
+      pending: 1,
+      planilhadas: 1,
+      caidas: 1,
+    });
   });
 });
 
@@ -288,7 +372,11 @@ describe('tips: contagem pro menu', () => {
     ];
     const service = makeService(rows);
     const repo = (service as any).tipsRepository;
-    expect(await service.countsForUser(1)).toEqual({ pending: 2, planilhadas: 0, caidas: 1 });
+    expect(await service.countsForUser(1)).toEqual({
+      pending: 2,
+      planilhadas: 0,
+      caidas: 1,
+    });
     expect(repo.countByStatus).toHaveBeenCalledWith(1, null);
     expect(repo.findListRows).not.toHaveBeenCalled();
   });

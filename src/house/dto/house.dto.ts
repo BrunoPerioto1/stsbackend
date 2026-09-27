@@ -1,24 +1,38 @@
-import { IsNumber, IsString, IsOptional, IsBoolean, IsArray } from "class-validator";
-import { ApiProperty } from "@nestjs/swagger";
+import {
+  IsNumber,
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsArray,
+} from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 
-export class FindAllHousesDTO  {
-
-  @ApiProperty({ description: "ID da casa de apostas", example: 1 })
+export class FindAllHousesDTO {
+  @ApiProperty({ description: 'ID da casa de apostas', example: 1 })
   @IsNumber()
   id!: number;
 
-  @ApiProperty({ description: "Nome da casa de apostas", example: "Bet365" })
+  @ApiProperty({ description: 'Nome da casa de apostas', example: 'Bet365' })
   @IsString()
   name!: string;
 
-  @ApiProperty({ description: "Status ativo da casa de apostas", example: true, required: false, default: true })
+  @ApiProperty({
+    description: 'Status ativo da casa de apostas',
+    example: true,
+    required: false,
+    default: true,
+  })
   @IsOptional()
   @IsBoolean()
   active?: boolean;
 
-  @ApiProperty({ description: "Apelidos/variações de nome reconhecidos pelo parser de apostas", example: ["Superbet Brasil"], required: false })
+  @ApiProperty({
+    description:
+      'Apelidos/variações de nome reconhecidos pelo parser de apostas',
+    example: ['Superbet Brasil'],
+    required: false,
+  })
   @IsOptional()
   @IsArray()
   aliases?: string[];
 }
-

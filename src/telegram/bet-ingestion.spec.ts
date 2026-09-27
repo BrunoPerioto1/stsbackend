@@ -34,9 +34,12 @@ describe('Telegram ingestion through existing house resolver', () => {
     type Dependencies = ConstructorParameters<typeof BetTextService>;
     const service = new BetTextService(
       grok as unknown as Dependencies[0],
-      new BetService(repository as unknown as BetRepository, {
-        findCandidates: jest.fn().mockResolvedValue([]),
-      } as unknown as SportEventRepository),
+      new BetService(
+        repository as unknown as BetRepository,
+        {
+          findCandidates: jest.fn().mockResolvedValue([]),
+        } as unknown as SportEventRepository,
+      ),
       users as unknown as Dependencies[2],
       {
         getAllHouses: jest.fn().mockResolvedValue([{ id: 7, name: 'Betfair' }]),

@@ -1,6 +1,6 @@
-import type { ColumnType, Insertable, Selectable, Updateable } from "kysely";
-import type { BetId } from "./Bet";
-import type { ResultId } from "./Results";
+import type { ColumnType, Insertable, Selectable, Updateable } from 'kysely';
+import type { BetId } from './Bet';
+import type { ResultId } from './Results';
 
 export type BetResultId = number & { __type: 'BetResultId' };
 
@@ -12,6 +12,6 @@ export default interface BetResultsTable {
   updatedAt: ColumnType<Date, Date | undefined, Date>;
 }
 
-export type BetResult = Selectable<BetResultsTable>;      // SELECT
-export type NewBetResult = Insertable<BetResultsTable>;   // INSERT
+export type BetResult = Selectable<BetResultsTable>; // SELECT
+export type NewBetResult = Insertable<BetResultsTable>; // INSERT
 export type UpdateBetResult = Updateable<BetResultsTable>; // UPDATE

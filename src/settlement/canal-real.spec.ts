@@ -7,9 +7,18 @@ import { parseMarket, LIMITE_DO_CANAL } from './market-conditions';
 import { SettlementContext } from './settlement.types';
 import { ResultIdEnum as R } from '../bet/dto/result-id.enum';
 
-const jogador = (name: string, participantId: string, stats: Record<string, number>) =>
+const jogador = (
+  name: string,
+  participantId: string,
+  stats: Record<string, number>,
+) =>
   Object.entries(stats).map(([metric, value]) => ({
-    scope: 'REGULATION' as const, name, participantId, played: true, metric, value,
+    scope: 'REGULATION' as const,
+    name,
+    participantId,
+    played: true,
+    metric,
+    value,
   }));
 
 const teams = { home: 'Palmeiras', away: 'São Paulo' };
@@ -23,20 +32,47 @@ const context: SettlementContext = {
   playerStats: {
     complete: true,
     items: [
-      ...jogador('José Manuel López', '1094179', { goals: 1, assists: 0, shots: 3, shotsOnTarget: 2 }),
-      ...jogador('Vitor Roque', '1150391', { goals: 1, assists: 1, shots: 4, shotsOnTarget: 1 }),
-      ...jogador('Alejo Véliz', '1116987', { goals: 0, assists: 1, shots: 1, shotsOnTarget: 0 }),
-      ...jogador('Pedro Guilherme', '840219', { goals: 0, assists: 0, shots: 2, shotsOnTarget: 0 }),
-      ...jogador('Pedro Milans', '985809', { goals: 0, assists: 1, shots: 0, shotsOnTarget: 0 }),
+      ...jogador('José Manuel López', '1094179', {
+        goals: 1,
+        assists: 0,
+        shots: 3,
+        shotsOnTarget: 2,
+      }),
+      ...jogador('Vitor Roque', '1150391', {
+        goals: 1,
+        assists: 1,
+        shots: 4,
+        shotsOnTarget: 1,
+      }),
+      ...jogador('Alejo Véliz', '1116987', {
+        goals: 0,
+        assists: 1,
+        shots: 1,
+        shotsOnTarget: 0,
+      }),
+      ...jogador('Pedro Guilherme', '840219', {
+        goals: 0,
+        assists: 0,
+        shots: 2,
+        shotsOnTarget: 0,
+      }),
+      ...jogador('Pedro Milans', '985809', {
+        goals: 0,
+        assists: 1,
+        shots: 0,
+        shotsOnTarget: 0,
+      }),
     ],
   },
 };
-const run = (market: string) => settleBet(market, teams, { home: 2, away: 0 }, 'finished', context);
+const run = (market: string) =>
+  settleBet(market, teams, { home: 2, away: 0 }, 'finished', context);
 
 describe('mercado cortado pelo canal', () => {
   // Aposta 12063: 100 caracteres exatos terminando limpo no fim de uma perna.
   // Não há como saber se existia uma quarta perna depois do corte.
-  const cortada = 'Vasco da Gama - Resultado final / Mais de 7.5 - Total de escanteios / Mais de 3.5 - Total de cartões';
+  const cortada =
+    'Vasco da Gama - Resultado final / Mais de 7.5 - Total de escanteios / Mais de 3.5 - Total de cartões';
 
   it('o exemplo real tem mesmo o tamanho do limite', () => {
     expect([...cortada].length).toBe(LIMITE_DO_CANAL);
@@ -53,8 +89,15 @@ describe('mercado cortado pelo canal', () => {
     expect([...curta].length).toBe(LIMITE_DO_CANAL - 1);
     // Não importa se liquida aqui — importa que a trava é o limite exato, e não
     // "qualquer texto comprido".
-    expect(parseMarket(curta, { home: 'Vasco da Gam', away: 'Flamengo' }).ok === false
-      && (parseMarket(curta, { home: 'Vasco da Gam', away: 'Flamengo' }) as { reason: string }).reason).not.toBe('MERCADO_TRUNCADO');
+    expect(
+      parseMarket(curta, { home: 'Vasco da Gam', away: 'Flamengo' }).ok ===
+        false &&
+        (
+          parseMarket(curta, { home: 'Vasco da Gam', away: 'Flamengo' }) as {
+            reason: string;
+          }
+        ).reason,
+    ).not.toBe('MERCADO_TRUNCADO');
   });
 });
 
@@ -71,7 +114,9 @@ describe('rótulos de jogador como o canal escreve', () => {
   });
 
   it('nome com acento no provider e sem acento na aposta', () => {
-    expect(run('Jose Manuel Lopez - Chutes a gol').explanation).toContain('José Manuel López: 2 chutes a gol');
+    expect(run('Jose Manuel Lopez - Chutes a gol').explanation).toContain(
+      'José Manuel López: 2 chutes a gol',
+    );
   });
 
   it('"Pedro" sozinho com dois Pedros em campo continua sem proposta', () => {
@@ -99,6 +144,8 @@ describe('time não vira jogador', () => {
   });
 
   it('total do jogo diz que é do jogo', () => {
-    expect(run('Mais de 40.5 - Chutes').explanation).toContain('41 chutes no jogo');
+    expect(run('Mais de 40.5 - Chutes').explanation).toContain(
+      '41 chutes no jogo',
+    );
   });
 });

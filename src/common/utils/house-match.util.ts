@@ -25,7 +25,9 @@ export function matchHouseIdByName(
   // fica ambígua quando existe casa com nome curto/genérico (ex.: "Bet7k"
   // poderia bater tanto com uma casa "7k" quanto com uma hipotética "Bet").
   for (const h of houses) {
-    const aliasMatch = (h.aliases ?? []).some((a) => normalizeName(a) === houseName);
+    const aliasMatch = (h.aliases ?? []).some(
+      (a) => normalizeName(a) === houseName,
+    );
     if (aliasMatch) return h.id;
   }
 

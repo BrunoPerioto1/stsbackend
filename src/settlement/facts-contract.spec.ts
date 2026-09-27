@@ -25,7 +25,8 @@ const context: SettlementContext = {
   cardCounting: 'RED_COUNTS_TWO', // igual ao SettlementService
   ...decodeFacts(raw),
 };
-const run = (market: string) => settleBet(market, teams, score, 'finished', context);
+const run = (market: string) =>
+  settleBet(market, teams, score, 'finished', context);
 
 describe('facts do coletor sofascore', () => {
   it('atravessa a fronteira do JSONB com as tres capacidades', () => {
@@ -85,7 +86,9 @@ describe('facts do coletor sofascore', () => {
     expect(run('Mais de 5.5 - Cartões').resultId).toBe(R.WON);
     expect(run('Menos de 6.5 - Cartões').resultId).toBe(R.WON);
     expect(run('Palmeiras - Maior número de cartões').resultId).toBe(R.WON);
-    expect(run('Palmeiras mais de 3.5 - Total de cartões').resultId).toBe(R.WON);
+    expect(run('Palmeiras mais de 3.5 - Total de cartões').resultId).toBe(
+      R.WON,
+    );
     // Amarelos continuam vindo do statistics, sem o peso do vermelho.
     expect(run('Mais de 3.5 - Cartões amarelos').resultId).toBe(R.WON);
   });

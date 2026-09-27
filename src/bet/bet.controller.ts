@@ -88,7 +88,8 @@ export class BetController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Quantidade e lucro por mês, com os mesmos filtros da lista',
-    description: 'A tela agrupada mostra os meses daqui e só busca as linhas do mês aberto.',
+    description:
+      'A tela agrupada mostra os meses daqui e só busca as linhas do mês aberto.',
   })
   async monthlySummary(
     @Query() filters: BetFilterDto,
@@ -166,9 +167,16 @@ export class BetController {
 
   @Get('sports')
   // Lista global e estavel: pode ir pro cache da CDN (mesmo caso de /house/all).
-  @Header('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400')
+  @Header(
+    'Cache-Control',
+    'public, s-maxage=3600, stale-while-revalidate=86400',
+  )
   @ApiOperation({ summary: 'Lista os esportes normalizados' })
-  @ApiResponse({ status: HttpStatus.OK, description: 'Lista de esportes.', type: [Object] })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Lista de esportes.',
+    type: [Object],
+  })
   async getSports() {
     return this.betService.getSports();
   }

@@ -33,7 +33,9 @@ export class SettlementController {
   constructor(private readonly settlementService: SettlementService) {}
 
   @Get('support')
-  @ApiOperation({ summary: 'Capacidades, dados exigidos e limitações dos mercados' })
+  @ApiOperation({
+    summary: 'Capacidades, dados exigidos e limitações dos mercados',
+  })
   support() {
     return MARKET_REGISTRY.map(({ parser, evaluator, ...support }) => support);
   }
@@ -52,7 +54,9 @@ export class SettlementController {
   }
 
   @Get('review')
-  @ApiOperation({ summary: 'Apostas indefinidas e motivos para revisão manual' })
+  @ApiOperation({
+    summary: 'Apostas indefinidas e motivos para revisão manual',
+  })
   review(@User('userId') userId: number) {
     return this.settlementService.listReview(userId as UserId);
   }

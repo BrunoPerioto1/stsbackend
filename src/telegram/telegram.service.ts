@@ -107,7 +107,10 @@ export class TelegramService implements OnModuleInit {
       // um card de aposta completo — encaminhar uma tip com mídia + legenda
       // inteira continua caindo no parser de texto de sempre.
       if (msg.photo && !parseBetLocal(msg.caption ?? '')) {
-        await this.betTextService.handleBetPhoto(ctx, { ...msg, photo: msg.photo });
+        await this.betTextService.handleBetPhoto(ctx, {
+          ...msg,
+          photo: msg.photo,
+        });
         return;
       }
 

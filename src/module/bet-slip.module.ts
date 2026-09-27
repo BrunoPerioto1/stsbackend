@@ -11,11 +11,7 @@ import { RateLimitModule } from './rate-limit.module';
 @Module({
   imports: [HouseModule, UsersModule, TipsModule, RateLimitModule],
   controllers: [BetSlipController],
-  providers: [
-    BetSlipService,
-    BetSlipParserService,
-    PendingMatchService,
-  ],
+  providers: [BetSlipService, BetSlipParserService, PendingMatchService],
   exports: [BetSlipParserService, PendingMatchService],
 })
 export class BetSlipModule {}

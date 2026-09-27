@@ -131,7 +131,12 @@ export class SettlementRepository {
       .innerJoin('users', 'users.id', 'bets.userId')
       .where('bets.deletedAt', 'is', null)
       .where('betResults.resultId', '=', ResultIdEnum.PENDING as ResultId)
-      .where((eb) => eb.or([eb('users.isActive', 'is', null), eb('users.isActive', '=', true)]))
+      .where((eb) =>
+        eb.or([
+          eb('users.isActive', 'is', null),
+          eb('users.isActive', '=', true),
+        ]),
+      )
       .select('bets.userId')
       .distinct()
       .execute();
@@ -209,7 +214,11 @@ export class SettlementRepository {
             .filterWhere((fb) =>
               fb.or([
                 fb('eventResults.externalId', 'is not', null),
-                fb('bets.eventStartAt', '<', sql<Date>`now() - interval '3 hours'`),
+                fb(
+                  'bets.eventStartAt',
+                  '<',
+                  sql<Date>`now() - interval '3 hours'`,
+                ),
                 fb.and([
                   fb('bets.eventStartAt', 'is', null),
                   fb('bets.betTime', '<', sql<Date>`now() - interval '1 day'`),
@@ -221,7 +230,11 @@ export class SettlementRepository {
         .executeTakeFirstOrThrow(),
       this.dbRead
         .selectFrom('betSettlementSuggestions as s')
-        .innerJoin('bets', (join) => join.onRef('bets.id', '=', 's.betId').on('bets.deletedAt', 'is', null))
+        .innerJoin('bets', (join) =>
+          join
+            .onRef('bets.id', '=', 's.betId')
+            .on('bets.deletedAt', 'is', null),
+        )
         .innerJoin('betResults', 'betResults.betId', 'bets.id')
         .leftJoin('eventResults as er', (join) =>
           join
@@ -240,9 +253,18 @@ export class SettlementRepository {
         .whereRef('s.computedAt', '>=', 'bets.updatedAt')
         .where((eb) =>
           eb.and([
-            eb.or([eb('er.externalId', 'is not', null), eb('legs.betId', 'is not', null)]),
-            eb.or([eb('er.fetchedAt', 'is', null), eb('s.computedAt', '>=', eb.ref('er.fetchedAt'))]),
-            eb.or([eb('legs.fetchedAt', 'is', null), eb('s.computedAt', '>=', eb.ref('legs.fetchedAt'))]),
+            eb.or([
+              eb('er.externalId', 'is not', null),
+              eb('legs.betId', 'is not', null),
+            ]),
+            eb.or([
+              eb('er.fetchedAt', 'is', null),
+              eb('s.computedAt', '>=', eb.ref('er.fetchedAt')),
+            ]),
+            eb.or([
+              eb('legs.fetchedAt', 'is', null),
+              eb('s.computedAt', '>=', eb.ref('legs.fetchedAt')),
+            ]),
           ]),
         )
         .select((eb) => [
@@ -288,11 +310,13 @@ export class SettlementRepository {
           .onRef('sportEvents.externalId', '=', 'bets.eventExternalId'),
       )
       .leftJoin('betSettlementSuggestions as s', 's.betId', 'bets.id')
-      .leftJoin('eventFacts as f', (join) => join
-        .onRef('f.provider', '=', 'eventResults.provider')
-        .onRef('f.externalId', '=', 'eventResults.externalId')
-        .onRef('f.fetchedAt', '=', 'eventResults.fetchedAt')
-        .on('f.formatVersion', '=', 1))
+      .leftJoin('eventFacts as f', (join) =>
+        join
+          .onRef('f.provider', '=', 'eventResults.provider')
+          .onRef('f.externalId', '=', 'eventResults.externalId')
+          .onRef('f.fetchedAt', '=', 'eventResults.fetchedAt')
+          .on('f.formatVersion', '=', 1),
+      )
       .where('bets.userId', '=', userId)
       .where('betResults.resultId', '=', ResultIdEnum.PENDING as ResultId)
       .where((eb) =>
@@ -395,18 +419,28 @@ export class SettlementRepository {
    * `betIds` restringe ao que o usuario marcou — e' o que a confirmacao usa pra
    * nao trazer a lista inteira do banco so' pra descartar quase tudo em memoria.
    */
-  async findPendingSuggestions(userId: UserId, betIds?: BetId[], review = false) {
+  async findPendingSuggestions(
+    userId: UserId,
+    betIds?: BetId[],
+    review = false,
+  ) {
     // `in ()` nao e' SQL valido; lista vazia nao tem o que buscar.
     if (betIds && !betIds.length) return [];
 
     let query = this.dbRead
       .selectFrom('betSettlementSuggestions as s')
-      .innerJoin('bets', (join) => join.onRef('bets.id', '=', 's.betId').on('bets.deletedAt', 'is', null))
+      .innerJoin('bets', (join) =>
+        join.onRef('bets.id', '=', 's.betId').on('bets.deletedAt', 'is', null),
+      )
       .innerJoin('betResults', 'betResults.betId', 'bets.id')
-      .leftJoin('eventResults as er', (join) => join
-        .onRef('er.provider', '=', 'bets.eventProvider')
-        .onRef('er.externalId', '=', 'bets.eventExternalId'))
-      .leftJoin(this.legsFetched().as('legs'), (join) => join.onRef('legs.betId', '=', 'bets.id'))
+      .leftJoin('eventResults as er', (join) =>
+        join
+          .onRef('er.provider', '=', 'bets.eventProvider')
+          .onRef('er.externalId', '=', 'bets.eventExternalId'),
+      )
+      .leftJoin(this.legsFetched().as('legs'), (join) =>
+        join.onRef('legs.betId', '=', 'bets.id'),
+      )
       .where('bets.userId', '=', userId)
       .where('betResults.resultId', '=', ResultIdEnum.PENDING as ResultId)
       .where('s.dismissedAt', 'is', null)
@@ -414,13 +448,26 @@ export class SettlementRepository {
       .whereRef('s.computedAt', '>=', 'bets.updatedAt')
       // Frescor contra o placar do jogo principal E contra o de cada perna da
       // multipla — mesma cerca de queue().
-      .where((eb) => eb.and([
-        eb.or([eb('er.externalId', 'is not', null), eb('legs.betId', 'is not', null)]),
-        eb.or([eb('er.fetchedAt', 'is', null), eb('s.computedAt', '>=', eb.ref('er.fetchedAt'))]),
-        eb.or([eb('legs.fetchedAt', 'is', null), eb('s.computedAt', '>=', eb.ref('legs.fetchedAt'))]),
-      ]));
+      .where((eb) =>
+        eb.and([
+          eb.or([
+            eb('er.externalId', 'is not', null),
+            eb('legs.betId', 'is not', null),
+          ]),
+          eb.or([
+            eb('er.fetchedAt', 'is', null),
+            eb('s.computedAt', '>=', eb.ref('er.fetchedAt')),
+          ]),
+          eb.or([
+            eb('legs.fetchedAt', 'is', null),
+            eb('s.computedAt', '>=', eb.ref('legs.fetchedAt')),
+          ]),
+        ]),
+      );
 
-    query = review ? query.where('s.suggestedResultId', 'is', null) : query.where('s.suggestedResultId', 'is not', null);
+    query = review
+      ? query.where('s.suggestedResultId', 'is', null)
+      : query.where('s.suggestedResultId', 'is not', null);
 
     if (betIds) query = query.where('s.betId', 'in', betIds);
 

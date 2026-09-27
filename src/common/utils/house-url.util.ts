@@ -17,21 +17,30 @@ export const JUDICIAL_HOUSE_HOSTS = ['zeroum.bet', 'www.zeroum.bet'];
  * Aceita digitar sem protocolo ("betano.bet.br") e sempre grava https.
  * Vazio/null devolve null, que apaga o link.
  */
-export function normalizeFederalHouseUrl(raw: string | null | undefined): string | null {
+export function normalizeFederalHouseUrl(
+  raw: string | null | undefined,
+): string | null {
   const trimmed = raw?.trim() ?? '';
   if (!trimmed) return null;
 
   let url: URL;
   try {
-    url = new URL(/^[a-z][a-z0-9+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`);
+    url = new URL(
+      /^[a-z][a-z0-9+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`,
+    );
   } catch {
     throw new BadRequestException('Link inválido');
   }
 
   const host = url.hostname.toLowerCase();
   const federal = host.endsWith('.bet.br') && host !== 'bet.br';
-  if (!['http:', 'https:'].includes(url.protocol) || !(federal || JUDICIAL_HOUSE_HOSTS.includes(host))) {
-    throw new BadRequestException('Só casas federais: o link precisa ser um domínio .bet.br');
+  if (
+    !['http:', 'https:'].includes(url.protocol) ||
+    !(federal || JUDICIAL_HOUSE_HOSTS.includes(host))
+  ) {
+    throw new BadRequestException(
+      'Só casas federais: o link precisa ser um domínio .bet.br',
+    );
   }
 
   url.protocol = 'https:';

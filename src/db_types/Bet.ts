@@ -1,10 +1,10 @@
-import type { ColumnType, Insertable, Selectable, Updateable } from "kysely";
-import type { BettingHouseId } from "./BettingHouse";
-import type { UserId } from "./Users";
-import type { TipId } from "./Tips";
-import type { SportId } from "./Sports";
+import type { ColumnType, Insertable, Selectable, Updateable } from 'kysely';
+import type { BettingHouseId } from './BettingHouse';
+import type { UserId } from './Users';
+import type { TipId } from './Tips';
+import type { SportId } from './Sports';
 
-export type BetId = number & { __type: "BetId" };
+export type BetId = number & { __type: 'BetId' };
 
 export default interface BetsTable {
   id: ColumnType<BetId, BetId | undefined, never>;
@@ -22,8 +22,12 @@ export default interface BetsTable {
   telegramChatId: ColumnType<string | null, string | undefined, never>;
   game: ColumnType<string, string, string>;
   stake: ColumnType<number, number, number>; // DECIMAL(10,2)
-  odd: ColumnType<number, number, number>;   // DECIMAL(5,2)
-  houseId: ColumnType<BettingHouseId | null, BettingHouseId | null, BettingHouseId | null>;
+  odd: ColumnType<number, number, number>; // DECIMAL(5,2)
+  houseId: ColumnType<
+    BettingHouseId | null,
+    BettingHouseId | null,
+    BettingHouseId | null
+  >;
   market: ColumnType<string, string, string>;
   sport: ColumnType<string, string, string>;
   // Preenchido pelo trigger bets_normalize_sport a partir de `sport`.
@@ -35,10 +39,22 @@ export default interface BetsTable {
   betTime: ColumnType<Date, Date | undefined, Date>;
   // Evento real casado na criacao da aposta. Tudo null = sem match confiavel;
   // a aposta existe do mesmo jeito, so nao tem horario de inicio do jogo.
-  eventExternalId: ColumnType<string | null, string | null | undefined, string | null>;
-  eventProvider: ColumnType<string | null, string | null | undefined, string | null>;
+  eventExternalId: ColumnType<
+    string | null,
+    string | null | undefined,
+    string | null
+  >;
+  eventProvider: ColumnType<
+    string | null,
+    string | null | undefined,
+    string | null
+  >;
   eventStartAt: ColumnType<Date | null, Date | null | undefined, Date | null>;
-  eventMatchConfidence: ColumnType<number | null, number | null | undefined, number | null>;
+  eventMatchConfidence: ColumnType<
+    number | null,
+    number | null | undefined,
+    number | null
+  >;
   // Soft delete: apagar so' preenche isto. Toda leitura filtra `deletedAt is null`.
   deletedAt: ColumnType<Date | null, Date | null | undefined, Date | null>;
   createdAt: ColumnType<Date, Date | undefined, never>;

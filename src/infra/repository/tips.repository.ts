@@ -81,89 +81,127 @@ export class TipsRepository {
     // Writer, nao a replica: a lista e reconstruida no mesmo clique que criou
     // a aposta, e com lag de replicacao o item recem-planilhado reaparecia.
     // E um comando manual, entao o custo extra no writer e desprezivel.
-    return this.dbWrite
-      .selectFrom('tips as t')
-      .leftJoin('bets as b', (join) =>
-        join.onRef('b.tipId', '=', 't.id').on('b.userId', '=', userId).on('b.deletedAt', 'is', null),
-      )
-      .leftJoin('tipDismissals as d', (join) =>
-        join.onRef('d.tipId', '=', 't.id').on('d.userId', '=', userId),
-      )
-      // A cópia que o fan-out mandou pra ESTE usuário: é só nela que existe a
-      // "🎯 Recomendação de aposta" (banca do usuário × % da tip). O texto da
-      // tabela `tips` é a mensagem crua do canal, igual pra todo mundo.
-      .leftJoin('tipDeliveries as td', (join) =>
-        join.onRef('td.tipId', '=', 't.id').on('td.userId', '=', userId),
-      )
-      .select([
-        't.id',
-        't.text',
-        't.chatId',
-        't.messageId',
-        't.hasMedia',
-        't.percent',
-        't.isAviso',
-        // A URL do "Odd mudou? ... calcule quanto vale" é um text_link: só
-        // existe aqui, não no texto da mensagem.
-        't.entities',
-        't.createdAt',
-        'b.id as betId',
-        // A aposta ja casou o evento quando foi criada, com a janela cheia. A
-        // lista reaproveita esse valor em vez de recasar contra uma janela que
-        // pode ja ter perdido o jogo.
-        'b.eventStartAt as betEventStartAt',
-        'd.id as dismissalId',
-        'td.text as deliveryText',
-      ])
-      .where('t.percent', 'is not', null)
-      .$if(since !== undefined, (qb) => qb.where('t.createdAt', '>=', since!))
-      // Sem janela explícita do chamador vale a de 48h — mas só pra tip que o
-      // usuário nunca tocou.
-      .$if(since === undefined, (qb) =>
-        qb.where((eb) =>
-          eb.or([
-            eb('t.createdAt', '>=', untouchedSince),
-            eb('b.id', 'is not', null),
-            eb('d.id', 'is not', null),
-          ]),
-        ),
-      )
-      .$if(minPercentFilter !== null, (qb) =>
-        qb.where('t.percent', '>=', minPercentFilter as number),
-      )
-      .orderBy('t.createdAt', 'asc')
-      .execute();
+    return (
+      this.dbWrite
+        .selectFrom('tips as t')
+        .leftJoin('bets as b', (join) =>
+          join
+            .onRef('b.tipId', '=', 't.id')
+            .on('b.userId', '=', userId)
+            .on('b.deletedAt', 'is', null),
+        )
+        .leftJoin('tipDismissals as d', (join) =>
+          join.onRef('d.tipId', '=', 't.id').on('d.userId', '=', userId),
+        )
+        // A cópia que o fan-out mandou pra ESTE usuário: é só nela que existe a
+        // "🎯 Recomendação de aposta" (banca do usuário × % da tip). O texto da
+        // tabela `tips` é a mensagem crua do canal, igual pra todo mundo.
+        .leftJoin('tipDeliveries as td', (join) =>
+          join.onRef('td.tipId', '=', 't.id').on('td.userId', '=', userId),
+        )
+        .select([
+          't.id',
+          't.text',
+          't.chatId',
+          't.messageId',
+          't.hasMedia',
+          't.percent',
+          't.isAviso',
+          // A URL do "Odd mudou? ... calcule quanto vale" é um text_link: só
+          // existe aqui, não no texto da mensagem.
+          't.entities',
+          't.createdAt',
+          'b.id as betId',
+          // A aposta ja casou o evento quando foi criada, com a janela cheia. A
+          // lista reaproveita esse valor em vez de recasar contra uma janela que
+          // pode ja ter perdido o jogo.
+          'b.eventStartAt as betEventStartAt',
+          'd.id as dismissalId',
+          'td.text as deliveryText',
+        ])
+        .where('t.percent', 'is not', null)
+        .$if(since !== undefined, (qb) => qb.where('t.createdAt', '>=', since!))
+        // Sem janela explícita do chamador vale a de 48h — mas só pra tip que o
+        // usuário nunca tocou.
+        .$if(since === undefined, (qb) =>
+          qb.where((eb) =>
+            eb.or([
+              eb('t.createdAt', '>=', untouchedSince),
+              eb('b.id', 'is not', null),
+              eb('d.id', 'is not', null),
+            ]),
+          ),
+        )
+        .$if(minPercentFilter !== null, (qb) =>
+          qb.where('t.percent', '>=', minPercentFilter as number),
+        )
+        .orderBy('t.createdAt', 'asc')
+        .execute()
+    );
   }
 
   // Mesma base da findSummaryForUser (joins, janela de 48h pra tip não
   // tocada, filtro de %), sem o SELECT: cada consulta da tela escolhe o seu.
   private listBase(userId: UserId, minPercentFilter: number | null) {
-    const untouchedSince = new Date(Date.now() - TipsRepository.UNTOUCHED_WINDOW_MS);
+    const untouchedSince = new Date(
+      Date.now() - TipsRepository.UNTOUCHED_WINDOW_MS,
+    );
     return this.dbWrite
       .selectFrom('tips as t')
       .leftJoin('bets as b', (join) =>
-        join.onRef('b.tipId', '=', 't.id').on('b.userId', '=', userId).on('b.deletedAt', 'is', null),
+        join
+          .onRef('b.tipId', '=', 't.id')
+          .on('b.userId', '=', userId)
+          .on('b.deletedAt', 'is', null),
       )
-      .leftJoin('tipDismissals as d', (join) => join.onRef('d.tipId', '=', 't.id').on('d.userId', '=', userId))
-      .leftJoin('tipDeliveries as td', (join) => join.onRef('td.tipId', '=', 't.id').on('td.userId', '=', userId))
+      .leftJoin('tipDismissals as d', (join) =>
+        join.onRef('d.tipId', '=', 't.id').on('d.userId', '=', userId),
+      )
+      .leftJoin('tipDeliveries as td', (join) =>
+        join.onRef('td.tipId', '=', 't.id').on('td.userId', '=', userId),
+      )
       .where('t.percent', 'is not', null)
       .where((eb) =>
-        eb.or([eb('t.createdAt', '>=', untouchedSince), eb('b.id', 'is not', null), eb('d.id', 'is not', null)]),
+        eb.or([
+          eb('t.createdAt', '>=', untouchedSince),
+          eb('b.id', 'is not', null),
+          eb('d.id', 'is not', null),
+        ]),
       )
-      .$if(minPercentFilter !== null, (qb) => qb.where('t.percent', '>=', minPercentFilter as number));
+      .$if(minPercentFilter !== null, (qb) =>
+        qb.where('t.percent', '>=', minPercentFilter as number),
+      );
   }
 
   // Status e busca no SQL. A tela de Tips carregava o histórico inteiro (toda
   // tip planilhada ou "caiu" fica pra sempre) e paginava em memória.
-  private listFiltered(userId: UserId, minPercentFilter: number | null, filter: TipListFilter) {
+  private listFiltered(
+    userId: UserId,
+    minPercentFilter: number | null,
+    filter: TipListFilter,
+  ) {
     const termo = filter.q?.trim();
-    return this.listBase(userId, minPercentFilter)
-      .$if(filter.status === 'planilhada', (qb) => qb.where('b.id', 'is not', null))
-      .$if(filter.status === 'caiu', (qb) => qb.where('b.id', 'is', null).where('d.id', 'is not', null))
-      .$if(filter.status === 'pending', (qb) => qb.where('b.id', 'is', null).where('d.id', 'is', null))
-      // Busca no texto da mensagem (jogo, mercado, casa). Curinga do LIKE
-      // digitado pelo usuário vale como letra.
-      .$if(!!termo, (qb) => qb.where('t.text', 'ilike', `%${termo!.replace(/[\\%_]/g, (c) => '\\' + c)}%`));
+    return (
+      this.listBase(userId, minPercentFilter)
+        .$if(filter.status === 'planilhada', (qb) =>
+          qb.where('b.id', 'is not', null),
+        )
+        .$if(filter.status === 'caiu', (qb) =>
+          qb.where('b.id', 'is', null).where('d.id', 'is not', null),
+        )
+        .$if(filter.status === 'pending', (qb) =>
+          qb.where('b.id', 'is', null).where('d.id', 'is', null),
+        )
+        // Busca no texto da mensagem (jogo, mercado, casa). Curinga do LIKE
+        // digitado pelo usuário vale como letra.
+        .$if(!!termo, (qb) =>
+          qb.where(
+            't.text',
+            'ilike',
+            `%${termo!.replace(/[\\%_]/g, (c) => '\\' + c)}%`,
+          ),
+        )
+    );
   }
 
   /** Página da lista (mais recente primeiro). Sem `page`, devolve tudo que casa com o filtro. */
@@ -192,7 +230,11 @@ export class TipsRepository {
       .execute();
   }
 
-  async countListRows(userId: UserId, minPercentFilter: number | null, filter: TipListFilter) {
+  async countListRows(
+    userId: UserId,
+    minPercentFilter: number | null,
+    filter: TipListFilter,
+  ) {
     const row = await this.listFiltered(userId, minPercentFilter, filter)
       .select((eb) => eb.fn.countAll<string>().as('total'))
       .executeTakeFirstOrThrow();
@@ -203,14 +245,21 @@ export class TipsRepository {
   async countByStatus(userId: UserId, minPercentFilter: number | null) {
     const row = await this.listBase(userId, minPercentFilter)
       .select((eb) => [
-        eb.fn.countAll<string>().filterWhere('b.id', 'is not', null).as('planilhadas'),
         eb.fn
           .countAll<string>()
-          .filterWhere((fb) => fb.and([fb('b.id', 'is', null), fb('d.id', 'is not', null)]))
+          .filterWhere('b.id', 'is not', null)
+          .as('planilhadas'),
+        eb.fn
+          .countAll<string>()
+          .filterWhere((fb) =>
+            fb.and([fb('b.id', 'is', null), fb('d.id', 'is not', null)]),
+          )
           .as('caidas'),
         eb.fn
           .countAll<string>()
-          .filterWhere((fb) => fb.and([fb('b.id', 'is', null), fb('d.id', 'is', null)]))
+          .filterWhere((fb) =>
+            fb.and([fb('b.id', 'is', null), fb('d.id', 'is', null)]),
+          )
           .as('pending'),
       ])
       .executeTakeFirstOrThrow();

@@ -18,7 +18,9 @@ const run = (market: string, jogo: Jogo) =>
   settleBet(market, jogo.teams, jogo.score, 'finished', {
     sport: 'Football',
     scoreScope: 'REGULATION',
-    ...(jogo.semRegraDeCartao ? {} : { cardCounting: 'RED_COUNTS_TWO' as const }),
+    ...(jogo.semRegraDeCartao
+      ? {}
+      : { cardCounting: 'RED_COUNTS_TWO' as const }),
     periods: jogo.periods,
     teamStats: jogo.teamStats,
     incidents: jogo.incidents,
@@ -27,8 +29,13 @@ const run = (market: string, jogo: Jogo) =>
 const flamengo: Jogo = {
   teams: { home: 'Flamengo', away: 'Corinthians' },
   score: { home: 2, away: 1 },
-  periods: { FIRST_HALF: { home: 1, away: 0 }, SECOND_HALF: { home: 1, away: 1 } },
-  teamStats: [{ scope: 'REGULATION', metric: 'shotsOnTarget', home: 8, away: 3 }],
+  periods: {
+    FIRST_HALF: { home: 1, away: 0 },
+    SECOND_HALF: { home: 1, away: 1 },
+  },
+  teamStats: [
+    { scope: 'REGULATION', metric: 'shotsOnTarget', home: 8, away: 3 },
+  ],
   incidents: {
     complete: true,
     items: [
@@ -84,9 +91,14 @@ describe('frases do canal', () => {
     const jogo: Jogo = {
       teams: { home: 'Atlético Mineiro', away: 'Fluminense' },
       score: { home: 3, away: 1 },
-      periods: { FIRST_HALF: { home: 0, away: 1 }, SECOND_HALF: { home: 3, away: 0 } },
+      periods: {
+        FIRST_HALF: { home: 0, away: 1 },
+        SECOND_HALF: { home: 3, away: 0 },
+      },
     };
-    expect(run('Atlético MG vence um dos tempos - Sim', jogo).resultId).toBe(R.WON);
+    expect(run('Atlético MG vence um dos tempos - Sim', jogo).resultId).toBe(
+      R.WON,
+    );
   });
 });
 
@@ -95,7 +107,9 @@ describe('cartões com vermelho valendo 2', () => {
   const coritiba: Jogo = {
     teams: { home: 'Coritiba', away: 'Athletico Paranaense' },
     score: { home: 3, away: 3 },
-    teamStats: [{ scope: 'REGULATION', metric: 'cardPoints', home: 5, away: 4 }],
+    teamStats: [
+      { scope: 'REGULATION', metric: 'cardPoints', home: 5, away: 4 },
+    ],
   };
 
   it('aposta real "UNDER 6.5 CARDS" perde com 9 pontos', () => {
@@ -113,12 +127,17 @@ describe('cartões com vermelho valendo 2', () => {
   });
 
   it('sem a regra da casa no contexto, cartão não liquida', () => {
-    expect(run('UNDER 6.5 CARDS', { ...coritiba, semRegraDeCartao: true }).reason).toBe('REGRA_NAO_SUPORTADA');
+    expect(
+      run('UNDER 6.5 CARDS', { ...coritiba, semRegraDeCartao: true }).reason,
+    ).toBe('REGRA_NAO_SUPORTADA');
   });
 
   it('linha antiga "cards" gravada em produção é ignorada', () => {
     // event_facts de produção ainda tem cards = amarelo + vermelho valendo 1.
-    const antigo: Jogo = { ...coritiba, teamStats: [{ scope: 'REGULATION', metric: 'cards', home: 4, away: 4 }] };
+    const antigo: Jogo = {
+      ...coritiba,
+      teamStats: [{ scope: 'REGULATION', metric: 'cards', home: 4, away: 4 }],
+    };
     expect(run('UNDER 6.5 CARDS', antigo).reason).toBe('DADO_INDISPONIVEL');
   });
 });

@@ -1,11 +1,22 @@
-import { Controller, Headers, Logger, Param, Post, Req, Res } from '@nestjs/common';
+import {
+  Controller,
+  Headers,
+  Logger,
+  Param,
+  Post,
+  Req,
+  Res,
+} from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
 import { timingSafeEqual } from 'crypto';
 import { Request, Response } from 'express';
 import { TelegramService } from './telegram.service';
 import { errorArgs } from '../common/utils/log';
 
-const sameSecret = (received: string | undefined, expected: string | undefined) =>
+const sameSecret = (
+  received: string | undefined,
+  expected: string | undefined,
+) =>
   !!received &&
   !!expected &&
   received.length === expected.length &&
@@ -42,11 +53,17 @@ export class TelegramController {
    * webhook novo registrado, dá pra apagar.
    */
   @Post(':token')
-  async handleLegacyUpdate(@Param('token') token: string, @Req() req: Request, @Res() res: Response) {
+  async handleLegacyUpdate(
+    @Param('token') token: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
     if (!sameSecret(token, process.env.TELEGRAM_BOT_TOKEN)) {
       return res.status(403).send('Forbidden');
     }
-    this.logger.warn('webhook pela URL antiga (token no caminho): rode npm run telegram:webhook');
+    this.logger.warn(
+      'webhook pela URL antiga (token no caminho): rode npm run telegram:webhook',
+    );
     return this.process(req, res);
   }
 
@@ -57,7 +74,9 @@ export class TelegramController {
       await this.telegramService.bot.handleUpdate(req.body);
     } catch (error) {
       status = 'error';
-      this.logger.error(...errorArgs('Erro ao processar update do Telegram', error));
+      this.logger.error(
+        ...errorArgs('Erro ao processar update do Telegram', error),
+      );
     } finally {
       this.logger.log(
         `[TELEGRAM_WEBHOOK] update_id=${(req.body as { update_id?: number } | undefined)?.update_id ?? '?'} status=${status} duration_ms=${Math.round(performance.now() - startedAt)}`,

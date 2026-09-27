@@ -144,7 +144,11 @@ describe('BetService.updateBet — casamento de evento', () => {
 
   it('jogo novo refaz o casamento e limpa o evento antigo quando nada casa', async () => {
     const { repository, sportEvents, service } = setup();
-    await service.updateBet(5, { game: 'Palmeiras x Santos', market: 'Over 2.5', sport: 'Futebol' }, 1);
+    await service.updateBet(
+      5,
+      { game: 'Palmeiras x Santos', market: 'Over 2.5', sport: 'Futebol' },
+      1,
+    );
     expect(sportEvents.findCandidates).toHaveBeenCalledWith(current.betTime);
     expect(repository.update).toHaveBeenCalledWith(
       5,
@@ -162,7 +166,16 @@ describe('BetService.updateBet — casamento de evento', () => {
 
   it('o front reenviando o mesmo jogo não mexe no evento', async () => {
     const { repository, sportEvents, service } = setup();
-    await service.updateBet(5, { game: 'Flamengo x Vasco', market: 'Over 2.5', sport: 'Futebol', stake: 60 }, 1);
+    await service.updateBet(
+      5,
+      {
+        game: 'Flamengo x Vasco',
+        market: 'Over 2.5',
+        sport: 'Futebol',
+        stake: 60,
+      },
+      1,
+    );
     expect(sportEvents.findCandidates).not.toHaveBeenCalled();
     const [, patch] = repository.update.mock.calls[0] as [number, object];
     expect(patch).not.toHaveProperty('eventExternalId');
@@ -180,7 +193,13 @@ describe('BetService: filtros novos da lista', () => {
       repository as unknown as BetRepository,
       { findCandidates: jest.fn() } as unknown as SportEventRepository,
     );
-    await service.findBets({ userId: 1, origins: ['tip', 'print'], unmatched: true, page: 1, perPage: 30 } as any);
+    await service.findBets({
+      userId: 1,
+      origins: ['tip', 'print'],
+      unmatched: true,
+      page: 1,
+      perPage: 30,
+    } as any);
     expect(repository.findBets).toHaveBeenCalledWith(
       expect.objectContaining({ origins: ['tip', 'print'], unmatched: true }),
     );

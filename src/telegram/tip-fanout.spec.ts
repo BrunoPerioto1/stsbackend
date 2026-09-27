@@ -4,7 +4,14 @@ import type { BotContext } from './utils/bot-context';
 
 const asCtx = (ctx: object) => ctx as unknown as BotContext;
 
-const TIP = ['🏠 Bet365', '🆚 Flamengo x Vasco', '⚽️ Futebol', '📌 Over 2.5', '🏷 1.90', '🛑 1.5%'].join('\n');
+const TIP = [
+  '🏠 Bet365',
+  '🆚 Flamengo x Vasco',
+  '⚽️ Futebol',
+  '📌 Over 2.5',
+  '🏷 1.90',
+  '🛑 1.5%',
+].join('\n');
 
 function setupFanout({ created = true, banca = 1000 as number | null } = {}) {
   const bot = {
@@ -16,11 +23,15 @@ function setupFanout({ created = true, banca = 1000 as number | null } = {}) {
   const usersService = {
     getUsersForTipsFanout: jest
       .fn()
-      .mockResolvedValue([{ id: 1, telegramUserId: 10, minPercentFilter: null }]),
+      .mockResolvedValue([
+        { id: 1, telegramUserId: 10, minPercentFilter: null },
+      ]),
     getUserStake: jest.fn().mockResolvedValue(banca),
   };
   const tipsService = {
-    recordTip: jest.fn().mockResolvedValue({ tip: { id: 8, percent: '1.5' }, created }),
+    recordTip: jest
+      .fn()
+      .mockResolvedValue({ tip: { id: 8, percent: '1.5' }, created }),
     saveDelivery: jest.fn().mockResolvedValue(undefined),
   };
   const tipsGroup = { isMember: jest.fn().mockResolvedValue(true) };
@@ -69,15 +80,38 @@ describe('/stake', () => {
       findByTelegramUserId: jest.fn().mockResolvedValue({ id: 1 }),
       updateUserStake: jest.fn().mockResolvedValue(true),
     };
-    const service = new BotCommandsService(usersService as any, {} as any, {} as any);
-    await service.handleStake(asCtx({ message: { text: `/stake ${arg}` }, from: { id: 10 }, reply: jest.fn() }));
+    const service = new BotCommandsService(
+      usersService as any,
+      {} as any,
+      {} as any,
+    );
+    await service.handleStake(
+      asCtx({
+        message: { text: `/stake ${arg}` },
+        from: { id: 10 },
+        reply: jest.fn(),
+      }),
+    );
     expect(usersService.updateUserStake).toHaveBeenCalledWith(1, expected);
   });
 
   it('recusa valor que não é número', async () => {
-    const usersService = { findByTelegramUserId: jest.fn(), updateUserStake: jest.fn() };
-    const service = new BotCommandsService(usersService as any, {} as any, {} as any);
-    await service.handleStake(asCtx({ message: { text: '/stake abc' }, from: { id: 10 }, reply: jest.fn() }));
+    const usersService = {
+      findByTelegramUserId: jest.fn(),
+      updateUserStake: jest.fn(),
+    };
+    const service = new BotCommandsService(
+      usersService as any,
+      {} as any,
+      {} as any,
+    );
+    await service.handleStake(
+      asCtx({
+        message: { text: '/stake abc' },
+        from: { id: 10 },
+        reply: jest.fn(),
+      }),
+    );
     expect(usersService.updateUserStake).not.toHaveBeenCalled();
   });
 });

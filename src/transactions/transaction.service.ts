@@ -1,7 +1,11 @@
 // transaction.service.ts
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { TransactionRepository } from '../infra/repository/transaction.repository';
-import { NewTransactionDto, TransactionTypeEnum, UpdateTransactionDto } from './dto/transaction.dto';
+import {
+  NewTransactionDto,
+  TransactionTypeEnum,
+  UpdateTransactionDto,
+} from './dto/transaction.dto';
 import { TransactionFilterDto } from './dto/transaction.filter.dto';
 import type { UserId } from '../db_types/Users';
 import type { BettingHouseId } from '../db_types/BettingHouse';
@@ -25,8 +29,13 @@ export class TransactionService {
     }
   }
 
-  async createTransaction(transactionData: NewTransactionDto & { userId: number }) {
-    if ((transactionData.transactionTypeId as TransactionTypeEnum) === TransactionTypeEnum.WITHDRAWAL) {
+  async createTransaction(
+    transactionData: NewTransactionDto & { userId: number },
+  ) {
+    if (
+      (transactionData.transactionTypeId as TransactionTypeEnum) ===
+      TransactionTypeEnum.WITHDRAWAL
+    ) {
       transactionData.value = -Math.abs(transactionData.value);
     }
     return this.transactionRepository.create({
@@ -34,7 +43,9 @@ export class TransactionService {
       userId: transactionData.userId as UserId,
       transactionTypeId: transactionData.transactionTypeId as TransactionTypeId,
       value: transactionData.value,
-      description: transactionData.description || this.defaultDescription(transactionData.transactionTypeId),
+      description:
+        transactionData.description ||
+        this.defaultDescription(transactionData.transactionTypeId),
     });
   }
 
@@ -46,24 +57,44 @@ export class TransactionService {
     return value;
   }
 
-  async updateTransaction(id: number, userId: number, changes: UpdateTransactionDto) {
-    const current = await this.transactionRepository.findById(id as HouseTransactionId, userId as UserId);
+  async updateTransaction(
+    id: number,
+    userId: number,
+    changes: UpdateTransactionDto,
+  ) {
+    const current = await this.transactionRepository.findById(
+      id as HouseTransactionId,
+      userId as UserId,
+    );
     if (!current) throw new NotFoundException('Movimentação não encontrada.');
 
-    const type = (changes.transactionTypeId ?? current.transactionTypeId) as TransactionTypeEnum;
+    const type = (changes.transactionTypeId ??
+      current.transactionTypeId) as TransactionTypeEnum;
     const value = this.signed(type, changes.value ?? Number(current.value));
-    await this.transactionRepository.update(id as HouseTransactionId, userId as UserId, {
-      transactionTypeId: type as unknown as TransactionTypeId,
-      value,
-      ...(changes.description !== undefined && { description: changes.description || this.defaultDescription(type) }),
-    });
+    await this.transactionRepository.update(
+      id as HouseTransactionId,
+      userId as UserId,
+      {
+        transactionTypeId: type as unknown as TransactionTypeId,
+        value,
+        ...(changes.description !== undefined && {
+          description: changes.description || this.defaultDescription(type),
+        }),
+      },
+    );
     return { id, transactionTypeId: type, value };
   }
 
   async deleteTransaction(id: number, userId: number) {
-    const current = await this.transactionRepository.findById(id as HouseTransactionId, userId as UserId);
+    const current = await this.transactionRepository.findById(
+      id as HouseTransactionId,
+      userId as UserId,
+    );
     if (!current) throw new NotFoundException('Movimentação não encontrada.');
-    await this.transactionRepository.delete(id as HouseTransactionId, userId as UserId);
+    await this.transactionRepository.delete(
+      id as HouseTransactionId,
+      userId as UserId,
+    );
   }
 
   async findAllTransactions(userId: number, filter?: TransactionFilterDto) {

@@ -10,7 +10,11 @@ import type { UserId } from '../db_types/Users';
 // Dois cliques seguidos não viram duas mensagens pro admin.
 const RENOTIFY_AFTER_MS = 30 * 60_000;
 
-export type PaymentClaimResult = 'notified' | 'already' | 'inactive' | 'not_found';
+export type PaymentClaimResult =
+  | 'notified'
+  | 'already'
+  | 'inactive'
+  | 'not_found';
 
 /**
  * "Já paguei" (tela de renovação ou botão do bot). Marca a conta, que aparece
@@ -31,10 +35,14 @@ export class PaymentClaimService {
     if (!user) return 'not_found';
     if (user.isActive === false) return 'inactive';
 
-    const last = user.paymentClaimedAt ? new Date(user.paymentClaimedAt).getTime() : 0;
+    const last = user.paymentClaimedAt
+      ? new Date(user.paymentClaimedAt).getTime()
+      : 0;
     if (Date.now() - last < RENOTIFY_AFTER_MS) return 'already';
 
-    await this.usersRepository.updateUser(user.id, { paymentClaimedAt: new Date() });
+    await this.usersRepository.updateUser(user.id, {
+      paymentClaimedAt: new Date(),
+    });
 
     const { price, txid } = billingInfo(user.id);
     const text = [
@@ -43,15 +51,20 @@ export class PaymentClaimService {
       'Confira o extrato e libere o acesso no painel.',
     ].join('\n');
 
-    const admins = await this.usersRepository.findAdminsWithTelegram(ADMIN_ROLE_ID);
+    const admins =
+      await this.usersRepository.findAdminsWithTelegram(ADMIN_ROLE_ID);
     for (const admin of admins) {
       await this.bot.telegram
         .sendMessage(admin.telegramUserId as number, text, {
           reply_markup: {
-            inline_keyboard: [[{ text: '👤 Abrir usuários', url: frontUrl('/admin/users') }]],
+            inline_keyboard: [
+              [{ text: '👤 Abrir usuários', url: frontUrl('/admin/users') }],
+            ],
           },
         })
-        .catch((error: Error) => this.logger.warn(`aviso de pagamento falhou: ${error.message}`));
+        .catch((error: Error) =>
+          this.logger.warn(`aviso de pagamento falhou: ${error.message}`),
+        );
     }
     return 'notified';
   }

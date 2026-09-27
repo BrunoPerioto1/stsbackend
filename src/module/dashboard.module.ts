@@ -8,10 +8,7 @@ import { DatabaseModule } from '../infra/db/db.module';
 @Module({
   imports: [DatabaseModule],
   controllers: [DashboardController],
-  providers: [
-    DashboardService,
-    DashboardRepository, 
-  ],
+  providers: [DashboardService, DashboardRepository],
   exports: [DashboardService],
 })
 export class DashboardModule {}

@@ -22,14 +22,21 @@ import {
   extractStakeFromText,
   parseBetLocal,
 } from './utils/tip-extractors.util';
-import { findBetMatches, type PendingCandidate } from '../bet-slip/matching.util';
+import {
+  findBetMatches,
+  type PendingCandidate,
+} from '../bet-slip/matching.util';
 import { BetSlipParserService } from '../bet-slip/bet-slip-parser.service';
 import { PendingMatchService } from '../bet-slip/pending-match.service';
 import { BetAudioService, MAX_AUDIO_BYTES } from './bet-audio.service';
 import { buildBetPreview, missingBetFields } from './utils/bet-preview.util';
 import type { Context } from 'telegraf';
 import type { InlineKeyboardMarkup } from 'telegraf/types';
-import { callbackMessage, senderId, type BotContext } from './utils/bot-context';
+import {
+  callbackMessage,
+  senderId,
+  type BotContext,
+} from './utils/bot-context';
 import {
   AI_PARSE_LIMIT,
   RateLimitedException,
@@ -78,7 +85,6 @@ export class BetTextService {
       throw error;
     }
   }
-
 
   // Parsing + criação da aposta. Reaproveitado tanto pelo texto livre em DM
   // quanto pelo clique em "Enviar ao Planilhador" na cópia individual do
@@ -223,7 +229,9 @@ export class BetTextService {
       // Clique duplo que passou pelo lock em memória (outra instância): o
       // banco recusou a segunda aposta. Quem chamou responde "já planilhada".
       if (err instanceof TipAlreadyPlanilhadaException) throw err;
-      this.logger.warn(`[VALIDATION_FAILED] stage=telegram_bet ${(err as Error).message}`);
+      this.logger.warn(
+        `[VALIDATION_FAILED] stage=telegram_bet ${(err as Error).message}`,
+      );
       const extra = replyToMessageId
         ? { reply_parameters: { message_id: replyToMessageId } }
         : undefined;
@@ -272,7 +280,11 @@ export class BetTextService {
     const keyboard = preview.reply_markup;
     if (
       !keyboard?.inline_keyboard?.some((row) =>
-        row.some((button) => 'callback_data' in button && button.callback_data === 'bet_image_deep'),
+        row.some(
+          (button) =>
+            'callback_data' in button &&
+            button.callback_data === 'bet_image_deep',
+        ),
       )
     ) {
       await ctx.answerCbQuery('Esta análise já foi solicitada.');
@@ -315,9 +327,12 @@ export class BetTextService {
       return;
     }
     // A análise profunda já contou o uso no clique (handleDeepBetPhoto).
-    const limited = deep || !this.rateLimit ? null : await this.aiLimitMessage(ctx);
+    const limited =
+      deep || !this.rateLimit ? null : await this.aiLimitMessage(ctx);
     if (limited) {
-      await ctx.reply(limited, { reply_parameters: { message_id: msg.message_id } });
+      await ctx.reply(limited, {
+        reply_parameters: { message_id: msg.message_id },
+      });
       return;
     }
 
@@ -370,7 +385,10 @@ export class BetTextService {
     const chatId = ctx.chat?.id;
     const reply = async (
       text: string,
-      options: { reply_parameters?: unknown; reply_markup?: InlineKeyboardMarkup } = {},
+      options: {
+        reply_parameters?: unknown;
+        reply_markup?: InlineKeyboardMarkup;
+      } = {},
     ) =>
       measure('preview', async () => {
         const { reply_parameters: _replyParameters, ...editOptions } = options;
@@ -477,7 +495,7 @@ export class BetTextService {
                 house: caption,
                 odd: extracted.odd ?? NaN,
                 stake: extracted.stake ?? NaN,
-                at: new Date((msg.date) * 1000),
+                at: new Date(msg.date * 1000),
               },
               pendentes.value,
             ).map(({ candidate, score }) => ({
@@ -513,7 +531,9 @@ export class BetTextService {
     if (chatId === undefined) return;
     const limited = this.rateLimit ? await this.aiLimitMessage(ctx) : null;
     if (limited) {
-      await ctx.reply(limited, { reply_parameters: { message_id: msg.message_id } });
+      await ctx.reply(limited, {
+        reply_parameters: { message_id: msg.message_id },
+      });
       return;
     }
     const audio = 'voice' in msg ? msg.voice : msg.audio;
@@ -644,9 +664,7 @@ export class BetTextService {
     const percent = extractPercent(text);
     if (limitChanged && percent !== null) {
       const user = await this.usersService.findByTelegramUserId(senderId(ctx));
-      const banca = user
-        ? await this.usersService.getUserStake(user.id)
-        : null;
+      const banca = user ? await this.usersService.getUserStake(user.id) : null;
       if (banca !== null) stake = (percent / 100) * banca;
     }
     const limit = extractLimitFromText(text);

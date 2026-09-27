@@ -14,10 +14,14 @@ import {
   extractOddFromText,
 } from './utils/tip-extractors.util';
 import { parseCallbackAction } from './utils/callback-parsing.util';
-import { callbackData, callbackMessage, senderId, type BotContext } from './utils/bot-context';
+import {
+  callbackData,
+  callbackMessage,
+  senderId,
+  type BotContext,
+} from './utils/bot-context';
 import { frontUrl } from '../common/utils/front-url';
 import { errorArgs } from '../common/utils/log';
-
 
 // Dispatcher de callback_query: os botões da cópia individual (Planilhar /
 // Editar / Aposta Caiu / Voltar) e os da lista compacta do /pendentes
@@ -61,7 +65,9 @@ export class TelegramCallbackService {
       });
     } catch (err) {
       if (!String(err).includes('message is not modified'))
-        this.logger.error(...errorArgs('Erro ao atualizar lista de pendentes', err));
+        this.logger.error(
+          ...errorArgs('Erro ao atualizar lista de pendentes', err),
+        );
     }
   }
 
@@ -185,7 +191,9 @@ export class TelegramCallbackService {
           await ctx.answerCbQuery('✅ Essa aposta já está planilhada.');
           return;
         }
-        this.logger.error(...errorArgs('❌ Erro ao planilhar via callback', err));
+        this.logger.error(
+          ...errorArgs('❌ Erro ao planilhar via callback', err),
+        );
         await ctx.answerCbQuery(
           '❌ Erro ao planilhar. Veja o chat para detalhes.',
         );
@@ -245,7 +253,9 @@ export class TelegramCallbackService {
             : '❌ A aposta não está mais lá — talvez já tenha sido apagada.',
         );
       } catch (err) {
-        this.logger.error(...errorArgs('❌ Erro ao desfazer print vinculado', err));
+        this.logger.error(
+          ...errorArgs('❌ Erro ao desfazer print vinculado', err),
+        );
         await ctx.answerCbQuery('❌ Não deu pra desfazer.');
       } finally {
         this.inFlight.delete(lock);
@@ -274,7 +284,12 @@ export class TelegramCallbackService {
           },
         );
       } catch (err) {
-        this.logger.error(...errorArgs('⚠️ Falha ao mandar prompt de edição com blockquote, caindo pra texto simples', err));
+        this.logger.error(
+          ...errorArgs(
+            '⚠️ Falha ao mandar prompt de edição com blockquote, caindo pra texto simples',
+            err,
+          ),
+        );
         await ctx.reply(`${preamble}${text}`, {
           reply_markup: { force_reply: true },
           link_preview_options: { is_disabled: true },
@@ -312,9 +327,7 @@ export class TelegramCallbackService {
             },
           });
         if (tipId !== null) {
-          const user = await this.usersService.findByTelegramUserId(
-            fromId,
-          );
+          const user = await this.usersService.findByTelegramUserId(fromId);
           if (user) await this.tipsService.dismissTip(tipId, user.id);
         }
         await ctx.answerCbQuery('❌ Marcado como aposta caiu!');
@@ -345,9 +358,7 @@ export class TelegramCallbackService {
             ),
           });
         if (tipId !== null) {
-          const user = await this.usersService.findByTelegramUserId(
-            fromId,
-          );
+          const user = await this.usersService.findByTelegramUserId(fromId);
           if (user) await this.tipsService.undismissTip(tipId, user.id);
         }
         await ctx.answerCbQuery('↩️ Voltando');
@@ -377,7 +388,9 @@ export class TelegramCallbackService {
         });
         await ctx.answerCbQuery();
       } catch (err) {
-        this.logger.error(...errorArgs('❌ Erro ao trocar página de pendentes', err));
+        this.logger.error(
+          ...errorArgs('❌ Erro ao trocar página de pendentes', err),
+        );
         await ctx.answerCbQuery('❌ Erro ao trocar página.');
       }
       return;
@@ -477,7 +490,9 @@ export class TelegramCallbackService {
             }
             // processBetText ja respondeu no chat com o motivo; o toast so
             // aponta pra la, mas o log guarda a causa.
-            this.logger.error(...errorArgs('❌ Erro ao planilhar do /pendentes', err));
+            this.logger.error(
+              ...errorArgs('❌ Erro ao planilhar do /pendentes', err),
+            );
             await ctx.answerCbQuery(
               `❌ ${label}: não deu pra planilhar. Veja a resposta no chat.`,
             );

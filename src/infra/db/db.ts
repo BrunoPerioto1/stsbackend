@@ -5,7 +5,10 @@ import { defaults, Pool, types, type PoolConfig } from 'pg';
 // tudo andava 3h — a aposta gravada às 12h voltava 09h. Fixa UTC nos dois
 // sentidos, em qualquer máquina, sem depender de TZ no ambiente.
 const TIMESTAMP_OID = 1114;
-types.setTypeParser(TIMESTAMP_OID, (value: string) => new Date(`${value.replace(' ', 'T')}Z`));
+types.setTypeParser(
+  TIMESTAMP_OID,
+  (value: string) => new Date(`${value.replace(' ', 'T')}Z`),
+);
 defaults.parseInputDatesAsUTC = true;
 
 /**
@@ -19,7 +22,9 @@ defaults.parseInputDatesAsUTC = true;
  *    não está no Node, então verificar sem ela derruba a conexão; criptografar
  *    já tira a senha do texto aberto.
  */
-export function sslConfig(env: NodeJS.ProcessEnv = process.env): PoolConfig['ssl'] {
+export function sslConfig(
+  env: NodeJS.ProcessEnv = process.env,
+): PoolConfig['ssl'] {
   const mode = (env.DB_SSL ?? env.PGSSLMODE ?? '').toLowerCase();
   if (mode === 'disable' || mode === 'false') return false;
 
@@ -28,7 +33,8 @@ export function sslConfig(env: NodeJS.ProcessEnv = process.env): PoolConfig['ssl
   if (mode === 'verify-full' || mode === 'verify-ca') return true;
 
   const host = (env.DB_HOST ?? '').toLowerCase();
-  const local = !host || host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  const local =
+    !host || host === 'localhost' || host === '127.0.0.1' || host === '::1';
   if (local && !mode) return false;
   return { rejectUnauthorized: false };
 }

@@ -10,7 +10,11 @@ function setup(user: object | null) {
   const usersService = {
     findByTelegramUserId: jest.fn().mockResolvedValue(user),
   };
-  const service = new BotCommandsService(usersService as any, {} as any, {} as any);
+  const service = new BotCommandsService(
+    usersService as any,
+    {} as any,
+    {} as any,
+  );
   return { service, usersService };
 }
 
@@ -89,9 +93,9 @@ describe('blockIfNoAccess', () => {
       null,
     ]) {
       const { service } = setup(user);
-      await expect(service.blockIfNoAccess(asCtx(privateMessage('oi')))).resolves.toBe(
-        false,
-      );
+      await expect(
+        service.blockIfNoAccess(asCtx(privateMessage('oi'))),
+      ).resolves.toBe(false);
     }
   });
 
@@ -120,10 +124,14 @@ describe('blockIfNoAccess', () => {
     const usersService = {
       findByTelegramUserId: jest.fn().mockRejectedValue(new Error('db')),
     };
-    const failing = new BotCommandsService(usersService as any, {} as any, {} as any);
-    jest.spyOn(console, 'error').mockImplementation(() => undefined);
-    await expect(failing.blockIfNoAccess(asCtx(privateMessage('oi')))).resolves.toBe(
-      false,
+    const failing = new BotCommandsService(
+      usersService as any,
+      {} as any,
+      {} as any,
     );
+    jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    await expect(
+      failing.blockIfNoAccess(asCtx(privateMessage('oi'))),
+    ).resolves.toBe(false);
   });
 });

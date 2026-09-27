@@ -27,7 +27,9 @@ export class AdminGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const { user } = context.switchToHttp().getRequest<{ user?: JwtPayload }>();
-    const current = user?.userId ? await this.usersRepository.findById(user.userId as UserId) : undefined;
+    const current = user?.userId
+      ? await this.usersRepository.findById(user.userId as UserId)
+      : undefined;
     if (current?.roleId !== ADMIN_ROLE_ID || current.isActive === false) {
       throw new ForbiddenException('Acesso restrito ao administrador');
     }

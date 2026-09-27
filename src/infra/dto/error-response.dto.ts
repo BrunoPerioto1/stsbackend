@@ -3,19 +3,19 @@ import { ApiProperty } from '@nestjs/swagger';
 class ErrorResponseDto {
   @ApiProperty({
     description: 'Código de status HTTP',
-    example: 400
+    example: 400,
   })
   statusCode!: number;
 
   @ApiProperty({
     description: 'Mensagem de erro',
-    example: 'Saldo insuficiente para saque'
+    example: 'Saldo insuficiente para saque',
   })
   message!: string;
 
   @ApiProperty({
     description: 'Tipo de erro',
-    example: 'Bad Request'
+    example: 'Bad Request',
   })
   error!: string;
 }
@@ -23,13 +23,13 @@ class ErrorResponseDto {
 export class InsufficientBalanceErrorDto extends ErrorResponseDto {
   @ApiProperty({
     description: 'Saldo atual da casa',
-    example: 150.75
+    example: 150.75,
   })
   currentBalance!: number;
 
   @ApiProperty({
     description: 'Valor solicitado para saque',
-    example: 200.00
+    example: 200.0,
   })
   requestedAmount!: number;
 }

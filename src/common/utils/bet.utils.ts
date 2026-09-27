@@ -53,7 +53,6 @@ export function endOfDay(date: Date): Date {
   return d;
 }
 
-
 export function normalizeName(name?: string): string {
   const value = (name ?? '').toString();
   if (!value) return '';

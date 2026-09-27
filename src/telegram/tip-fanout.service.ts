@@ -111,7 +111,9 @@ export class TipFanoutService {
     // Reentrega do webhook (o Telegram repete quando a resposta demora): a
     // primeira entrega já fez o fan-out, repetir mandaria a DM duas vezes.
     if (!created) {
-      this.logger.log(`📨 handleTipsMessage: tip ${tip.id} já registrada, fan-out ignorado`);
+      this.logger.log(
+        `📨 handleTipsMessage: tip ${tip.id} já registrada, fan-out ignorado`,
+      );
       return;
     }
 
@@ -129,25 +131,29 @@ export class TipFanoutService {
 
     // Em paralelo, com teto: um de cada vez, a última DM chegava segundos
     // depois da primeira. Cada envio já trata o próprio erro.
-    await forEachWithConcurrency(destinatarios, FANOUT_CONCURRENCY, async (user) => {
-      const stillMember = await this.tipsGroup
-        .isMember(user.telegramUserId as number)
-        .catch(() => false);
-      if (!stillMember) return;
+    await forEachWithConcurrency(
+      destinatarios,
+      FANOUT_CONCURRENCY,
+      async (user) => {
+        const stillMember = await this.tipsGroup
+          .isMember(user.telegramUserId as number)
+          .catch(() => false);
+        if (!stillMember) return;
 
-      await this.sendTipCopyToUser(
-        user,
-        tip,
-        chatId,
-        messageId,
-        hasMedia,
-        baseText,
-        baseEntities,
-        text,
-        limit,
-        showKeyboard,
-      );
-    });
+        await this.sendTipCopyToUser(
+          user,
+          tip,
+          chatId,
+          messageId,
+          hasMedia,
+          baseText,
+          baseEntities,
+          text,
+          limit,
+          showKeyboard,
+        );
+      },
+    );
   }
 
   // Manda a cópia individual de uma tip (com recomendação de aposta calculada
@@ -158,7 +164,11 @@ export class TipFanoutService {
   async sendTipCopyToUser(
     // `stake` vem pronto do fan-out (a query já traz); o reenvio avulso não
     // tem e busca.
-    user: { id: number; telegramUserId: number | null; stake?: number | string | null },
+    user: {
+      id: number;
+      telegramUserId: number | null;
+      stake?: number | string | null;
+    },
     tip: { id: number; percent: number | null },
     chatId: number,
     messageId: number,
@@ -263,7 +273,12 @@ export class TipFanoutService {
         });
       }
     } catch (err) {
-      this.logger.error(...errorArgs(`⚠️ Não foi possível enviar tip para o usuário (telegramUserId=${user.telegramUserId})`, err));
+      this.logger.error(
+        ...errorArgs(
+          `⚠️ Não foi possível enviar tip para o usuário (telegramUserId=${user.telegramUserId})`,
+          err,
+        ),
+      );
     }
   }
 
@@ -352,7 +367,12 @@ export class TipFanoutService {
         );
       }
     } catch (err) {
-      this.logger.error(...errorArgs(`⚠️ Não foi possível atualizar a mensagem original da tip (tipId=${tipId})`, err));
+      this.logger.error(
+        ...errorArgs(
+          `⚠️ Não foi possível atualizar a mensagem original da tip (tipId=${tipId})`,
+          err,
+        ),
+      );
     }
   }
 }

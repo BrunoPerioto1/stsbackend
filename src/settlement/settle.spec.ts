@@ -13,12 +13,23 @@ describe('selecao / mercado: regressao do CSV real', () => {
     ['2-0 / Resultado Correto', 2, 0, ResultIdEnum.WON],
     ['Empate / Resultado Final', 1, 1, ResultIdEnum.WON],
   ])('%s', (market, home, away, result) => {
-    expect(settleBet(market, TIMES, placar(home, away), 'finished').resultId).toBe(result);
+    expect(
+      settleBet(market, TIMES, placar(home, away), 'finished').resultId,
+    ).toBe(result);
   });
   it('preserva todas as pernas e recusa alternativas de placar', () => {
-    expect(settleBet('Sim / Ambos os Times Marcam / Mais de 3.5 / Total de Gols', TIMES, placar(2, 1), 'finished').resultId).toBe(ResultIdEnum.LOST);
+    expect(
+      settleBet(
+        'Sim / Ambos os Times Marcam / Mais de 3.5 / Total de Gols',
+        TIMES,
+        placar(2, 1),
+        'finished',
+      ).resultId,
+    ).toBe(ResultIdEnum.LOST);
     expect(parseMarket('1-0 / 2-0 / Resultado Correto', TIMES).ok).toBe(false);
-    expect(parseMarket('Empate / Resultado Final / seleção desconhecida', TIMES).ok).toBe(false);
+    expect(
+      parseMarket('Empate / Resultado Final / seleção desconhecida', TIMES).ok,
+    ).toBe(false);
   });
 });
 
@@ -336,9 +347,12 @@ describe('recusas que protegem a planilha', () => {
 
   it.each(casos)('recusa %s', (market, reason) => {
     const r = liquida(market, 2, 1);
-    if (reason === 'WON' || reason === 'LOST') expect(r.resultId).toBe(reason === 'WON' ? ResultIdEnum.WON : ResultIdEnum.LOST);
+    if (reason === 'WON' || reason === 'LOST')
+      expect(r.resultId).toBe(
+        reason === 'WON' ? ResultIdEnum.WON : ResultIdEnum.LOST,
+      );
     else expect(r.resultId).toBeNull();
-    if (!['WON','LOST'].includes(reason)) expect(r.reason).toBe(reason);
+    if (!['WON', 'LOST'].includes(reason)) expect(r.reason).toBe(reason);
   });
 });
 
@@ -371,9 +385,16 @@ describe('parseMarket', () => {
 // Aposta 12024 (2026-09-15): rótulo e nome em português que a casa usa.
 describe('intervalo/final "Intervalo/Tempo Completo"', () => {
   it('reconhece o mercado com o nome da casa', () => {
-    const r = parseMarket('Florentina/Florentina - Intervalo/Tempo Completo', { home: 'Fiorentina', away: 'Pisa' });
+    const r = parseMarket('Florentina/Florentina - Intervalo/Tempo Completo', {
+      home: 'Fiorentina',
+      away: 'Pisa',
+    });
     expect(r.ok && r.conditions).toEqual([
-      { normalizedMarket: 'INTERVALO_FINAL', scope: 'REGULATION', picks: ['HOME', 'HOME'] },
+      {
+        normalizedMarket: 'INTERVALO_FINAL',
+        scope: 'REGULATION',
+        picks: ['HOME', 'HOME'],
+      },
     ]);
   });
 });

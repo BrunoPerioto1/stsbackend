@@ -1,6 +1,11 @@
 import { matchEvent, matchEvents, type CandidateEvent } from './event-matching';
 
-const evento = (externalId: string, homeName: string, awayName: string, startAt: string): CandidateEvent => ({
+const evento = (
+  externalId: string,
+  homeName: string,
+  awayName: string,
+  startAt: string,
+): CandidateEvent => ({
   externalId,
   provider: 'sofascore',
   startAt: new Date(startAt),
@@ -20,21 +25,50 @@ const CANDIDATOS = [
 
 describe('matchEvents', () => {
   it('um resultado por confronto, na ordem do texto', () => {
-    const achados = matchEvents('CD Recoleta x Boca Juniors / São Paulo x Bolívar', 'Boca Juniors e São Paulo vencerem', CANDIDATOS, 'Futebol');
-    expect(achados.map((a) => [a.position, a.confronto, a.match?.externalId])).toEqual([
+    const achados = matchEvents(
+      'CD Recoleta x Boca Juniors / São Paulo x Bolívar',
+      'Boca Juniors e São Paulo vencerem',
+      CANDIDATOS,
+      'Futebol',
+    );
+    expect(
+      achados.map((a) => [a.position, a.confronto, a.match?.externalId]),
+    ).toEqual([
       [0, 'CD Recoleta x Boca Juniors', '10'],
       [1, 'São Paulo x Bolívar', '11'],
     ]);
   });
 
   it('confronto que não casou vem sem jogo, e os outros continuam', () => {
-    const achados = matchEvents('CD Recoleta x Boca Juniors / Time Nenhum x Outro Time', '', CANDIDATOS, 'Futebol');
-    expect(achados.map((a) => a.match?.externalId ?? null)).toEqual(['10', null]);
+    const achados = matchEvents(
+      'CD Recoleta x Boca Juniors / Time Nenhum x Outro Time',
+      '',
+      CANDIDATOS,
+      'Futebol',
+    );
+    expect(achados.map((a) => a.match?.externalId ?? null)).toEqual([
+      '10',
+      null,
+    ]);
   });
 
   it('matchEvent segue exigindo todos os confrontos', () => {
-    expect(matchEvent('CD Recoleta x Boca Juniors / Time Nenhum x Outro Time', '', CANDIDATOS, 'Futebol')).toBeNull();
+    expect(
+      matchEvent(
+        'CD Recoleta x Boca Juniors / Time Nenhum x Outro Time',
+        '',
+        CANDIDATOS,
+        'Futebol',
+      ),
+    ).toBeNull();
     // A data da múltipla é a do primeiro jogo, não a do primeiro no texto.
-    expect(matchEvent('CD Recoleta x Boca Juniors / São Paulo x Bolívar', '', CANDIDATOS, 'Futebol')?.externalId).toBe('11');
+    expect(
+      matchEvent(
+        'CD Recoleta x Boca Juniors / São Paulo x Bolívar',
+        '',
+        CANDIDATOS,
+        'Futebol',
+      )?.externalId,
+    ).toBe('11');
   });
 });

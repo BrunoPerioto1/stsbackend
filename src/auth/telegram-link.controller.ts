@@ -4,7 +4,12 @@ import { randomInt } from 'crypto';
 import { User } from '../common/decorators/user.decorator';
 import { UsersRepository } from '../infra/repository/users.repository';
 import type { UserId } from '../db_types/Users';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 
 // O código vale por cinco minutos — tempo de abrir o Telegram e colar a linha,
 // não de deixar aberto num navegador emprestado.
@@ -26,20 +31,25 @@ export class TelegramLinkController {
         code: {
           type: 'string',
           example: '481906',
-          description: 'Código de vinculação de seis dígitos'
+          description: 'Código de vinculação de seis dígitos',
         },
         expiresAt: {
           type: 'string',
-          description: 'Instante em que o código deixa de valer (ISO)'
-        }
-      }
-    }
+          description: 'Instante em que o código deixa de valer (ISO)',
+        },
+      },
+    },
   })
-  @ApiResponse({ status: 401, description: 'Não autorizado - Token JWT inválido ou ausente' })
+  @ApiResponse({
+    status: 401,
+    description: 'Não autorizado - Token JWT inválido ou ausente',
+  })
   @ApiBearerAuth()
   @Post('link-telegram')
   @UseGuards(AuthGuard('jwt'))
-  async generateLinkCode(@User('userId') id: number): Promise<{ code: string; expiresAt: string }> {
+  async generateLinkCode(
+    @User('userId') id: number,
+  ): Promise<{ code: string; expiresAt: string }> {
     const userId = id as UserId;
     const user = await this.usersRepository.findById(userId);
     if (!user) {

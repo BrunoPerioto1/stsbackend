@@ -1,6 +1,6 @@
-import type { ColumnType, Selectable } from "kysely";
+import type { ColumnType, Selectable } from 'kysely';
 
-export type SportId = number & { __type: "SportId" };
+export type SportId = number & { __type: 'SportId' };
 
 export default interface SportsTable {
   id: ColumnType<SportId, SportId | undefined, never>;

@@ -1,8 +1,15 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { BettingHouseId } from '../../db_types/BettingHouse';
 import { UserId } from '../../db_types/Users';
-import { HouseTransactionId, NewHouseTransaction, UpdateHouseTransaction } from '../../db_types/HouseTransactions';
-import { DATABASE_READ_CONNECTION, DATABASE_WRITE_CONNECTION } from '../db/db.module';
+import {
+  HouseTransactionId,
+  NewHouseTransaction,
+  UpdateHouseTransaction,
+} from '../../db_types/HouseTransactions';
+import {
+  DATABASE_READ_CONNECTION,
+  DATABASE_WRITE_CONNECTION,
+} from '../db/db.module';
 import { Kysely } from 'kysely';
 import { Database } from '../db/database.types';
 import { isNotEmpty } from 'class-validator';
@@ -16,7 +23,6 @@ interface FilterGetTransactions {
 
 @Injectable()
 export class TransactionRepository {
-
   constructor(
     @Inject(DATABASE_WRITE_CONNECTION)
     private readonly dbWrite: Kysely<Database>,
@@ -24,78 +30,82 @@ export class TransactionRepository {
     private readonly dbRead: Kysely<Database>,
   ) {}
 
- async create(newHouseTransaction: NewHouseTransaction) {
-  const result = await this.dbWrite
-    .insertInto("houseTransactions")
-    .values(newHouseTransaction)
-    .returning("id")
-    .executeTakeFirstOrThrow();
+  async create(newHouseTransaction: NewHouseTransaction) {
+    const result = await this.dbWrite
+      .insertInto('houseTransactions')
+      .values(newHouseTransaction)
+      .returning('id')
+      .executeTakeFirstOrThrow();
 
-  return result;
-}
+    return result;
+  }
 
-async findAllTransactions(userId: UserId, filter?: FilterGetTransactions) {
-  return this.dbRead
-    .selectFrom("houseTransactions as ht")
-    .leftJoin("bettingHouses as h", "ht.houseId", "h.id")
-    .leftJoin("transactionTypes as tt", "ht.transactionTypeId", "tt.id")
-    .select([
-      "ht.id",
-      "ht.houseId",
-      "ht.transactionTypeId",
-      "ht.description",
-      "h.name as houseName",
-      "tt.name as transactionType",
-      "ht.value",
-      "ht.createdAt",
-    ])
-    .where("ht.userId", "=", userId) 
-    .$if(isNotEmpty(filter?.houseId), (qb) =>
-      qb.where("ht.houseId", "=", filter!.houseId!)
-    )
-    .$if(isNotEmpty(filter?.startDate), (qb) =>
-      qb.where("ht.createdAt", ">=", startOfDay(filter!.startDate!))
-    )
-    .$if(isNotEmpty(filter?.endDate), (qb) =>
-      qb.where("ht.createdAt", "<", endOfDay(filter!.endDate!))
-    )
-    .orderBy("ht.createdAt", "desc")
-    .execute();
-}
+  async findAllTransactions(userId: UserId, filter?: FilterGetTransactions) {
+    return this.dbRead
+      .selectFrom('houseTransactions as ht')
+      .leftJoin('bettingHouses as h', 'ht.houseId', 'h.id')
+      .leftJoin('transactionTypes as tt', 'ht.transactionTypeId', 'tt.id')
+      .select([
+        'ht.id',
+        'ht.houseId',
+        'ht.transactionTypeId',
+        'ht.description',
+        'h.name as houseName',
+        'tt.name as transactionType',
+        'ht.value',
+        'ht.createdAt',
+      ])
+      .where('ht.userId', '=', userId)
+      .$if(isNotEmpty(filter?.houseId), (qb) =>
+        qb.where('ht.houseId', '=', filter!.houseId!),
+      )
+      .$if(isNotEmpty(filter?.startDate), (qb) =>
+        qb.where('ht.createdAt', '>=', startOfDay(filter!.startDate!)),
+      )
+      .$if(isNotEmpty(filter?.endDate), (qb) =>
+        qb.where('ht.createdAt', '<', endOfDay(filter!.endDate!)),
+      )
+      .orderBy('ht.createdAt', 'desc')
+      .execute();
+  }
   // Sempre com o dono na cláusula: movimentação de outro usuário é tratada
   // como inexistente, não como proibida.
   async findById(id: HouseTransactionId, userId: UserId) {
     return this.dbRead
-      .selectFrom("houseTransactions")
+      .selectFrom('houseTransactions')
       .selectAll()
-      .where("id", "=", id)
-      .where("userId", "=", userId)
+      .where('id', '=', id)
+      .where('userId', '=', userId)
       .executeTakeFirst();
   }
 
-  async update(id: HouseTransactionId, userId: UserId, changes: UpdateHouseTransaction) {
+  async update(
+    id: HouseTransactionId,
+    userId: UserId,
+    changes: UpdateHouseTransaction,
+  ) {
     return this.dbWrite
-      .updateTable("houseTransactions")
+      .updateTable('houseTransactions')
       .set({ ...changes, updatedAt: new Date() })
-      .where("id", "=", id)
-      .where("userId", "=", userId)
-      .returning("id")
+      .where('id', '=', id)
+      .where('userId', '=', userId)
+      .returning('id')
       .executeTakeFirst();
   }
 
   async delete(id: HouseTransactionId, userId: UserId) {
     return this.dbWrite
-      .deleteFrom("houseTransactions")
-      .where("id", "=", id)
-      .where("userId", "=", userId)
+      .deleteFrom('houseTransactions')
+      .where('id', '=', id)
+      .where('userId', '=', userId)
       .executeTakeFirst();
   }
 
   async findAllTypeTransactions() {
     return this.dbRead
-      .selectFrom("transactionTypes")
-      .select(["id", "name"])
-      .orderBy("name", "asc")
+      .selectFrom('transactionTypes')
+      .select(['id', 'name'])
+      .orderBy('name', 'asc')
       .execute();
   }
 }

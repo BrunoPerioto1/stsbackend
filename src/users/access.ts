@@ -21,8 +21,11 @@ const DAY_MS = 86_400_000;
 export function accessStatus(user: AccessFields): 'new' | 'expired' {
   if (!user.accessUntil || !user.createdAt) return 'expired';
   const trialEnd =
-    new Date(user.createdAt).getTime() + Number(process.env.TRIAL_DAYS ?? 0) * DAY_MS;
-  return new Date(user.accessUntil).getTime() <= trialEnd + 60_000 ? 'new' : 'expired';
+    new Date(user.createdAt).getTime() +
+    Number(process.env.TRIAL_DAYS ?? 0) * DAY_MS;
+  return new Date(user.accessUntil).getTime() <= trialEnd + 60_000
+    ? 'new'
+    : 'expired';
 }
 
 // Cobrança é PIX manual: o admin confere o pagamento e empurra o vencimento.
@@ -86,7 +89,9 @@ export function daysUntil(date: Date, now = new Date()): number {
  */
 export function billingInfo(userId?: number) {
   const pixKey = process.env.PIX_KEY || null;
-  const price = process.env.ACCESS_PRICE ? Number(process.env.ACCESS_PRICE) : null;
+  const price = process.env.ACCESS_PRICE
+    ? Number(process.env.ACCESS_PRICE)
+    : null;
   const txid = userId ? pixTxid(userId) : null;
   return {
     pixKey,
@@ -127,9 +132,15 @@ export function pixKeyboard(userId?: number) {
   const { pixKey, pixCode } = billingInfo(userId);
   if (!pixKey) return undefined;
   const rows: any[][] = [];
-  if (pixCode) rows.push([{ text: '📋 Copiar PIX copia e cola', copy_text: { text: pixCode } }]);
+  if (pixCode)
+    rows.push([
+      { text: '📋 Copiar PIX copia e cola', copy_text: { text: pixCode } },
+    ]);
   rows.push([{ text: '🔑 Copiar chave PIX', copy_text: { text: pixKey } }]);
-  if (userId) rows.push([{ text: '✅ Já paguei', callback_data: PAYMENT_CLAIM_CALLBACK }]);
+  if (userId)
+    rows.push([
+      { text: '✅ Já paguei', callback_data: PAYMENT_CLAIM_CALLBACK },
+    ]);
   return { inline_keyboard: rows };
 }
 

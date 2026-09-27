@@ -35,7 +35,9 @@ export async function createNestApp(): Promise<NestExpressApplication> {
       const { configureSwagger } = await import('./swagger');
       configureSwagger(app);
     } catch (err) {
-      new Logger('Bootstrap').error(...errorArgs('Falha ao carregar a documentação Swagger/Scalar', err));
+      new Logger('Bootstrap').error(
+        ...errorArgs('Falha ao carregar a documentação Swagger/Scalar', err),
+      );
     }
   }
 

@@ -1,4 +1,9 @@
-import { HttpException, HttpStatus, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { assertAccess } from '../users/access';
@@ -25,7 +30,10 @@ export class AuthService {
     const user = await this.usersService.findById(userId);
     if (!user) throw new UnauthorizedException('Usuário não encontrado');
 
-    const isMatch = await bcrypt.compare(dto.currentPassword, user.passwordHash);
+    const isMatch = await bcrypt.compare(
+      dto.currentPassword,
+      user.passwordHash,
+    );
     if (!isMatch) throw new UnauthorizedException('Senha atual incorreta');
 
     await this.usersService.setPassword(userId, dto.newPassword);
@@ -92,7 +100,10 @@ export class AuthService {
 
     return {
       // "Manter conectado" vale 30 dias; sem ele, 1 dia (o padrão do módulo).
-      access_token: this.jwtService.sign(payload, loginDTO.remember ? { expiresIn: '30d' } : undefined),
+      access_token: this.jwtService.sign(
+        payload,
+        loginDTO.remember ? { expiresIn: '30d' } : undefined,
+      ),
     };
   }
 }

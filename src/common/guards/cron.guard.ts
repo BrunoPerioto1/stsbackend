@@ -14,9 +14,12 @@ import {
 export class CronGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const secret = process.env.CRON_SECRET;
-    const auth = context.switchToHttp().getRequest<{ headers: Record<string, string | undefined> }>()
+    const auth = context
+      .switchToHttp()
+      .getRequest<{ headers: Record<string, string | undefined> }>()
       .headers.authorization;
-    if (!secret || auth !== `Bearer ${secret}`) throw new UnauthorizedException();
+    if (!secret || auth !== `Bearer ${secret}`)
+      throw new UnauthorizedException();
     return true;
   }
 }

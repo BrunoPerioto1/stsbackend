@@ -1,8 +1,16 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { AdminRepository } from '../infra/repository/admin.repository';
 import { UsersRepository } from '../infra/repository/users.repository';
 import { HouseRepository } from '../infra/repository/house.repository';
-import { CreateAdminHouseDTO, UpdateAdminHouseDTO, UpdateAdminUserDTO } from './dto/admin.dto';
+import {
+  CreateAdminHouseDTO,
+  UpdateAdminHouseDTO,
+  UpdateAdminUserDTO,
+} from './dto/admin.dto';
 import { normalizeName } from '../common/utils/bet.utils';
 import { normalizeFederalHouseUrl } from '../common/utils/house-url.util';
 import type { BettingHouseId } from '../db_types/BettingHouse';
@@ -12,7 +20,9 @@ import type { RoleId } from '../db_types/Roles';
 import { extendAccess, hasAccess } from '../users/access';
 import { TipsGroupService } from '../telegram/tips-group.service';
 
-type AdminHouseRow = Awaited<ReturnType<HouseRepository['findAllHousesForAdmin']>>[number];
+type AdminHouseRow = Awaited<
+  ReturnType<HouseRepository['findAllHousesForAdmin']>
+>[number];
 
 @Injectable()
 export class AdminService {
@@ -24,7 +34,9 @@ export class AdminService {
   ) {}
 
   async overview(userId: number) {
-    const { deliveryFilters, ...data } = await this.adminRepository.overview(userId as UserId);
+    const { deliveryFilters, ...data } = await this.adminRepository.overview(
+      userId as UserId,
+    );
 
     /**
      * Tip que passaria pelo filtro de pelo menos um usuário vinculado e mesmo
@@ -36,7 +48,9 @@ export class AdminService {
      * um alarme.
      */
     const expected = (percent: number | null) =>
-      deliveryFilters.some((f) => f === null || percent === null || Number(percent) >= f);
+      deliveryFilters.some(
+        (f) => f === null || percent === null || Number(percent) >= f,
+      );
 
     const undeliveredTips = data.undeliveredTips.map((tip) => ({
       id: Number(tip.id),
@@ -51,7 +65,8 @@ export class AdminService {
     return {
       ...data,
       undeliveredTips,
-      undeliveredExpected: undeliveredTips.filter((t) => t.expectedDelivery).length,
+      undeliveredExpected: undeliveredTips.filter((t) => t.expectedDelivery)
+        .length,
     };
   }
 
@@ -69,7 +84,10 @@ export class AdminService {
 
   async listHouses() {
     const rows = await this.houseRepository.findAllHousesForAdmin();
-    return rows.map((house) => ({ ...house, betCount: Number(house.betCount) }));
+    return rows.map((house) => ({
+      ...house,
+      betCount: Number(house.betCount),
+    }));
   }
 
   /**
@@ -83,10 +101,19 @@ export class AdminService {
     const name = dto.name.trim();
 
     this.assertNameIsFree(houses, name);
-    const aliases = this.normalizeAliases(dto.aliases ?? [], name, houses, null);
+    const aliases = this.normalizeAliases(
+      dto.aliases ?? [],
+      name,
+      houses,
+      null,
+    );
     const websiteUrl = normalizeFederalHouseUrl(dto.websiteUrl);
 
-    const created = await this.houseRepository.createHouse(name, aliases, websiteUrl);
+    const created = await this.houseRepository.createHouse(
+      name,
+      aliases,
+      websiteUrl,
+    );
     return { ...created, betCount: 0 };
   }
 
@@ -95,7 +122,12 @@ export class AdminService {
     const current = houses.find((h) => Number(h.id) === id);
     if (!current) throw new NotFoundException('Casa não encontrada');
 
-    const update: { name?: string; aliases?: string[]; isActive?: boolean; websiteUrl?: string | null } = {};
+    const update: {
+      name?: string;
+      aliases?: string[];
+      isActive?: boolean;
+      websiteUrl?: string | null;
+    } = {};
 
     if (dto.name !== undefined) {
       const name = dto.name.trim();
@@ -104,26 +136,43 @@ export class AdminService {
     }
 
     if (dto.aliases !== undefined) {
-      update.aliases = this.normalizeAliases(dto.aliases, update.name ?? current.name, houses, id);
+      update.aliases = this.normalizeAliases(
+        dto.aliases,
+        update.name ?? current.name,
+        houses,
+        id,
+      );
     }
 
     if (dto.isActive !== undefined) update.isActive = dto.isActive;
-    if (dto.websiteUrl !== undefined) update.websiteUrl = normalizeFederalHouseUrl(dto.websiteUrl);
+    if (dto.websiteUrl !== undefined)
+      update.websiteUrl = normalizeFederalHouseUrl(dto.websiteUrl);
 
     if (Object.keys(update).length === 0) {
       throw new BadRequestException('Nada para atualizar');
     }
 
-    const updated = await this.houseRepository.updateHouse(id as BettingHouseId, update);
+    const updated = await this.houseRepository.updateHouse(
+      id as BettingHouseId,
+      update,
+    );
     if (!updated) throw new NotFoundException('Casa não encontrada');
     return { ...updated, betCount: Number(current.betCount) };
   }
 
-  private assertNameIsFree(houses: AdminHouseRow[], name: string, ignoreId: number | null = null) {
+  private assertNameIsFree(
+    houses: AdminHouseRow[],
+    name: string,
+    ignoreId: number | null = null,
+  ) {
     const normalized = normalizeName(name);
-    const clash = houses.find((h) => Number(h.id) !== ignoreId && normalizeName(h.name) === normalized);
+    const clash = houses.find(
+      (h) => Number(h.id) !== ignoreId && normalizeName(h.name) === normalized,
+    );
     if (clash) {
-      throw new BadRequestException(`"${clash.name}" já é a mesma casa com outra grafia`);
+      throw new BadRequestException(
+        `"${clash.name}" já é a mesma casa com outra grafia`,
+      );
     }
   }
 
@@ -155,7 +204,9 @@ export class AdminService {
             (h.aliases ?? []).some((a) => normalizeName(a) === normalized)),
       );
       if (clash) {
-        throw new BadRequestException(`O apelido "${alias}" já aponta para "${clash.name}"`);
+        throw new BadRequestException(
+          `O apelido "${alias}" já aponta para "${clash.name}"`,
+        );
       }
 
       result.push(alias);
@@ -170,7 +221,11 @@ export class AdminService {
    * tranca o dono do lado de fora da tela — e não sobra nenhum caminho pela
    * aplicação pra desfazer, só o banco.
    */
-  async updateUser(requesterId: number, targetId: number, dto: UpdateAdminUserDTO) {
+  async updateUser(
+    requesterId: number,
+    targetId: number,
+    dto: UpdateAdminUserDTO,
+  ) {
     const target = await this.usersRepository.findById(targetId as UserId);
     if (!target) throw new NotFoundException('Usuário não encontrado');
 
@@ -182,7 +237,10 @@ export class AdminService {
       throw new BadRequestException('Você não pode alterar o próprio papel');
     }
     // Mesmo motivo: um prazo na própria conta tranca o admin quando vencer.
-    if ((dto.extendDays || dto.accessUntil !== undefined) && requesterId === targetId) {
+    if (
+      (dto.extendDays || dto.accessUntil !== undefined) &&
+      requesterId === targetId
+    ) {
       throw new BadRequestException('Sua conta não tem vencimento');
     }
     // Idem: desativar a própria conta tranca o admin do lado de fora na hora.
@@ -205,12 +263,15 @@ export class AdminService {
     if (dto.extendDays && dto.accessUntil !== undefined) {
       throw new BadRequestException('Use +dias ou uma data, não os dois');
     }
-    if (dto.extendDays) fields.accessUntil = extendAccess(target.accessUntil, dto.extendDays);
+    if (dto.extendDays)
+      fields.accessUntil = extendAccess(target.accessUntil, dto.extendDays);
     if (dto.accessUntil !== undefined) {
-      fields.accessUntil = dto.accessUntil === null ? null : new Date(dto.accessUntil);
+      fields.accessUntil =
+        dto.accessUntil === null ? null : new Date(dto.accessUntil);
     }
     // Liberou o acesso: o "Já paguei" foi atendido e sai do destaque do painel.
-    if (dto.extendDays || dto.accessUntil !== undefined) fields.paymentClaimedAt = null;
+    if (dto.extendDays || dto.accessUntil !== undefined)
+      fields.paymentClaimedAt = null;
 
     if (Object.keys(fields).length === 0 && !dto.tipsGroup) {
       throw new BadRequestException('Nada para atualizar');
@@ -229,10 +290,15 @@ export class AdminService {
     } else if (this.shouldReadmit(dto, target, after)) {
       // Depois do UPDATE de propósito: o convite pede aprovação, e o bot
       // aprova lendo o vencimento no banco.
-      const result = await this.tipsGroup.readmit(after.telegramUserId as number, after.accessUntil ?? null);
+      const result = await this.tipsGroup.readmit(
+        after.telegramUserId as number,
+        after.accessUntil ?? null,
+      );
       // Falhou: a marca fica, e a tela oferece "Convidar" pra repetir.
       if (result !== 'failed' && target.tipsGroupRemovedAt) {
-        await this.usersRepository.updateUser(targetId as UserId, { tipsGroupRemovedAt: null });
+        await this.usersRepository.updateUser(targetId as UserId, {
+          tipsGroupRemovedAt: null,
+        });
       }
       groupInvite = result ?? undefined;
     }
@@ -251,18 +317,33 @@ export class AdminService {
    * o grupo Tips saindo dele. Sair é pelo painel, só pra quem está sem acesso
    * — em dia e fora do grupo é o estado que "invite" existe pra desfazer.
    */
-  private assertTipsGroupAction(action: 'remove' | 'invite', after: { telegramUserId: number | null; isActive: boolean | null; accessUntil: Date | null }) {
+  private assertTipsGroupAction(
+    action: 'remove' | 'invite',
+    after: {
+      telegramUserId: number | null;
+      isActive: boolean | null;
+      accessUntil: Date | null;
+    },
+  ) {
     if (!this.tipsGroup.configured) {
-      throw new BadRequestException('Grupo Tips não configurado (TIPS_GROUP_CHAT_ID)');
+      throw new BadRequestException(
+        'Grupo Tips não configurado (TIPS_GROUP_CHAT_ID)',
+      );
     }
     if (!after.telegramUserId) {
-      throw new BadRequestException('Sem Telegram vinculado: o bot não sabe quem é essa pessoa no grupo');
+      throw new BadRequestException(
+        'Sem Telegram vinculado: o bot não sabe quem é essa pessoa no grupo',
+      );
     }
     if (action === 'remove' && hasAccess(after)) {
-      throw new BadRequestException('Só sai do grupo quem está com o acesso vencido');
+      throw new BadRequestException(
+        'Só sai do grupo quem está com o acesso vencido',
+      );
     }
     if (action === 'invite' && !hasAccess(after)) {
-      throw new BadRequestException('O acesso está vencido: libere o prazo antes de convidar');
+      throw new BadRequestException(
+        'O acesso está vencido: libere o prazo antes de convidar',
+      );
     }
   }
 
@@ -273,24 +354,37 @@ export class AdminService {
       // Os motivos comuns são de configuração (bot sem "Banir usuários",
       // pessoa é admin do grupo) — a descrição do Telegram já diz qual.
       const reason =
-        (error as { response?: { description?: string } })?.response?.description ??
+        (error as { response?: { description?: string } })?.response
+          ?.description ??
         (error instanceof Error ? error.message : 'erro desconhecido');
       throw new BadRequestException(`O Telegram recusou a remoção: ${reason}`);
     }
-    await this.usersRepository.updateUser(targetId as UserId, { tipsGroupRemovedAt: new Date() });
+    await this.usersRepository.updateUser(targetId as UserId, {
+      tipsGroupRemovedAt: new Date(),
+    });
   }
 
   // Convite só quando o acesso acabou de voltar (estava vencido, ou foi tirado
   // do grupo) — renovar quem está em dia e lá dentro não manda nada.
   private shouldReadmit(
     dto: UpdateAdminUserDTO,
-    target: { isActive: boolean | null; accessUntil: Date | null; tipsGroupRemovedAt: Date | null },
-    after: { telegramUserId: number | null; isActive: boolean | null; accessUntil: Date | null },
+    target: {
+      isActive: boolean | null;
+      accessUntil: Date | null;
+      tipsGroupRemovedAt: Date | null;
+    },
+    after: {
+      telegramUserId: number | null;
+      isActive: boolean | null;
+      accessUntil: Date | null;
+    },
   ): boolean {
     if (!after.telegramUserId || !hasAccess(after)) return false;
     if (dto.tipsGroup === 'invite') return true;
     const accessChanged =
-      dto.extendDays !== undefined || dto.accessUntil !== undefined || dto.isActive !== undefined;
+      dto.extendDays !== undefined ||
+      dto.accessUntil !== undefined ||
+      dto.isActive !== undefined;
     return accessChanged && (!!target.tipsGroupRemovedAt || !hasAccess(target));
   }
 }

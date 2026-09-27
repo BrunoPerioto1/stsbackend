@@ -46,10 +46,15 @@ export class CreateUserRequestDTO {
 
 // Sem `password`: senha só troca pelo POST /auth/change-password, que pede a
 // atual. Aqui bastava o token — quem pegasse a sessão tomava a conta.
-export class UpdateUserRequestDTO extends PartialType(OmitType(CreateUserRequestDTO, ['password'] as const)) {
+export class UpdateUserRequestDTO extends PartialType(
+  OmitType(CreateUserRequestDTO, ['password'] as const),
+) {
   // Obrigatória só quando o e-mail muda: e-mail é o login, trocar ele é trocar
   // quem entra na conta.
-  @ApiProperty({ required: false, description: 'Senha atual (exigida ao trocar o e-mail)' })
+  @ApiProperty({
+    required: false,
+    description: 'Senha atual (exigida ao trocar o e-mail)',
+  })
   @IsOptional()
   @IsString()
   currentPassword?: string;

@@ -20,7 +20,10 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { User } from '../common/decorators/user.decorator';
-import { AI_PARSE_LIMIT, RateLimitService } from '../common/rate-limit/rate-limit.service';
+import {
+  AI_PARSE_LIMIT,
+  RateLimitService,
+} from '../common/rate-limit/rate-limit.service';
 import {
   BetSlipService,
   MAX_IMAGE_BYTES,

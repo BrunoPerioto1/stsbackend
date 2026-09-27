@@ -126,7 +126,10 @@ export function normalizeBetData(data: RawBetData, diagnostics = true) {
     process.env.NODE_ENV !== 'production'
   ) {
     const raw = Object.fromEntries(
-      Object.keys(normalized).map((key) => [key, data[key as keyof RawBetData]]),
+      Object.keys(normalized).map((key) => [
+        key,
+        data[key as keyof RawBetData],
+      ]),
     );
     logger.debug(`[AI_EXTRACTION] ${JSON.stringify(raw)}`);
     logger.debug(`[BET_NORMALIZED] ${JSON.stringify(normalized)}`);
@@ -247,7 +250,10 @@ export const FORMATOS_DE_MERCADO: readonly (readonly [string, string])[] = [
   ['faltas de jogador', 'Pedro mais de 1.5 - Faltas cometidas'],
   ['faltas sofridas por jogador', 'Pedro mais de 2.5 - Faltas sofridas'],
   ['defesas do goleiro', 'Weverton mais de 2.5 - Defesas do goleiro'],
-  ['resultado e total juntos', 'Flamengo e Mais de 2.5 - Resultado final e total de gols'],
+  [
+    'resultado e total juntos',
+    'Flamengo e Mais de 2.5 - Resultado final e total de gols',
+  ],
 ];
 
 export const BET_EXTRACTION_RULES = `Evento contém somente o confronto/participantes; mercado contém seleção, jogador, linha e condição, preservando negações e conectivos.

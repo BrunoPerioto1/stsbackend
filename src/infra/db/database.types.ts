@@ -24,16 +24,16 @@ export interface Database {
   results: ResultsTable;
   roles: RolesTable;
   users: UsersTable;
-  transactionTypes: TransactionTypesTable
-  houseTransactions: HouseTransactionsTable
-  tips: TipsTable
-  tipDismissals: TipDismissalsTable
-  tipDeliveries: TipDeliveriesTable
-  sportEvents: SportEventsTable
-  eventResults: EventResultsTable
-  eventFacts: EventFactsTable
-  betSettlementSuggestions: BetSettlementSuggestionsTable
-  betEvents: BetEventsTable
-  sports: SportsTable
-  rateLimitHits: RateLimitHitsTable
+  transactionTypes: TransactionTypesTable;
+  houseTransactions: HouseTransactionsTable;
+  tips: TipsTable;
+  tipDismissals: TipDismissalsTable;
+  tipDeliveries: TipDeliveriesTable;
+  sportEvents: SportEventsTable;
+  eventResults: EventResultsTable;
+  eventFacts: EventFactsTable;
+  betSettlementSuggestions: BetSettlementSuggestionsTable;
+  betEvents: BetEventsTable;
+  sports: SportsTable;
+  rateLimitHits: RateLimitHitsTable;
 }

@@ -23,7 +23,11 @@ export class UserDto {
   @ApiProperty({ nullable: true })
   isActive!: boolean | null;
 
-  @ApiProperty({ type: String, nullable: true, description: 'Vencimento do acesso; null = sem prazo' })
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'Vencimento do acesso; null = sem prazo',
+  })
   accessUntil!: Date | null;
 
   @ApiProperty()

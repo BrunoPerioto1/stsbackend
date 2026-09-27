@@ -25,7 +25,7 @@ function candidate(over: Partial<PendingCandidate> = {}): PendingCandidate {
     market: 'Mais de 2.5 gols',
     house: 'Superbet Brasil',
     odd: 2.1,
-      stake: 50,
+    stake: 50,
     at: new Date(AT.getTime() - 30 * 60 * 1000),
     ...over,
   };

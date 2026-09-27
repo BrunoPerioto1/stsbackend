@@ -63,7 +63,10 @@ describe('AdminService.updateUser — grupo Tips', () => {
   const DAY = 86_400_000;
   const expired = () => new Date(Date.now() - DAY);
 
-  function setupGroup(target: object, readmit: 'sent' | 'failed' | null = 'sent') {
+  function setupGroup(
+    target: object,
+    readmit: 'sent' | 'failed' | null = 'sent',
+  ) {
     const usersRepository = {
       findById: jest.fn().mockResolvedValue({
         id: 16,
@@ -115,7 +118,10 @@ describe('AdminService.updateUser — grupo Tips', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(inDay.tipsGroup.remove).not.toHaveBeenCalled();
 
-    const noTelegram = setupGroup({ accessUntil: expired(), telegramUserId: null });
+    const noTelegram = setupGroup({
+      accessUntil: expired(),
+      telegramUserId: null,
+    });
     await expect(
       noTelegram.service.updateUser(1, 16, { tipsGroup: 'remove' }),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -197,7 +203,9 @@ describe('AdminService.updateUser — grupo Tips', () => {
       accessUntil: new Date(Date.now() + DAY),
       tipsGroupRemovedAt: new Date(),
     });
-    const result = await inDay.service.updateUser(1, 16, { tipsGroup: 'invite' });
+    const result = await inDay.service.updateUser(1, 16, {
+      tipsGroup: 'invite',
+    });
     expect(inDay.tipsGroup.readmit).toHaveBeenCalled();
     expect(result.groupInvite).toBe('sent');
 
@@ -212,12 +220,16 @@ describe('AdminService.updateUser — desativar conta', () => {
   it('grava is_active', async () => {
     const { service, usersRepository } = setup();
     await service.updateUser(1, 16, { isActive: false });
-    expect(usersRepository.updateUser).toHaveBeenCalledWith(16, { isActive: false });
+    expect(usersRepository.updateUser).toHaveBeenCalledWith(16, {
+      isActive: false,
+    });
   });
 
   it('recusa desativar a própria conta', async () => {
     const { service, usersRepository } = setup();
-    await expect(service.updateUser(16, 16, { isActive: false })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.updateUser(16, 16, { isActive: false }),
+    ).rejects.toBeInstanceOf(BadRequestException);
     expect(usersRepository.updateUser).not.toHaveBeenCalled();
   });
 });

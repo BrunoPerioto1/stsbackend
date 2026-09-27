@@ -1,8 +1,25 @@
-import { Body, Controller, Delete, Get, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { User } from '../common/decorators/user.decorator';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import { CreateUserRequestDTO, DeleteAccountRequestDTO, UpdateUserRequestDTO } from './dto/request.dto';
+import {
+  CreateUserRequestDTO,
+  DeleteAccountRequestDTO,
+  UpdateUserRequestDTO,
+} from './dto/request.dto';
 import { CreateUserResponseDTO } from './dto/response.dto';
 import { AuthGuard } from '@nestjs/passport';
 
@@ -18,7 +35,6 @@ export class UsersController {
     return this.usersService.createUser(dto);
   }
 
-
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth('jwt')
   @Get('me')
@@ -27,20 +43,27 @@ export class UsersController {
     return this.usersService.getMe(userId);
   }
 
-
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth('jwt')
   @Patch('me')
   @ApiOperation({ summary: 'Atualizar usuário logado' })
-  async update(@User('userId') userId: number, @Body() dto: UpdateUserRequestDTO) {
+  async update(
+    @User('userId') userId: number,
+    @Body() dto: UpdateUserRequestDTO,
+  ) {
     return this.usersService.updateMe(userId, dto);
   }
 
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth('jwt')
   @Delete('me')
-  @ApiOperation({ summary: 'Exclui a conta logada e todos os seus dados (pede a senha)' })
-  async deleteMe(@User('userId') userId: number, @Body() dto: DeleteAccountRequestDTO) {
+  @ApiOperation({
+    summary: 'Exclui a conta logada e todos os seus dados (pede a senha)',
+  })
+  async deleteMe(
+    @User('userId') userId: number,
+    @Body() dto: DeleteAccountRequestDTO,
+  ) {
     await this.usersService.deleteAccount(userId, dto.password);
     return { success: true };
   }
@@ -54,5 +77,3 @@ export class UsersController {
     return { success: true };
   }
 }
-
-

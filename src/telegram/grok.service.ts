@@ -1,4 +1,7 @@
-import { BET_EXTRACTION_RULES, type RawBetData } from '../bet/bet-normalization';
+import {
+  BET_EXTRACTION_RULES,
+  type RawBetData,
+} from '../bet/bet-normalization';
 import { Injectable, Logger } from '@nestjs/common';
 import Groq from 'groq-sdk';
 
@@ -50,7 +53,10 @@ export class GrokService {
     return null;
   }
 
-  async parseBetMessage(message: string, houseId: number | null): Promise<RawBetData | null> {
+  async parseBetMessage(
+    message: string,
+    houseId: number | null,
+  ): Promise<RawBetData | null> {
     const prompt = `Você é um parser de mensagens de apostas.
 ${BET_EXTRACTION_RULES}
 Receberá um texto e deve devolver APENAS um objeto JSON válido, sem explicações.
@@ -79,7 +85,7 @@ linha 7: percentual sozinho, ex. "0,75%" (ignore, calculado no servidor).
 linha 8: valor em R$ (ignore, calculado no servidor).
 linha 9: "Sim" ou "Não" → "free": true se "Sim", false se "Não".
 
-"houseId": use este valor: ${houseId ?? "null"}.
+"houseId": use este valor: ${houseId ?? 'null'}.
 
 IMPORTANTE SOBRE STAKE:
 

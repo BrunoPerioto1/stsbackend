@@ -1,4 +1,9 @@
-import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { randomInt } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { Telegraf } from 'telegraf';
@@ -53,13 +58,17 @@ export class PasswordResetService {
         { parse_mode: 'Markdown' },
       );
     } catch (error) {
-      this.logger.warn(`codigo de senha nao saiu (userId=${user.id}): ${(error as Error).message}`);
+      this.logger.warn(
+        `codigo de senha nao saiu (userId=${user.id}): ${(error as Error).message}`,
+      );
     }
   }
 
   async reset(email: string, code: string, newPassword: string): Promise<void> {
     const user = await this.usersRepository.findByEmail(email.trim());
-    const expiresAt = user?.passwordResetExpiresAt ? new Date(user.passwordResetExpiresAt).getTime() : 0;
+    const expiresAt = user?.passwordResetExpiresAt
+      ? new Date(user.passwordResetExpiresAt).getTime()
+      : 0;
     if (!user?.passwordResetCodeHash || expiresAt <= Date.now()) {
       throw new BadRequestException(INVALID);
     }
@@ -69,7 +78,11 @@ export class PasswordResetService {
       await this.usersRepository.updateUser(
         user.id,
         attempts >= MAX_ATTEMPTS
-          ? { passwordResetCodeHash: null, passwordResetExpiresAt: null, passwordResetAttempts: 0 }
+          ? {
+              passwordResetCodeHash: null,
+              passwordResetExpiresAt: null,
+              passwordResetAttempts: 0,
+            }
           : { passwordResetAttempts: attempts },
       );
       throw new BadRequestException(INVALID);

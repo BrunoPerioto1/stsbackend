@@ -1,8 +1,8 @@
-import type { ColumnType, Insertable, Selectable, Updateable } from "kysely";
-import type { TipEntity, TipId } from "./Tips";
-import type { UserId } from "./Users";
+import type { ColumnType, Insertable, Selectable, Updateable } from 'kysely';
+import type { TipEntity, TipId } from './Tips';
+import type { UserId } from './Users';
 
-export type TipDeliveryId = number & { __type: "TipDeliveryId" };
+export type TipDeliveryId = number & { __type: 'TipDeliveryId' };
 
 // Última cópia de DM enviada pra um (tip, usuário) — guarda o texto/entidades
 // exatos que foram mandados (com a recomendação já calculada pra banca desse

@@ -1,7 +1,11 @@
 import { frontUrl } from './front-url';
 
 // Portas do Vite (dev e preview) pra rodar o front local contra a API local.
-const DEV_ORIGINS = ['http://localhost:8080', 'http://localhost:4173', 'http://localhost:5173'];
+const DEV_ORIGINS = [
+  'http://localhost:8080',
+  'http://localhost:4173',
+  'http://localhost:5173',
+];
 
 /**
  * Origens que o navegador pode usar pra chamar a API. Antes era qualquer uma:

@@ -1,9 +1,22 @@
 import { MARKET_REGISTRY } from './market-registry';
-import { normalize, labels, scoped, splitLabel, resultPick, parseScoreMarket, yesNo, teamPick } from './market-parser';
+import {
+  normalize,
+  labels,
+  scoped,
+  splitLabel,
+  resultPick,
+  parseScoreMarket,
+  yesNo,
+  teamPick,
+} from './market-parser';
 import { Condition, ParseResult, Reason, Teams } from './settlement.types';
 export type { Condition, Teams, ParseResult } from './settlement.types';
 export type ParseFailure = Reason;
-const fail = (reason: Reason, detail: string): ParseResult => ({ ok:false,reason,detail });
+const fail = (reason: Reason, detail: string): ParseResult => ({
+  ok: false,
+  reason,
+  detail,
+});
 function compound(text: string, teams: Teams): Condition[] | null {
   const { selection, label } = splitLabel(text.replace(/\s+\/\s+/g, ' - '));
   const scope = scoped(text)?.scope;
@@ -11,37 +24,85 @@ function compound(text: string, teams: Teams): Condition[] | null {
   // " + " já chega como " e " (ver abreviacoes). "1x2 e total" é o mesmo mercado.
   // Linha às vezes repetida no rótulo ("total de gols 2.5") e "e" omitido na
   // seleção ("Espanha mais de 2.5 - 1x2 e total").
-  if (/^(?:resultado final|resultado da partida|resultado|1x2|vencedor do encontro) e total(?: de gols)?(?: \d+(?:[.,]\d+)?)?$/.test(label)) {
-    const m = /^(.+?)\s+e\s+(.+)$/.exec(selection) ?? /^(.+?)\s+((?:mais|menos) de .+)$/.exec(selection);
+  if (
+    /^(?:resultado final|resultado da partida|resultado|1x2|vencedor do encontro) e total(?: de gols)?(?: \d+(?:[.,]\d+)?)?$/.test(
+      label,
+    )
+  ) {
+    const m =
+      /^(.+?)\s+e\s+(.+)$/.exec(selection) ??
+      /^(.+?)\s+((?:mais|menos) de .+)$/.exec(selection);
     if (!m) return null;
     const pick = resultPick(m[1].replace(/\s+para ganhar$/, ''), teams);
     const total = parseScoreMarket(`${m[2]} - total de gols`, teams);
-    return pick && total?.normalizedMarket === 'TOTAL_GOLS' ? [{normalizedMarket:'RESULTADO_FINAL',scope:'REGULATION',pick}, total] : null;
+    return pick && total?.normalizedMarket === 'TOTAL_GOLS'
+      ? [
+          { normalizedMarket: 'RESULTADO_FINAL', scope: 'REGULATION', pick },
+          total,
+        ]
+      : null;
   }
-  if (/^(total de gols e ambas as equipes marcam|total e ambas equipes marcam|total e ambas marcam|total de gols e ambas marcam)$/.test(label)) {
+  if (
+    /^(total de gols e ambas as equipes marcam|total e ambas equipes marcam|total e ambas marcam|total de gols e ambas marcam)$/.test(
+      label,
+    )
+  ) {
     const m = /^(.+?) e (sim|nao)$/.exec(selection);
     const total = m && parseScoreMarket(`${m[1]} - total de gols`, teams);
-    return total?.normalizedMarket==='TOTAL_GOLS' ? [total,{normalizedMarket:'AMBAS_MARCAM',scope:'REGULATION',expected:yesNo(m![2])!}] : null;
+    return total?.normalizedMarket === 'TOTAL_GOLS'
+      ? [
+          total,
+          {
+            normalizedMarket: 'AMBAS_MARCAM',
+            scope: 'REGULATION',
+            expected: yesNo(m![2])!,
+          },
+        ]
+      : null;
   }
   if (!label) {
     const m = /^(ambas marcam|btts) e (.+)$/.exec(selection);
     const total = m && parseScoreMarket(`${m[2]} - total de gols`, teams);
-    return total?.normalizedMarket==='TOTAL_GOLS' ? [{normalizedMarket:'AMBAS_MARCAM',scope:'REGULATION',expected:true},total] : null;
+    return total?.normalizedMarket === 'TOTAL_GOLS'
+      ? [
+          {
+            normalizedMarket: 'AMBAS_MARCAM',
+            scope: 'REGULATION',
+            expected: true,
+          },
+          total,
+        ]
+      : null;
   }
   return null;
 }
 function single(text: string, teams: Teams): Condition | null {
-  const matches=MARKET_REGISTRY.map(d=>d.parser(text,teams)).filter((c): c is Condition=>!!c);
-  if (matches.length===1) return matches[0];
+  const matches = MARKET_REGISTRY.map((d) => d.parser(text, teams)).filter(
+    (c): c is Condition => !!c,
+  );
+  if (matches.length === 1) return matches[0];
   // Formato em lista junta seleção e rótulo com a métrica repetida: "Mais de
   // 2.5 Gols / Total de Gols" vira "mais de 2.5 gols - total de gols". Tira a
   // métrica da seleção e tenta de novo — o rótulo continua dizendo qual é.
-  const repetida = /^(.*\d)\s+(?:gols?|escanteios|cartoes|chutes(?: no gol| a gol| ao gol)?|finalizacoes)( - .+)$/.exec(text);
-  return !matches.length && repetida ? single(repetida[1] + repetida[2], teams) : null;
+  const repetida =
+    /^(.*\d)\s+(?:gols?|escanteios|cartoes|chutes(?: no gol| a gol| ao gol)?|finalizacoes)( - .+)$/.exec(
+      text,
+    );
+  return !matches.length && repetida
+    ? single(repetida[1] + repetida[2], teams)
+    : null;
 }
 function isLabel(text: string): boolean {
-  const s=scoped(text)?.text ?? text;
-  return Object.values(labels).some(p=>p.test(s)) || /^(?:total de |total |totais )?(?:escanteios|corners|cartoes(?: amarelos)?|cards|chutes(?: a gol| ao gol| no gol)?|faltas|impedimentos|defesas)(?: mais\/menos)?$/.test(s) || /^(?:dupla chance|chance dupla|double chance|dupla hipotese|handicap(?: asiatico)?|clean sheet|sem sofrer gols|mais escanteios|equipe com mais escanteios|escanteios 1x2|(?:maior numero de|equipe com mais|time com mais) (?:escanteios|cartoes|chutes ao gol|chutes a gol|chutes no gol|chutes)|(?:ganhar|vencer) sem (?:sofrer|tomar|levar) gols?|primeiro gol|ultimo gol|proximo gol (?:\(gol )?\d+\)?|penalti no jogo|cartao vermelho|marcar a qualquer momento|marcar em qualquer momento|marcador a qualquer momento|para marcar a qualquer momento|a marcar a qualquer momento|a marcar|marcar gol|1o gol|(?:vencer|ganhar) (?:cada tempo|ambos os tempos)|jogador para marcar|jogador assistencia|assistencias do jogador|gol ou assistencia|jogador marcar ou dar assistencia|marcar gol ou dar assistencia|chutes a gol do jogador|total de chutes do jogador|cartoes do jogador)$/.test(s);
+  const s = scoped(text)?.text ?? text;
+  return (
+    Object.values(labels).some((p) => p.test(s)) ||
+    /^(?:total de |total |totais )?(?:escanteios|corners|cartoes(?: amarelos)?|cards|chutes(?: a gol| ao gol| no gol)?|faltas|impedimentos|defesas)(?: mais\/menos)?$/.test(
+      s,
+    ) ||
+    /^(?:dupla chance|chance dupla|double chance|dupla hipotese|handicap(?: asiatico)?|clean sheet|sem sofrer gols|mais escanteios|equipe com mais escanteios|escanteios 1x2|(?:maior numero de|equipe com mais|time com mais) (?:escanteios|cartoes|chutes ao gol|chutes a gol|chutes no gol|chutes)|(?:ganhar|vencer) sem (?:sofrer|tomar|levar) gols?|primeiro gol|ultimo gol|proximo gol (?:\(gol )?\d+\)?|penalti no jogo|cartao vermelho|marcar a qualquer momento|marcar em qualquer momento|marcador a qualquer momento|para marcar a qualquer momento|a marcar a qualquer momento|a marcar|marcar gol|1o gol|(?:vencer|ganhar) (?:cada tempo|ambos os tempos)|jogador para marcar|jogador assistencia|assistencias do jogador|gol ou assistencia|jogador marcar ou dar assistencia|marcar gol ou dar assistencia|chutes a gol do jogador|total de chutes do jogador|cartoes do jogador)$/.test(
+      s,
+    )
+  );
 }
 // Combinada do mesmo jogo escrita como frase, do jeito que o canal manda:
 // "Palmeiras vence e tem mais escanteios - Resultado final e escanteios",
@@ -50,7 +111,8 @@ function isLabel(text: string): boolean {
 // apostas simples. Cláusula que não case derruba a aposta inteira: liquidar só
 // a parte entendida daria GANHOU sem a perna que ficou de fora. O escopo é de
 // cada cláusula — "1º tempo" numa perna não vaza pra outra.
-const ESTATISTICA_DE_EQUIPE = 'escanteios|cartoes|chutes ao gol|chutes a gol|chutes no gol|chutes';
+const ESTATISTICA_DE_EQUIPE =
+  'escanteios|cartoes|chutes ao gol|chutes a gol|chutes no gol|chutes';
 function clausulas(text: string, teams: Teams): Condition[] | null {
   const partes = text.replace(/\s+-\s*$/, '').split(/\s+[-–—]\s+/);
   if (partes.length > 2) return null;
@@ -68,37 +130,74 @@ function clausulas(text: string, teams: Teams): Condition[] | null {
     return nome;
   };
   const canonicos = frases.map((frase): string | null => {
-    const vitoria1T = /^(.+?) (?:para )?(?:vence|vencer|ganha|ganhar) (?:o )?(?:1o tempo|primeiro tempo)$/.exec(frase);
-    if (vitoria1T) return time(vitoria1T[1]) && `${vitoria1T[1]} - resultado do 1o tempo`;
-    const vitoria = /^(.+?) (?:para )?(?:vence|vencer|ganha|ganhar)$/.exec(frase);
+    const vitoria1T =
+      /^(.+?) (?:para )?(?:vence|vencer|ganha|ganhar) (?:o )?(?:1o tempo|primeiro tempo)$/.exec(
+        frase,
+      );
+    if (vitoria1T)
+      return time(vitoria1T[1]) && `${vitoria1T[1]} - resultado do 1o tempo`;
+    const vitoria = /^(.+?) (?:para )?(?:vence|vencer|ganha|ganhar)$/.exec(
+      frase,
+    );
     if (vitoria) return time(vitoria[1]) && `${vitoria[1]} - resultado final`;
-    const mais = new RegExp(`^(?:(.+?) )?(?:tem|ter|com) mais (${ESTATISTICA_DE_EQUIPE})$`).exec(frase);
-    if (mais) { const quem = time(mais[1]); return quem && `${quem} - maior numero de ${mais[2]}`; }
-    const ambosTempos = /^(?:(.+?) )?(?:para )?marcar? em ambos os tempos$/.exec(frase);
-    if (ambosTempos) { const quem = time(ambosTempos[1]); return quem && `${quem} marcar em ambos os tempos - sim`; }
+    const mais = new RegExp(
+      `^(?:(.+?) )?(?:tem|ter|com) mais (${ESTATISTICA_DE_EQUIPE})$`,
+    ).exec(frase);
+    if (mais) {
+      const quem = time(mais[1]);
+      return quem && `${quem} - maior numero de ${mais[2]}`;
+    }
+    const ambosTempos =
+      /^(?:(.+?) )?(?:para )?marcar? em ambos os tempos$/.exec(frase);
+    if (ambosTempos) {
+      const quem = time(ambosTempos[1]);
+      return quem && `${quem} marcar em ambos os tempos - sim`;
+    }
     if (labels.both.test(frase)) return 'sim - ambas marcam';
     const over = /^(?:\+|o|mais de )\s*(\d+(?:[.,]\d+)?) gols?$/.exec(frase);
     if (over) return `mais de ${over[1]} - total de gols`;
     const under = /^(?:-|u|menos de )\s*(\d+(?:[.,]\d+)?) gols?$/.exec(frase);
     if (under) return `menos de ${under[1]} - total de gols`;
     // "mais de 9.5 escanteios", "menos de 4.5 cartoes": total do jogo.
-    const estatistica = /^(mais|menos) de (\d+(?:[.,]\d+)?) (escanteios|cartoes|chutes ao gol|chutes a gol|chutes no gol|chutes)$/.exec(frase);
-    if (estatistica) return `${estatistica[1]} de ${estatistica[2]} - total de ${estatistica[3]}`;
-    const placar1T = /^(\d{1,2})\s*[-x]\s*(\d{1,2}) (?:ht|no intervalo|1o tempo)$/.exec(frase);
-    if (placar1T) return `${placar1T[1]}-${placar1T[2]} - resultado correto 1o tempo`;
-    const marca = /^(.+?) (?:marca|marcar|para marcar) (?:a|em) qualquer momento$/.exec(frase);
-    if (marca && !teamPick(marca[1], teams)) return `${marca[1]} - marcar a qualquer momento`;
+    const estatistica =
+      /^(mais|menos) de (\d+(?:[.,]\d+)?) (escanteios|cartoes|chutes ao gol|chutes a gol|chutes no gol|chutes)$/.exec(
+        frase,
+      );
+    if (estatistica)
+      return `${estatistica[1]} de ${estatistica[2]} - total de ${estatistica[3]}`;
+    const placar1T =
+      /^(\d{1,2})\s*[-x]\s*(\d{1,2}) (?:ht|no intervalo|1o tempo)$/.exec(frase);
+    if (placar1T)
+      return `${placar1T[1]}-${placar1T[2]} - resultado correto 1o tempo`;
+    const marca =
+      /^(.+?) (?:marca|marcar|para marcar) (?:a|em) qualquer momento$/.exec(
+        frase,
+      );
+    if (marca && !teamPick(marca[1], teams))
+      return `${marca[1]} - marcar a qualquer momento`;
     return null;
   });
   const pendentes = canonicos.map((c, i) => (c ? -1 : i)).filter((i) => i >= 0);
   for (const i of pendentes) {
     // Cláusula sem verbo ("mais de 10.5") usa o rótulo: pareado quando há um
     // rótulo por cláusula, ou o rótulo único quando só UMA cláusula precisa dele.
-    const rot = rotulos.length === frases.length ? rotulos[i] : rotulos.length === 1 && pendentes.length === 1 ? rotulos[0] : '';
-    if (rot && !labels.result.test(rot)) { canonicos[i] = `${frases[i]} - ${rot}`; continue; }
+    const rot =
+      rotulos.length === frases.length
+        ? rotulos[i]
+        : rotulos.length === 1 && pendentes.length === 1
+          ? rotulos[0]
+          : '';
+    if (rot && !labels.result.test(rot)) {
+      canonicos[i] = `${frases[i]} - ${rot}`;
+      continue;
+    }
     // Time sozinho ("Los Angeles FC e +3.5 gols") só vale vitória ao lado de
     // total de gols, como o mercado composto que a casa já oferece.
-    if (teamPick(frases[i], teams) && canonicos.some((c) => c?.endsWith('total de gols'))) canonicos[i] = `${frases[i]} - resultado final`;
+    if (
+      teamPick(frases[i], teams) &&
+      canonicos.some((c) => c?.endsWith('total de gols'))
+    )
+      canonicos[i] = `${frases[i]} - resultado final`;
   }
   if (canonicos.some((c) => !c)) return null;
   const condicoes = canonicos.map((c) => single(c!, teams));
@@ -107,16 +206,36 @@ function clausulas(text: string, teams: Teams): Condition[] | null {
 // "Cada equipe leva mais de 1.5 cartões - Total de cartões", "Sim - Ambas
 // equipes receberão um cartão": uma frase, duas pernas — uma por time. Só a
 // afirmação: "não" viraria "um OU outro", que não é combinada.
-const CADA_EQUIPE = '(?:cada equipe|cada time|ambas (?:as )?equipes|os dois times)';
+const CADA_EQUIPE =
+  '(?:cada equipe|cada time|ambas (?:as )?equipes|os dois times)';
 function cadaEquipe(text: string): Condition[] | null {
   const { selection, label } = splitLabel(text);
-  const acima = new RegExp(`^${CADA_EQUIPE} (?:leva|levar|recebe|receber|tem|ter) mais de (\\d+(?:[.,]\\d+)?) cartoes$`).exec(selection);
-  const umCartao = new RegExp(`^${CADA_EQUIPE} (?:recebera|receberao|recebem|receber|levam|levar|leva) (?:um|pelo menos um|1) cartao$`);
+  const acima = new RegExp(
+    `^${CADA_EQUIPE} (?:leva|levar|recebe|receber|tem|ter) mais de (\\d+(?:[.,]\\d+)?) cartoes$`,
+  ).exec(selection);
+  const umCartao = new RegExp(
+    `^${CADA_EQUIPE} (?:recebera|receberao|recebem|receber|levam|levar|leva) (?:um|pelo menos um|1) cartao$`,
+  );
   let line: number | null = null;
-  if (acima && (!label || /^(?:total de )?cartoes$/.test(label))) line = Number(acima[1].replace(',', '.'));
-  else if ((umCartao.test(label) && yesNo(selection) === true) || (umCartao.test(selection) && (!label || yesNo(label) === true))) line = 0.5;
-  if (line === null || !Number.isFinite(line) || (line * 2) % 1 !== 0) return null;
-  return (['HOME', 'AWAY'] as const).map((side): Condition => ({ normalizedMarket: 'TIME_TOTAL_CARTOES', scope: 'REGULATION', metric: 'cardPoints', operator: 'OVER', line, side }));
+  if (acima && (!label || /^(?:total de )?cartoes$/.test(label)))
+    line = Number(acima[1].replace(',', '.'));
+  else if (
+    (umCartao.test(label) && yesNo(selection) === true) ||
+    (umCartao.test(selection) && (!label || yesNo(label) === true))
+  )
+    line = 0.5;
+  if (line === null || !Number.isFinite(line) || (line * 2) % 1 !== 0)
+    return null;
+  return (['HOME', 'AWAY'] as const).map(
+    (side): Condition => ({
+      normalizedMarket: 'TIME_TOTAL_CARTOES',
+      scope: 'REGULATION',
+      metric: 'cardPoints',
+      operator: 'OVER',
+      line,
+      side,
+    }),
+  );
 }
 // O canal de tips corta a linha do mercado em 100 caracteres: conferido contra
 // tips.text, onde a linha termina em "Handicap de escan" e a odd vem logo abaixo.
@@ -145,27 +264,60 @@ export function abreviacoes(text: string): string {
     .replace(/^ambas e /, 'ambas marcam e ')
     .replace(/\s+[+&]\s+/g, ' e ')
     // "2 ou mais faltas" e "2 faltas ou mais" são "2+ faltas".
-    .replace(/\b(\d+) ou mais (faltas|defesas|desarmes|escanteios|cartoes|chutes)\b|\b(\d+) (faltas|defesas|desarmes|escanteios|cartoes|chutes) ou mais\b/g, (_, a, b, c, d) => `${a ?? c}+ ${b ?? d}`)
+    .replace(
+      /\b(\d+) ou mais (faltas|defesas|desarmes|escanteios|cartoes|chutes)\b|\b(\d+) (faltas|defesas|desarmes|escanteios|cartoes|chutes) ou mais\b/g,
+      (_, a, b, c, d) => `${a ?? c}+ ${b ?? d}`,
+    )
     .replace(/\b(?:resultado final|resultado)(?: -)? 1x2\b/g, 'resultado final')
     .replace(/\btotal de gols - mais\/menos\b/g, 'total de gols')
     // "o2.5" só com decimal: "vence o 1o tempo" não pode virar linha.
-    .replace(new RegExp(`\\bover\\s*${NUM}|\\bo${NUM}(?=\\s|$)`, 'g'), (_, a, b) => `mais de ${a ?? b}`)
-    .replace(new RegExp(`\\bunder\\s*${NUM}|\\bu${NUM}(?=\\s|$)`, 'g'), (_, a, b) => `menos de ${a ?? b}`)
-    .replace(new RegExp(`(^|\\s)\\+${NUM}(?=\\s+${METRICA})`, 'g'), '$1mais de $2')
-    .replace(new RegExp(`(^|\\s)-${NUM}(?=\\s+${METRICA})`, 'g'), '$1menos de $2')
-    .replace(new RegExp(`(\\d)\\s+(${METRICA})\\s+(?:na partida|no jogo|ft)\\b`, 'g'), '$1 $2')
+    .replace(
+      new RegExp(`\\bover\\s*${NUM}|\\bo${NUM}(?=\\s|$)`, 'g'),
+      (_, a, b) => `mais de ${a ?? b}`,
+    )
+    .replace(
+      new RegExp(`\\bunder\\s*${NUM}|\\bu${NUM}(?=\\s|$)`, 'g'),
+      (_, a, b) => `menos de ${a ?? b}`,
+    )
+    .replace(
+      new RegExp(`(^|\\s)\\+${NUM}(?=\\s+${METRICA})`, 'g'),
+      '$1mais de $2',
+    )
+    .replace(
+      new RegExp(`(^|\\s)-${NUM}(?=\\s+${METRICA})`, 'g'),
+      '$1menos de $2',
+    )
+    .replace(
+      new RegExp(`(\\d)\\s+(${METRICA})\\s+(?:na partida|no jogo|ft)\\b`, 'g'),
+      '$1 $2',
+    )
     .replace(/\s+ft\b/g, '')
     .replace(/\bvence(r)? o (1o tempo|primeiro tempo|ht)\b/g, 'vence $2')
     .replace(/\bvencer? (?:a|de) (?:0|zero)\b/g, 'vence de zero')
     .replace(/\bht\b(?!\/)/g, '1o tempo')
     // "over 2.5 gols e 9.5 cantos": a segunda linha herda o "mais de".
-    .replace(new RegExp(`\\b(mais|menos) de ${NUM} (${METRICA}) e ${NUM} (${METRICA})\\b`, 'g'), '$1 de $2 $3 e $1 de $4 $5');
+    .replace(
+      new RegExp(
+        `\\b(mais|menos) de ${NUM} (${METRICA}) e ${NUM} (${METRICA})\\b`,
+        'g',
+      ),
+      '$1 de $2 $3 e $1 de $4 $5',
+    );
   // Linha solta sem métrica ("o3.5", "mais de 2.5 1o tempo") é total de gols.
   // Só quando a cláusula inteira é a linha ("Colômbia ML e o2.5"): com rótulo,
   // time ou métrica junto, quem decide é o resto do parser.
-  t = t.replace(new RegExp(`(^| e |\\S )(mais|menos) de ${NUM}(?![\\d.,])(\\s+1o tempo)?(?= e |$)`, 'g'), '$1$2 de $3 gols$4');
+  t = t.replace(
+    new RegExp(
+      `(^| e |\\S )(mais|menos) de ${NUM}(?![\\d.,])(\\s+1o tempo)?(?= e |$)`,
+      'g',
+    ),
+    '$1$2 de $3 gols$4',
+  );
   // "Marrocos 3+ gols" é "mais de 2.5": mesma coisa, na forma que o parser lê.
-  t = t.replace(new RegExp(`(^|\\s)(\\d+)\\+\\s+(${METRICA})`, 'g'), (_, a, n, m) => `${a}mais de ${Number(n) - 0.5} ${m}`);
+  t = t.replace(
+    new RegExp(`(^|\\s)(\\d+)\\+\\s+(${METRICA})`, 'g'),
+    (_, a, n, m) => `${a}mais de ${Number(n) - 0.5} ${m}`,
+  );
   t = t
     .replace(/^(.+?) ht\/ft$/, '$1/$1 - intervalo/final')
     .replace(/^ml (.+?)(?= e |$)/, '$1 vence')
@@ -187,86 +339,159 @@ export function abreviacoes(text: string): string {
 // ("Haiti para marcar gol" = Haiti marca pelo menos um gol) e o de jogador
 // recusa — é o teamPick que separa, não esta função.
 // " - " no nome é rótulo que já existia ("Lautaro - A marcar"): não mexe.
-const SUJEITO_COLETIVO = /\b(?:ambos|ambas|equipes?|times?|jogador|proxima|cada|uma das)\b| - /;
+const SUJEITO_COLETIVO =
+  /\b(?:ambos|ambas|equipes?|times?|jogador|proxima|cada|uma das)\b| - /;
 // Rótulo que só repete o que a seleção já diz: "Raphinha marcar ou dar
 // assistência - Jogador para marcar ou dar assistência".
-const ROTULO_REPETIDO = / - (?:jogador(?: (?:para |a )?marcar(?: um gol)?(?: ou dar (?:uma )?assistencia)?)?|gol ou assistencia|especial de jogador)$/;
+const ROTULO_REPETIDO =
+  / - (?:jogador(?: (?:para |a )?marcar(?: um gol)?(?: ou dar (?:uma )?assistencia)?)?|gol ou assistencia|especial de jogador)$/;
 function jogador(original: string): string {
   // "Lautaro +0.5 - Chutes a gol": linha com sinal é "mais de".
   // Só em chutes: em handicap o "+" é a linha do handicap.
-  const linha = original.replace(new RegExp(`(\\s)\\+${NUM}(?= - (?:chutes|finalizacoes))`), '$1mais de $2');
+  const linha = original.replace(
+    new RegExp(`(\\s)\\+${NUM}(?= - (?:chutes|finalizacoes))`),
+    '$1mais de $2',
+  );
   const perna = linha.replace(ROTULO_REPETIDO, '');
-  const marcar = /^(?:anytime (.+)|(.+?) (?:- )?(?:anytime|para marcar(?: gol)?(?: a qualquer (?:momento|altura))?|marcar(?:a|ao)?(?: um)?(?: gol)?(?: (?:a|em) qualquer (?:momento|altura))?|marca(?: gol)?(?: a qualquer (?:momento|altura))?|marcador(?: a qualquer (?:momento|altura))?|qualq\. altura))$/.exec(perna);
+  const marcar =
+    /^(?:anytime (.+)|(.+?) (?:- )?(?:anytime|para marcar(?: gol)?(?: a qualquer (?:momento|altura))?|marcar(?:a|ao)?(?: um)?(?: gol)?(?: (?:a|em) qualquer (?:momento|altura))?|marca(?: gol)?(?: a qualquer (?:momento|altura))?|marcador(?: a qualquer (?:momento|altura))?|qualq\. altura))$/.exec(
+      perna,
+    );
   const quem = marcar && (marcar[1] ?? marcar[2]);
-  if (quem && !SUJEITO_COLETIVO.test(quem)) return `${quem} - marcar a qualquer momento`;
-  const golOuAssist = /^(.+?) (?:- )?(?:jogador )?(?:para |a )?(?:marcar|marca)(?: um)?(?: gol)? ou (?:dar (?:uma )?assistencia|assiste|assistir)$/.exec(perna);
-  if (golOuAssist && !SUJEITO_COLETIVO.test(golOuAssist[1])) return `${golOuAssist[1]} - gol ou assistencia`;
-  const assist = /^(.+?) (?:- )?(?:para )?dar (?:uma )?assistencia$/.exec(perna);
-  if (assist && !SUJEITO_COLETIVO.test(assist[1])) return `${assist[1]} - jogador assistencia`;
+  if (quem && !SUJEITO_COLETIVO.test(quem))
+    return `${quem} - marcar a qualquer momento`;
+  const golOuAssist =
+    /^(.+?) (?:- )?(?:jogador )?(?:para |a )?(?:marcar|marca)(?: um)?(?: gol)? ou (?:dar (?:uma )?assistencia|assiste|assistir)$/.exec(
+      perna,
+    );
+  if (golOuAssist && !SUJEITO_COLETIVO.test(golOuAssist[1]))
+    return `${golOuAssist[1]} - gol ou assistencia`;
+  const assist = /^(.+?) (?:- )?(?:para )?dar (?:uma )?assistencia$/.exec(
+    perna,
+  );
+  if (assist && !SUJEITO_COLETIVO.test(assist[1]))
+    return `${assist[1]} - jogador assistencia`;
   // Nada reescrito: devolve com o rótulo, que ele é o mercado ("Pedro - Gol ou
   // assistência").
-  const semRotulo = linha.replace(/\b(?:finalizacoes|chutes) (?:no|ao|a) gol\b|\bchutes gol\b/g, 'chutes a gol');
-  const chutes = new RegExp(`^(.+?) ((?:mais|menos) de ${NUM}) (?:- )?(chutes a gol|chutes|finalizacoes)$`).exec(semRotulo);
+  const semRotulo = linha.replace(
+    /\b(?:finalizacoes|chutes) (?:no|ao|a) gol\b|\bchutes gol\b/g,
+    'chutes a gol',
+  );
+  const chutes = new RegExp(
+    `^(.+?) ((?:mais|menos) de ${NUM}) (?:- )?(chutes a gol|chutes|finalizacoes)$`,
+  ).exec(semRotulo);
   // "Bontempo comete 2 ou mais faltas", "Vini Jr sofre 3+ faltas" (o "3+" já
   // virou "mais de 2.5"), "Kobel mais de 3.5 defesas", "Pereira 1+ desarmes".
-  const acao = new RegExp(`^(.+?) (?:(comete|cometer|sofre|sofrer) )?((?:mais|menos) de ${NUM}) (faltas|defesas|desarmes)(?: (cometidas|sofridas))?$`).exec(semRotulo);
+  const acao = new RegExp(
+    `^(.+?) (?:(comete|cometer|sofre|sofrer) )?((?:mais|menos) de ${NUM}) (faltas|defesas|desarmes)(?: (cometidas|sofridas))?$`,
+  ).exec(semRotulo);
   if (acao && !SUJEITO_COLETIVO.test(acao[1])) {
     const sofridas = /^sofr/.test(acao[2] ?? '') || acao[6] === 'sofridas';
-    const rotulo = acao[5] === 'faltas' ? (sofridas ? 'faltas sofridas' : 'faltas cometidas') : acao[5] === 'defesas' ? 'defesas do goleiro' : 'desarmes';
+    const rotulo =
+      acao[5] === 'faltas'
+        ? sofridas
+          ? 'faltas sofridas'
+          : 'faltas cometidas'
+        : acao[5] === 'defesas'
+          ? 'defesas do goleiro'
+          : 'desarmes';
     return `${acao[1]} ${acao[3]} - ${rotulo}`;
   }
-  if (chutes && !SUJEITO_COLETIVO.test(chutes[1])) return `${chutes[1]} ${chutes[2]} - ${chutes[4] === 'finalizacoes' ? 'chutes' : chutes[4]}`;
+  if (chutes && !SUJEITO_COLETIVO.test(chutes[1]))
+    return `${chutes[1]} ${chutes[2]} - ${chutes[4] === 'finalizacoes' ? 'chutes' : chutes[4]}`;
   return semRotulo;
 }
 export function parseMarket(market: string, teams: Teams): ParseResult {
-  if ([...(market ?? '')].length === LIMITE_DO_CANAL) return fail('MERCADO_TRUNCADO',`texto no limite de ${LIMITE_DO_CANAL} caracteres do canal; pode faltar perna`);
-  const text=abreviacoes(normalize(market??''));
-  if (!text) return fail('MERCADO_NAO_RECONHECIDO','mercado vazio');
+  if ([...(market ?? '')].length === LIMITE_DO_CANAL)
+    return fail(
+      'MERCADO_TRUNCADO',
+      `texto no limite de ${LIMITE_DO_CANAL} caracteres do canal; pode faltar perna`,
+    );
+  const text = abreviacoes(normalize(market ?? ''));
+  if (!text) return fail('MERCADO_NAO_RECONHECIDO', 'mercado vazio');
   // Conjugacao solta: o bilhete escreve "se classifica", "classificado",
   // "classificar". Listar so' o infinitivo deixava "classifica" escapar daqui e
   // cair no fallback generico, com motivo errado na tela.
-  if (/\b(?:prorrogacao|extra time|penaltis|incluindo|classifica\w*)\b/.test(text)) return fail('ESCOPO_NAO_SUPORTADO','escopo além do tempo normal ou qualificação');
-  if (/\b(?:nos? \d+ jogos?|nas? \d+ partidas?|cada partida|todos os jogos|todas as partidas|todos os times|todas as equipes|rodada|jogo com o gol mais rapido|multipla)\b/.test(text)) return fail('VARIOS_JOGOS','agregado/comparação entre jogos');
-  const combined=compound(text,teams);
-  if (combined) return {ok:true,conditions:combined};
-  const cada=cadaEquipe(text);
-  if (cada) return {ok:true,conditions:cada};
-  const direct=single(text,teams);
-  if (direct) return { ok:true,conditions:[direct] };
+  if (
+    /\b(?:prorrogacao|extra time|penaltis|incluindo|classifica\w*)\b/.test(text)
+  )
+    return fail(
+      'ESCOPO_NAO_SUPORTADO',
+      'escopo além do tempo normal ou qualificação',
+    );
+  if (
+    /\b(?:nos? \d+ jogos?|nas? \d+ partidas?|cada partida|todos os jogos|todas as partidas|todos os times|todas as equipes|rodada|jogo com o gol mais rapido|multipla)\b/.test(
+      text,
+    )
+  )
+    return fail('VARIOS_JOGOS', 'agregado/comparação entre jogos');
+  const combined = compound(text, teams);
+  if (combined) return { ok: true, conditions: combined };
+  const cada = cadaEquipe(text);
+  if (cada) return { ok: true, conditions: cada };
+  const direct = single(text, teams);
+  if (direct) return { ok: true, conditions: [direct] };
   // Consome toda a entrada. Rotulo após seleção só é unido se a gramática
   // completa do mercado o reconhecer; nenhum fragmento desconhecido é ignorado.
   // "Ambas marcam: Não" é a mesma perna que "Não - Ambas marcam". Exige espaço
   // depois dos dois-pontos pra não partir horário ("10:00").
-  const parts=text.split(/\s+\/\s+|\s+·\s+/).map(s=>s.trim().replace(/^([^:]+?):\s+(.+)$/,'$2 - $1'));
-  if (parts.length>12 || parts.some(p=>!p)) return fail('MERCADO_NAO_RECONHECIDO','separação inválida');
-  const paths: Condition[][]=[];
+  const parts = text
+    .split(/\s+\/\s+|\s+·\s+/)
+    .map((s) => s.trim().replace(/^([^:]+?):\s+(.+)$/, '$2 - $1'));
+  if (parts.length > 12 || parts.some((p) => !p))
+    return fail('MERCADO_NAO_RECONHECIDO', 'separação inválida');
+  const paths: Condition[][] = [];
   function visit(i: number, conditions: Condition[]) {
-    if (i===parts.length) { paths.push(conditions); return; }
-    const cada=cadaEquipe(parts[i]);
-    if (cada) { visit(i+1,[...conditions,...cada]); return; }
-    if (i+1<parts.length && isLabel(parts[i+1])) {
-      const c=single(`${parts[i]} - ${parts[i+1]}`,teams);
-      if (c) { visit(i+2,[...conditions,c]); return; }
+    if (i === parts.length) {
+      paths.push(conditions);
+      return;
     }
-    const c=single(parts[i],teams);
-    if (c) visit(i+1,[...conditions,c]);
+    const cada = cadaEquipe(parts[i]);
+    if (cada) {
+      visit(i + 1, [...conditions, ...cada]);
+      return;
+    }
+    if (i + 1 < parts.length && isLabel(parts[i + 1])) {
+      const c = single(`${parts[i]} - ${parts[i + 1]}`, teams);
+      if (c) {
+        visit(i + 2, [...conditions, c]);
+        return;
+      }
+    }
+    const c = single(parts[i], teams);
+    if (c) visit(i + 1, [...conditions, c]);
   }
-  visit(0,[]);
-  if (paths.length===1 && paths[0].length) return { ok:true,conditions:paths[0] };
+  visit(0, []);
+  if (paths.length === 1 && paths[0].length)
+    return { ok: true, conditions: paths[0] };
   // Formato real: seleções primeiro, depois respectivos rótulos.
-  if (parts.length>=4 && parts.length%2===0) {
-    const n=parts.length/2;
+  if (parts.length >= 4 && parts.length % 2 === 0) {
+    const n = parts.length / 2;
     if (parts.slice(n).every(isLabel)) {
-      const cs=parts.slice(0,n).map((s,i)=>single(`${s} - ${parts[n+i]}`,teams));
-      if (cs.every((c): c is Condition=>!!c)) return { ok:true,conditions:cs };
+      const cs = parts
+        .slice(0, n)
+        .map((s, i) => single(`${s} - ${parts[n + i]}`, teams));
+      if (cs.every((c): c is Condition => !!c))
+        return { ok: true, conditions: cs };
     }
   }
   if (/\se\s/.test(text)) {
-    const frase=clausulas(text,teams);
-    if (frase) return { ok:true,conditions:frase };
+    const frase = clausulas(text, teams);
+    if (frase) return { ok: true, conditions: frase };
   }
-  if (/\bou\b/.test(text)) return fail('CONDICAO_ALTERNATIVA','alternativa sem gramática inequívoca');
-  if (/\be\b/.test(text) && /mais|menos|resultado|marcam/.test(text)) return fail('COMBINADA_NAO_SEPARADA','condições sem separação inequívoca');
-  if (/gols/.test(text) && (text.includes(normalize(teams.home)) || text.includes(normalize(teams.away))) && /\bx\b/.test(text)) return fail('GOLS_DE_UM_TIME','confronto não identifica lado da seleção');
-  return fail('MERCADO_NAO_RECONHECIDO',`seleção, participante ou rótulo ambíguo: "${market}"`);
+  if (/\bou\b/.test(text))
+    return fail('CONDICAO_ALTERNATIVA', 'alternativa sem gramática inequívoca');
+  if (/\be\b/.test(text) && /mais|menos|resultado|marcam/.test(text))
+    return fail('COMBINADA_NAO_SEPARADA', 'condições sem separação inequívoca');
+  if (
+    /gols/.test(text) &&
+    (text.includes(normalize(teams.home)) ||
+      text.includes(normalize(teams.away))) &&
+    /\bx\b/.test(text)
+  )
+    return fail('GOLS_DE_UM_TIME', 'confronto não identifica lado da seleção');
+  return fail(
+    'MERCADO_NAO_RECONHECIDO',
+    `seleção, participante ou rótulo ambíguo: "${market}"`,
+  );
 }

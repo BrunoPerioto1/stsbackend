@@ -16,5 +16,7 @@ export async function forEachWithConcurrency<T>(
       await fn(item);
     }
   };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, worker),
+  );
 }

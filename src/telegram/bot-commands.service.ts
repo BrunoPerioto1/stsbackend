@@ -16,7 +16,10 @@ import {
   RateLimitService,
   TELEGRAM_LINK_LIMIT,
 } from '../common/rate-limit/rate-limit.service';
-import { MAX_PERCENT_FILTER, MIN_PERCENT_FILTER } from '../users/dto/request.dto';
+import {
+  MAX_PERCENT_FILTER,
+  MIN_PERCENT_FILTER,
+} from '../users/dto/request.dto';
 import { normalizeBetNumber } from '../bet/bet-normalization';
 import { frontUrl } from '../common/utils/front-url';
 import {
@@ -100,12 +103,18 @@ export class BotCommandsService {
       }
       if (arg.toLowerCase() === 'off') {
         await this.usersService.setMinPercentFilter(telegramUserId, null);
-        await ctx.reply('✅ Filtro removido. Você vai receber todas as tips do grupo.');
+        await ctx.reply(
+          '✅ Filtro removido. Você vai receber todas as tips do grupo.',
+        );
         return;
       }
 
       const value = Number(arg.replace(',', '.'));
-      if (!Number.isFinite(value) || value < MIN_PERCENT_FILTER || value > MAX_PERCENT_FILTER) {
+      if (
+        !Number.isFinite(value) ||
+        value < MIN_PERCENT_FILTER ||
+        value > MAX_PERCENT_FILTER
+      ) {
         await ctx.reply(
           `❌ Valor inválido. Informe de ${MIN_PERCENT_FILTER} a ${MAX_PERCENT_FILTER} (ex.: /filtro 1.5), ou /filtro off pra receber tudo.`,
         );
@@ -113,7 +122,9 @@ export class BotCommandsService {
       }
 
       await this.usersService.setMinPercentFilter(telegramUserId, value);
-      await ctx.reply(`✅ Filtro definido: só chegam tips com porcentagem >= ${value}%`);
+      await ctx.reply(
+        `✅ Filtro definido: só chegam tips com porcentagem >= ${value}%`,
+      );
     } catch (error) {
       this.logger.error(...errorArgs('Erro ao atualizar filtro', error));
       await ctx.reply('❌ Erro ao atualizar seu filtro. Tente novamente.');
@@ -123,7 +134,9 @@ export class BotCommandsService {
   async handleStake(ctx: BotContext) {
     const args = commandArgs(ctx);
     if (args.length !== 1) {
-      await ctx.reply('❌ Formato incorreto. Use: /stake VALOR\nExemplo: /stake 2000');
+      await ctx.reply(
+        '❌ Formato incorreto. Use: /stake VALOR\nExemplo: /stake 2000',
+      );
       return;
     }
 
@@ -159,15 +172,19 @@ export class BotCommandsService {
   private readonly knownUsernames = new Map<number, string | null>();
 
   /** Mantém o @ do card do app em dia; nunca atrapalha o fluxo da mensagem. */
-  syncUsername(from: { id: number; is_bot?: boolean; username?: string } | undefined) {
+  syncUsername(
+    from: { id: number; is_bot?: boolean; username?: string } | undefined,
+  ) {
     if (!from || from.is_bot) return;
     const username = from.username ?? null;
     if (this.knownUsernames.get(from.id) === username) return;
     this.knownUsernames.set(from.id, username);
-    this.usersService.syncTelegramUsername(from.id, username).catch((error: Error) => {
-      this.knownUsernames.delete(from.id);
-      this.logger.error('Erro ao sincronizar @ do Telegram', error);
-    });
+    this.usersService
+      .syncTelegramUsername(from.id, username)
+      .catch((error: Error) => {
+        this.knownUsernames.delete(from.id);
+        this.logger.error('Erro ao sincronizar @ do Telegram', error);
+      });
   }
 
   /**
@@ -177,7 +194,8 @@ export class BotCommandsService {
    * Devolve true quando barrou (e já respondeu).
    */
   async blockIfNoAccess(ctx: BotContext): Promise<boolean> {
-    if (ctx.chat?.type !== 'private' || !ctx.from || ctx.from.is_bot) return false;
+    if (ctx.chat?.type !== 'private' || !ctx.from || ctx.from.is_bot)
+      return false;
     // Instruções e vínculo seguem livres: é por eles que a pessoa volta.
     if (/^\/(start|vincular)(@\w+)?(\s|$)/.test(messageText(ctx))) return false;
 
@@ -218,17 +236,24 @@ export class BotCommandsService {
             ]
               .filter(Boolean)
               .join('\n');
-      await ctx.answerCbQuery(text.slice(0, 200), { show_alert: true }).catch(() => undefined);
+      await ctx
+        .answerCbQuery(text.slice(0, 200), { show_alert: true })
+        .catch(() => undefined);
       return true;
     }
 
     if (block === 'inactive') {
-      await ctx.reply('🚫 Sua conta está desativada. Fale com o administrador.');
+      await ctx.reply(
+        '🚫 Sua conta está desativada. Fale com o administrador.',
+      );
       return true;
     }
-    const date = new Date(user.accessUntil as Date).toLocaleDateString('pt-BR', {
-      timeZone: 'America/Sao_Paulo',
-    });
+    const date = new Date(user.accessUntil as Date).toLocaleDateString(
+      'pt-BR',
+      {
+        timeZone: 'America/Sao_Paulo',
+      },
+    );
     const headline =
       accessStatus(user) === 'new'
         ? '🔓 Sua conta ainda não foi ativada.'
@@ -240,9 +265,15 @@ export class BotCommandsService {
     return true;
   }
 
-  private async answerPaymentClaim(ctx: BotContext, userId: number, alreadyReleased: boolean) {
+  private async answerPaymentClaim(
+    ctx: BotContext,
+    userId: number,
+    alreadyReleased: boolean,
+  ) {
     if (alreadyReleased) {
-      await ctx.answerCbQuery('✅ Seu acesso já está liberado.', { show_alert: true }).catch(() => undefined);
+      await ctx
+        .answerCbQuery('✅ Seu acesso já está liberado.', { show_alert: true })
+        .catch(() => undefined);
       return;
     }
     const result = await this.paymentClaim.claim(userId);
@@ -265,8 +296,15 @@ export class BotCommandsService {
     const telegramUserId = senderId(ctx);
     try {
       // Código de 6 dígitos: sem teto de tentativas dava pra chutar o de outra conta.
-      await this.rateLimit?.consume(`vincular:tg:${telegramUserId}`, TELEGRAM_LINK_LIMIT);
-      await this.usersService.confirmTelegramLink(args[0], telegramUserId, ctx.from?.username ?? null);
+      await this.rateLimit?.consume(
+        `vincular:tg:${telegramUserId}`,
+        TELEGRAM_LINK_LIMIT,
+      );
+      await this.usersService.confirmTelegramLink(
+        args[0],
+        telegramUserId,
+        ctx.from?.username ?? null,
+      );
       await ctx.reply('✅ Conta vinculada com sucesso!');
     } catch (error) {
       if (error instanceof BadRequestException) {
@@ -274,7 +312,9 @@ export class BotCommandsService {
         return;
       }
       if (error instanceof RateLimitedException) {
-        await ctx.reply(`⏳ ${(error.getResponse() as { message: string }).message}`);
+        await ctx.reply(
+          `⏳ ${(error.getResponse() as { message: string }).message}`,
+        );
         return;
       }
       this.logger.error(...errorArgs('Erro ao confirmar vinculação', error));

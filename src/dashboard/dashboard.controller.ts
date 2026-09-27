@@ -1,9 +1,17 @@
 // dashboard.controller.ts
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { DashboardService } from './dashboard.service';
-import { DashboardQueryDto, DashboardMetricsComparisonQueryDto } from './dto/dashboard-query.dto';
+import {
+  DashboardQueryDto,
+  DashboardMetricsComparisonQueryDto,
+} from './dto/dashboard-query.dto';
 import { User } from '../common/decorators/user.decorator';
 import { UserId } from '../db_types/Users';
 
@@ -15,7 +23,9 @@ export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
   @Get('date-range')
-  @ApiOperation({ summary: 'Obtém a data da primeira e da última aposta do usuário' })
+  @ApiOperation({
+    summary: 'Obtém a data da primeira e da última aposta do usuário',
+  })
   @ApiResponse({ status: 200, description: 'Intervalo retornado com sucesso.' })
   async getDateRange(@User('userId') userId: UserId) {
     return this.dashboardService.getBetDateRange(userId);
@@ -23,7 +33,10 @@ export class DashboardController {
 
   @Get('by-house')
   @ApiOperation({ summary: 'Obtém o lucro por casa no período' })
-  @ApiResponse({ status: 200, description: 'Lucro por casa retornado com sucesso.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Lucro por casa retornado com sucesso.',
+  })
   async getProfitByHouse(
     @Query() query: DashboardQueryDto,
     @User('userId') userId: UserId,
@@ -42,8 +55,14 @@ export class DashboardController {
   }
 
   @Get('metrics-comparison')
-  @ApiOperation({ summary: 'Obtém métricas do período atual e do período anterior, para comparação' })
-  @ApiResponse({ status: 200, description: 'Métricas de comparação retornadas com sucesso.' })
+  @ApiOperation({
+    summary:
+      'Obtém métricas do período atual e do período anterior, para comparação',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Métricas de comparação retornadas com sucesso.',
+  })
   async getMetricsComparison(
     @Query() query: DashboardMetricsComparisonQueryDto,
     @User('userId') userId: UserId,
@@ -53,7 +72,10 @@ export class DashboardController {
 
   @Get('monthly-summary')
   @ApiOperation({ summary: 'Obtém resumo mensal para gráficos' })
-  @ApiResponse({ status: 200, description: 'Resumo mensal retornado com sucesso.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Resumo mensal retornado com sucesso.',
+  })
   async getMonthlySummary(
     @Query() query: DashboardQueryDto,
     @User('userId') userId: UserId,
@@ -63,7 +85,10 @@ export class DashboardController {
 
   @Get('daily-summary')
   @ApiOperation({ summary: 'Obtém resumo diário para gráficos' })
-  @ApiResponse({ status: 200, description: 'Resumo diário retornado com sucesso.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Resumo diário retornado com sucesso.',
+  })
   async getDailySummary(
     @Query() query: DashboardQueryDto,
     @User('userId') userId: UserId,

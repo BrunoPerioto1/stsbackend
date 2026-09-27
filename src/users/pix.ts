@@ -2,7 +2,8 @@
 // chave, valor e um txid por usuário: o comprovante chega com a identificação
 // de quem pagou, em vez de o admin adivinhar pelo nome do pagador.
 
-const field = (id: string, value: string) => `${id}${String(value.length).padStart(2, '0')}${value}`;
+const field = (id: string, value: string) =>
+  `${id}${String(value.length).padStart(2, '0')}${value}`;
 
 // CRC16-CCITT (polinômio 0x1021, início 0xFFFF), exigido no campo 63.
 export function crc16(payload: string): string {
@@ -34,7 +35,13 @@ export interface PixCharge {
   merchantCity: string;
 }
 
-export function pixBrCode({ key, amount, txid, merchantName, merchantCity }: PixCharge): string {
+export function pixBrCode({
+  key,
+  amount,
+  txid,
+  merchantName,
+  merchantCity,
+}: PixCharge): string {
   const payload = [
     field('00', '01'),
     field('26', field('00', 'br.gov.bcb.pix') + field('01', key)),
@@ -44,7 +51,10 @@ export function pixBrCode({ key, amount, txid, merchantName, merchantCity }: Pix
     field('58', 'BR'),
     field('59', ascii(merchantName, 25) || 'RECEBEDOR'),
     field('60', ascii(merchantCity, 15) || 'SAO PAULO'),
-    field('62', field('05', txid.replace(/[^A-Za-z0-9]/g, '').slice(0, 25) || '***')),
+    field(
+      '62',
+      field('05', txid.replace(/[^A-Za-z0-9]/g, '').slice(0, 25) || '***'),
+    ),
     '6304',
   ].join('');
   return payload + crc16(payload);

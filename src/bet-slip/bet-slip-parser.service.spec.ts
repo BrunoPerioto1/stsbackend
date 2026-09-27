@@ -137,7 +137,9 @@ describe('BetTextService.handleBetPhoto', () => {
 
   it('recusa casa desconhecida antes de chamar a IA', async () => {
     const { service, deps } = buildService({
-      houseService: { resolveHouseIdFromText: jest.fn().mockResolvedValue(null) },
+      houseService: {
+        resolveHouseIdFromText: jest.fn().mockResolvedValue(null),
+      },
     });
     const ctx = buildCtx();
 
@@ -206,7 +208,9 @@ describe('BetTextService.handleBetPhoto', () => {
       odd: 3,
     });
     expect(extractStakeFromText(text)).toBe(14.83);
-    expect(deps.houseService.resolveHouseIdFromText).toHaveBeenCalledWith('🏠 Ginga');
+    expect(deps.houseService.resolveHouseIdFromText).toHaveBeenCalledWith(
+      '🏠 Ginga',
+    );
   });
 
   it('avisa sem stack trace quando a OpenAI falha', async () => {
@@ -231,7 +235,9 @@ describe('BetTextService.handleBetPhoto', () => {
       resolveHouse = resolve;
     });
     const { service, deps } = buildService({
-      houseService: { resolveHouseIdFromText: jest.fn().mockReturnValue(house) },
+      houseService: {
+        resolveHouseIdFromText: jest.fn().mockReturnValue(house),
+      },
     });
     deps.betSlipParser.extractBetFromImage.mockResolvedValue({
       evento: 'Cruz Azul x Flamengo',
@@ -240,7 +246,9 @@ describe('BetTextService.handleBetPhoto', () => {
       odd: 1.73,
       stake: 15000,
     });
-    const log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
+    const log = jest
+      .spyOn(Logger.prototype, 'log')
+      .mockImplementation(() => {});
     const ctx = buildCtx();
     const pending = service.handleBetPhoto(ctx, photoMsg);
     expect(ctx.reply).toHaveBeenCalledWith('⏳ Analisando a foto…', {
@@ -326,6 +334,8 @@ describe('pickPhotoSize', () => {
   });
 
   it('cai no maior disponivel quando nenhum chega a 1100px', () => {
-    expect(pickPhotoSize([size(90), size(320), size(800)]).file_id).toBe('f800');
+    expect(pickPhotoSize([size(90), size(320), size(800)]).file_id).toBe(
+      'f800',
+    );
   });
 });

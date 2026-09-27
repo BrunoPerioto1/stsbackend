@@ -1,4 +1,11 @@
-import { Controller, Get, Param, ParseIntPipe, Query, Header } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Query,
+  Header,
+} from '@nestjs/common';
 import {
   ApiOperation,
   ApiResponse,
@@ -21,21 +28,39 @@ export class HouseController {
   @Get('balances')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Calcula saldos de casas com apostas registradas (escopo do usuário)' })
-  @ApiQuery({ name: 'houseId', required: false, type: Number, description: 'Filtra por ID da casa de apostas' })
-  @ApiQuery({ name: 'houseName', required: false, type: String, description: 'Filtra por nome da casa de apostas (busca parcial)' })
+  @ApiOperation({
+    summary:
+      'Calcula saldos de casas com apostas registradas (escopo do usuário)',
+  })
+  @ApiQuery({
+    name: 'houseId',
+    required: false,
+    type: Number,
+    description: 'Filtra por ID da casa de apostas',
+  })
+  @ApiQuery({
+    name: 'houseName',
+    required: false,
+    type: String,
+    description: 'Filtra por nome da casa de apostas (busca parcial)',
+  })
   @ApiResponse({
     status: 200,
     description: 'Saldos calculados com sucesso.',
   })
-  calculateAllHousesBalance(@Query() filter: HouseFilterRequestDto, @User('userId') userId: number) {
+  calculateAllHousesBalance(
+    @Query() filter: HouseFilterRequestDto,
+    @User('userId') userId: number,
+  ) {
     return this.houseService.getAllHousesBalanceWithFilter(filter, userId);
   }
 
   @Get('metrics')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Obtém métricas de casas de aposta (escopo do usuário)' })
+  @ApiOperation({
+    summary: 'Obtém métricas de casas de aposta (escopo do usuário)',
+  })
   @ApiResponse({ status: 200, description: 'Métricas retornadas com sucesso.' })
   getHouseMetrics(@User('userId') userId: number) {
     return this.houseService.getHouseMetrics(userId);
@@ -46,9 +71,15 @@ export class HouseController {
   // todo mundo) — entao pode ir pro cache compartilhado da CDN sem risco de
   // vazar dado de um usuario pro outro. As demais rotas sao por usuario e NAO
   // podem receber cache publico.
-  @Header('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400')
+  @Header(
+    'Cache-Control',
+    'public, s-maxage=3600, stale-while-revalidate=86400',
+  )
   @ApiOperation({ summary: 'Lista todas as casas de apostas' })
-  @ApiResponse({ status: 200, description: 'Lista de casas retornada com sucesso.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Lista de casas retornada com sucesso.',
+  })
   getAllHouses() {
     return this.houseService.getAllHouses();
   }
@@ -61,7 +92,10 @@ export class HouseController {
   @Get('ranking')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Ranking de casas por ROI/Lucro/Taxa de acerto (escopo do usuário)' })
+  @ApiOperation({
+    summary:
+      'Ranking de casas por ROI/Lucro/Taxa de acerto (escopo do usuário)',
+  })
   @ApiQuery({ name: 'startDate', required: false, type: String })
   @ApiQuery({ name: 'endDate', required: false, type: String })
   @ApiQuery({ name: 'minBets', required: false, type: Number })
@@ -72,7 +106,12 @@ export class HouseController {
     @Query('minBets') minBets: string | undefined,
     @User('userId') userId: number,
   ) {
-    return this.houseService.getHouseRanking(userId, startDate, endDate, minBets ? Number(minBets) : undefined);
+    return this.houseService.getHouseRanking(
+      userId,
+      startDate,
+      endDate,
+      minBets ? Number(minBets) : undefined,
+    );
   }
 
   @Get(':id')
@@ -90,5 +129,4 @@ export class HouseController {
   // calculateHouseBalance(@Param('id') id: string) {
   //   return this.houseService.calculateHouseBalance(+id);
   // }
-
 }

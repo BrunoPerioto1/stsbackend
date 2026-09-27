@@ -23,7 +23,11 @@ import {
 } from '@nestjs/swagger';
 import { User } from '../common/decorators/user.decorator';
 import { TipsService } from './tips.service';
-import { PlanilharTipDto, TipFilterDto, TipsListResponseDto } from './dto/tip.dto';
+import {
+  PlanilharTipDto,
+  TipFilterDto,
+  TipsListResponseDto,
+} from './dto/tip.dto';
 
 @ApiTags('Tips')
 @Controller('tips')
@@ -34,7 +38,8 @@ export class TipsController {
 
   @Get()
   @ApiOperation({
-    summary: 'Lista as tips do canal para o usuário logado, já com os campos extraídos',
+    summary:
+      'Lista as tips do canal para o usuário logado, já com os campos extraídos',
   })
   @ApiResponse({ status: HttpStatus.OK, type: TipsListResponseDto })
   async list(@Query() filters: TipFilterDto, @User('userId') userId: number) {
@@ -42,7 +47,9 @@ export class TipsController {
   }
 
   @Get('counts')
-  @ApiOperation({ summary: 'Quantas tips o usuário tem em cada status (badge do menu)' })
+  @ApiOperation({
+    summary: 'Quantas tips o usuário tem em cada status (badge do menu)',
+  })
   async counts(@User('userId') userId: number) {
     return this.tipsService.countsForUser(userId);
   }
@@ -77,7 +84,9 @@ export class TipsController {
 
   @Delete(':id/dismiss')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Desfaz o "caiu" e devolve a tip para as pendentes' })
+  @ApiOperation({
+    summary: 'Desfaz o "caiu" e devolve a tip para as pendentes',
+  })
   @ApiNoContentResponse({ description: 'Tip devolvida para as pendentes.' })
   async undismiss(
     @Param('id', ParseIntPipe) id: number,

@@ -23,7 +23,12 @@ function makeService(
       .mockResolvedValue(overrides.pending ?? []),
     dismiss: jest.fn().mockResolvedValue(overrides.dismissed ?? 0),
     queue: jest.fn().mockResolvedValue(
-      overrides.queue ?? { pending: 0, settleable: 0, suggestions: 0, undecided: 0 },
+      overrides.queue ?? {
+        pending: 0,
+        settleable: 0,
+        suggestions: 0,
+        undecided: 0,
+      },
     ),
   };
   const betService = { finalizeMany: jest.fn().mockResolvedValue(undefined) };
@@ -86,16 +91,40 @@ describe('computeSuggestions', () => {
   });
 
   it('multipla de varios jogos liquida cada perna no proprio jogo', async () => {
-    const perna = (position: number, homeName: string, awayName: string, home: number, away: number) => ({
-      betId: 5, position, homeName, awayName, homeScore: home, awayScore: away,
-      eventStatus: 'finished', eventSport: 'Football', scoreScope: 'REGULATION', facts: null,
+    const perna = (
+      position: number,
+      homeName: string,
+      awayName: string,
+      home: number,
+      away: number,
+    ) => ({
+      betId: 5,
+      position,
+      homeName,
+      awayName,
+      homeScore: home,
+      awayScore: away,
+      eventStatus: 'finished',
+      eventSport: 'Football',
+      scoreScope: 'REGULATION',
+      facts: null,
     });
     const { service, repository } = makeService({
-      settleable: [{
-        ...aposta(5, 'Boca Juniors e São Paulo vencerem - Resultado final', 0, 2),
-        game: 'CD Recoleta x Boca Juniors / São Paulo x Bolívar',
-      }],
-      legs: [perna(0, 'CD Recoleta', 'Boca Juniors', 0, 2), perna(1, 'São Paulo', 'Bolívar', 2, 0)],
+      settleable: [
+        {
+          ...aposta(
+            5,
+            'Boca Juniors e São Paulo vencerem - Resultado final',
+            0,
+            2,
+          ),
+          game: 'CD Recoleta x Boca Juniors / São Paulo x Bolívar',
+        },
+      ],
+      legs: [
+        perna(0, 'CD Recoleta', 'Boca Juniors', 0, 2),
+        perna(1, 'São Paulo', 'Bolívar', 2, 0),
+      ],
     });
 
     await service.computeSuggestions(10 as any);
@@ -201,8 +230,18 @@ describe('queue', () => {
       settleable: [aposta(1, 'Mais de 2.5 gols', 2, 1)],
     });
     repository.queue
-      .mockResolvedValueOnce({ pending: 1, settleable: 1, suggestions: 0, undecided: 0 })
-      .mockResolvedValueOnce({ pending: 1, settleable: 0, suggestions: 1, undecided: 0 });
+      .mockResolvedValueOnce({
+        pending: 1,
+        settleable: 1,
+        suggestions: 0,
+        undecided: 0,
+      })
+      .mockResolvedValueOnce({
+        pending: 1,
+        settleable: 0,
+        suggestions: 1,
+        undecided: 0,
+      });
 
     await expect(service.queue(1 as any)).resolves.toEqual({
       pending: 1,
@@ -219,7 +258,9 @@ describe('queue', () => {
     const { service, repository } = makeService({
       queue: { pending: 3, settleable: 0, suggestions: 2, undecided: 0 },
     });
-    await expect(service.queue(1 as any)).resolves.toMatchObject({ computed: 0 });
+    await expect(service.queue(1 as any)).resolves.toMatchObject({
+      computed: 0,
+    });
     expect(repository.findSettleable).not.toHaveBeenCalled();
   });
 
@@ -228,6 +269,8 @@ describe('queue', () => {
       queue: { pending: 5, settleable: 0, suggestions: 0, undecided: 2 },
     });
 
-    await expect(service.queue(1 as any)).resolves.toMatchObject({ hasMore: false });
+    await expect(service.queue(1 as any)).resolves.toMatchObject({
+      hasMore: false,
+    });
   });
 });

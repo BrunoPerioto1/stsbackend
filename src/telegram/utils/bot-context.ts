@@ -44,12 +44,24 @@ export interface CallbackMessage {
   text?: string;
   caption?: string;
   photo?: unknown[];
-  reply_to_message?: Message & { voice?: unknown; audio?: unknown; photo?: unknown[]; caption?: string; from?: { id: number } };
+  reply_to_message?: Message & {
+    voice?: unknown;
+    audio?: unknown;
+    photo?: unknown[];
+    caption?: string;
+    from?: { id: number };
+  };
   reply_markup?: InlineKeyboardMarkup;
 }
 
 export function callbackMessage(ctx: Context): CallbackMessage | undefined {
   const query = ctx.callbackQuery;
-  if (!query || !('message' in query) || !query.message || query.message.date === 0) return undefined;
+  if (
+    !query ||
+    !('message' in query) ||
+    !query.message ||
+    query.message.date === 0
+  )
+    return undefined;
   return query.message as unknown as CallbackMessage;
 }

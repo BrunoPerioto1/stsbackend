@@ -18,11 +18,17 @@ export function createPayToken(userId: number, now = Date.now()): string {
 }
 
 /** userId do token, ou null se for inválido/vencido. */
-export function readPayToken(token: string | undefined | null, now = Date.now()): number | null {
+export function readPayToken(
+  token: string | undefined | null,
+  now = Date.now(),
+): number | null {
   const [id, exp, sig] = (token ?? '').split('.');
   if (!id || !exp || !sig) return null;
   const expected = sign(`${id}.${exp}`);
-  if (sig.length !== expected.length || !timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
+  if (
+    sig.length !== expected.length ||
+    !timingSafeEqual(Buffer.from(sig), Buffer.from(expected))
+  ) {
     return null;
   }
   if (!(Number(exp) > now)) return null;

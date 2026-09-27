@@ -1,4 +1,12 @@
-import { Controller, HttpCode, HttpStatus, Inject, Logger, Post, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  HttpCode,
+  HttpStatus,
+  Inject,
+  Logger,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
 import { Telegraf } from 'telegraf';
 import { TELEGRAM_BOT } from '../telegram/telegram-bot.provider';
@@ -44,17 +52,23 @@ export class SettlementCronController {
             'O placar já chegou; nada vira lucro até você confirmar.',
           {
             reply_markup: {
-              inline_keyboard: [[{ text: '✅ Conferir', url: frontUrl('/settlement') }]],
+              inline_keyboard: [
+                [{ text: '✅ Conferir', url: frontUrl('/settlement') }],
+              ],
             },
           },
         );
         notified++;
       } catch (error) {
-        this.logger.warn(`aviso de conferencia falhou (userId=${userId}): ${(error as Error).message}`);
+        this.logger.warn(
+          `aviso de conferencia falhou (userId=${userId}): ${(error as Error).message}`,
+        );
       }
     }
 
-    this.logger.log(`cron: ${comNovidade.length} usuarios com proposta nova, ${notified} avisados`);
+    this.logger.log(
+      `cron: ${comNovidade.length} usuarios com proposta nova, ${notified} avisados`,
+    );
     return { users: comNovidade.length, notified };
   }
 }

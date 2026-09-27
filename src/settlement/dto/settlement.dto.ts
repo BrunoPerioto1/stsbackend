@@ -60,7 +60,10 @@ export class SettlementSuggestionDto {
 }
 
 export class SettlementQueueDto {
-  @ApiProperty({ example: 40, description: 'Apostas ainda pendentes do usuário.' })
+  @ApiProperty({
+    example: 40,
+    description: 'Apostas ainda pendentes do usuário.',
+  })
   pending!: number;
 
   @ApiProperty({
@@ -79,7 +82,10 @@ export class SettlementQueueDto {
   })
   overdue!: number;
 
-  @ApiProperty({ example: 12, description: 'Propostas aguardando confirmação.' })
+  @ApiProperty({
+    example: 12,
+    description: 'Propostas aguardando confirmação.',
+  })
   suggestions!: number;
 
   @ApiProperty({

@@ -25,10 +25,14 @@ function contexto(
     sport:
       sport == null && eventSport == null
         ? 'football'
-        : (sport == null || football(sport)) && (eventSport == null || football(eventSport))
+        : (sport == null || football(sport)) &&
+            (eventSport == null || football(eventSport))
           ? 'football'
           : null,
-    scoreScope: scoreScope == null || scoreScope === 'REGULATION' ? 'REGULATION' : 'UNKNOWN',
+    scoreScope:
+      scoreScope == null || scoreScope === 'REGULATION'
+        ? 'REGULATION'
+        : 'UNKNOWN',
     // Regra da casa informada pelo usuário em 2026-09-15: vermelho vale 2
     // amarelos. O coletor já grava cardPoints nessa regra.
     cardCounting: 'RED_COUNTS_TWO',
@@ -83,7 +87,12 @@ export class SettlementService {
               eventStatus: perna.eventStatus,
               // Esporte da perna pelo provider: "Futebol" da aposta pode vir
               // como "Vários" numa multipla.
-              context: contexto(perna.facts, null, perna.eventSport, perna.scoreScope),
+              context: contexto(
+                perna.facts,
+                null,
+                perna.eventSport,
+                perna.scoreScope,
+              ),
             }),
           );
         const settlement = settleMultiEvent(bet.game, bet.market, legs);

@@ -1,4 +1,4 @@
-import type { ColumnType, Insertable, Selectable, Updateable } from "kysely";
+import type { ColumnType, Insertable, Selectable, Updateable } from 'kysely';
 
 export type RoleId = number & { __type: 'RoleId' };
 
@@ -11,6 +11,6 @@ export default interface RolesTable {
   updatedAt: ColumnType<Date, Date | undefined, Date>;
 }
 
-export type Role = Selectable<RolesTable>;      // SELECT
-export type NewRole = Insertable<RolesTable>;   // INSERT
+export type Role = Selectable<RolesTable>; // SELECT
+export type NewRole = Insertable<RolesTable>; // INSERT
 export type UpdateRole = Updateable<RolesTable>; // UPDATE

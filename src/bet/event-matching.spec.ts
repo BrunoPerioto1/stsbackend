@@ -359,9 +359,9 @@ describe('matchEvent', () => {
 describe('mando invertido', () => {
   it('casa o jogo mesmo com os times na ordem trocada', () => {
     // Provider tem Gremio x Bragantino; a casa escreveu ao contrario.
-    expect(matchEvent('Red Bull Bragantino x Grêmio', '', CANDIDATOS)?.externalId).toBe(
-      '2',
-    );
+    expect(
+      matchEvent('Red Bull Bragantino x Grêmio', '', CANDIDATOS)?.externalId,
+    ).toBe('2');
   });
 
   it('prefere o mando do texto quando ida e volta estao na janela', () => {
@@ -392,7 +392,8 @@ describe('confronto com pedaco a mais (hifen virou " x ")', () => {
 
   it('hifen no time de fora', () => {
     expect(
-      matchEvent('Brest x Paris St x Germain', '', CANDIDATOS_HIFEN)?.externalId,
+      matchEvent('Brest x Paris St x Germain', '', CANDIDATOS_HIFEN)
+        ?.externalId,
     ).toBe('10');
     expect(
       matchEvent('Coritiba x Athletico x PR', '', CANDIDATOS_HIFEN)?.externalId,

@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  Logger,
+} from '@nestjs/common';
 import { TipsRepository } from '../infra/repository/tips.repository';
 import { UsersService } from '../users/users.service';
 import { BetService, TipAlreadyPlanilhadaException } from '../bet/bet.service';
@@ -89,7 +94,8 @@ export class TipsService {
       );
 
     const houseId =
-      overrides.houseId ?? (await this.houseService.resolveHouseIdFromText(tip.text));
+      overrides.houseId ??
+      (await this.houseService.resolveHouseIdFromText(tip.text));
     if (!houseId)
       throw new BadRequestException(
         'Não reconheci a casa dessa tip. Escolha a casa em Editar.',
@@ -176,29 +182,35 @@ export class TipsService {
     // caso comum), a página inteira sai do banco já cortada.
     const filtraCasa = !!houseIds?.length;
 
-    const [counts, pendentes, pageRows, banca, houses, candidatos] = await Promise.all([
-      this.tipsRepository.countByStatus(uid, minPercentFilter),
-      // Só pra somar a stake das pendentes: é o conjunto pequeno (janela de 48h).
-      this.tipsRepository.findListRows(uid, minPercentFilter, { status: 'pending' }),
-      this.tipsRepository.findListRows(
-        uid,
-        minPercentFilter,
-        filter,
-        filtraCasa ? undefined : { limit: perPage, offset: (page - 1) * perPage },
-      ),
-      this.usersService.getUserStake(userId),
-      this.houseService.getAllHouses(),
-      // Uma consulta só pra página inteira: o matcher compara nome em memória,
-      // então a mesma janela de eventos serve todas as tips.
-      this.findEventCandidates(),
-    ]);
+    const [counts, pendentes, pageRows, banca, houses, candidatos] =
+      await Promise.all([
+        this.tipsRepository.countByStatus(uid, minPercentFilter),
+        // Só pra somar a stake das pendentes: é o conjunto pequeno (janela de 48h).
+        this.tipsRepository.findListRows(uid, minPercentFilter, {
+          status: 'pending',
+        }),
+        this.tipsRepository.findListRows(
+          uid,
+          minPercentFilter,
+          filter,
+          filtraCasa
+            ? undefined
+            : { limit: perPage, offset: (page - 1) * perPage },
+        ),
+        this.usersService.getUserStake(userId),
+        this.houseService.getAllHouses(),
+        // Uma consulta só pra página inteira: o matcher compara nome em memória,
+        // então a mesma janela de eventos serve todas as tips.
+        this.findEventCandidates(),
+      ]);
 
     // Poucos nomes de casa distintos se repetem em milhares de tips, e o
     // casamento por similaridade contra todas as casas custava ~600ms por
     // request. Mesmo nome + mesma lista = mesmo resultado, entao lembra aqui.
     const houseIdByName = new Map<string | null, number | null>();
     const houseIdOf = (name: string | null) => {
-      if (!houseIdByName.has(name)) houseIdByName.set(name, matchHouseIdByName(name, houses ?? []));
+      if (!houseIdByName.has(name))
+        houseIdByName.set(name, matchHouseIdByName(name, houses ?? []));
       return houseIdByName.get(name)!;
     };
 
@@ -218,7 +230,12 @@ export class TipsService {
       return {
         id: Number(row.id),
         createdAt: row.createdAt,
-        status: row.betId != null ? 'planilhada' : row.dismissalId != null ? 'caiu' : 'pending',
+        status:
+          row.betId != null
+            ? 'planilhada'
+            : row.dismissalId != null
+              ? 'caiu'
+              : 'pending',
         betId: row.betId != null ? Number(row.betId) : null,
         // Nome cadastrado quando casou: o canal escreve "bet365", a lista de
         // apostas mostra "BET365" — a mesma casa com duas grafias na tela.
@@ -233,7 +250,9 @@ export class TipsService {
         recommendedStake: stake,
         potentialProfit:
           extractPotentialProfitFromText(row.deliveryText ?? '') ??
-          (stake !== null && odd !== null ? Number((stake * odd - stake).toFixed(2)) : null),
+          (stake !== null && odd !== null
+            ? Number((stake * odd - stake).toFixed(2))
+            : null),
         link: extractLinkFromText(row.text),
         calcLink: extractCalcLinkFromEntities(row.text, row.entities),
         // Tip já planilhada carrega o horário que a aposta gravou na criação.
@@ -249,7 +268,9 @@ export class TipsService {
 
     const summary = {
       ...counts,
-      pendingStake: pendentes.map(toItem).reduce((sum, i) => sum + (i.recommendedStake ?? 0), 0),
+      pendingStake: pendentes
+        .map(toItem)
+        .reduce((sum, i) => sum + (i.recommendedStake ?? 0), 0),
     };
 
     // Tip sem casa reconhecida fica de fora quando há filtro: o usuário pediu
@@ -264,7 +285,11 @@ export class TipsService {
       pagina = daCasa.slice((page - 1) * perPage, page * perPage);
     } else {
       pagina = pageRows.map(toItem);
-      total = await this.tipsRepository.countListRows(uid, minPercentFilter, filter);
+      total = await this.tipsRepository.countListRows(
+        uid,
+        minPercentFilter,
+        filter,
+      );
     }
 
     // O horário do jogo entra só agora, sobre a página já cortada. Casar nome
@@ -276,7 +301,13 @@ export class TipsService {
       ...item,
       eventStartAt:
         item.eventStartAt ??
-        resolveEventStartAt(item.game, item.market, item.sport, candidatos, cache),
+        resolveEventStartAt(
+          item.game,
+          item.market,
+          item.sport,
+          candidatos,
+          cache,
+        ),
     }));
 
     return {
@@ -326,7 +357,10 @@ export class TipsService {
     const user = await this.usersService.findById(userId);
     const minPercentFilter =
       user?.minPercentFilter != null ? Number(user.minPercentFilter) : null;
-    return this.tipsRepository.countByStatus(userId as UserId, minPercentFilter);
+    return this.tipsRepository.countByStatus(
+      userId as UserId,
+      minPercentFilter,
+    );
   }
 
   async getSummaryForUser(

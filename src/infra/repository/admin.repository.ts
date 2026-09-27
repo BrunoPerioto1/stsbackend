@@ -86,7 +86,12 @@ export class AdminRepository {
       .where('tips.createdAt', '>', hoursAgo(DELIVERY_WINDOW_HOURS))
       .where('tips.isAviso', '=', false)
       .where('d.id', 'is', null)
-      .select(['tips.id as id', 'tips.text as text', 'tips.percent as percent', 'tips.createdAt as createdAt'])
+      .select([
+        'tips.id as id',
+        'tips.text as text',
+        'tips.percent as percent',
+        'tips.createdAt as createdAt',
+      ])
       .orderBy('tips.createdAt', 'desc')
       .execute();
 
@@ -165,7 +170,9 @@ export class AdminRepository {
   private async suggestionCounts(userId: UserId) {
     const row = await this.dbRead
       .selectFrom('betSettlementSuggestions as s')
-      .innerJoin('bets', (join) => join.onRef('bets.id', '=', 's.betId').on('bets.deletedAt', 'is', null))
+      .innerJoin('bets', (join) =>
+        join.onRef('bets.id', '=', 's.betId').on('bets.deletedAt', 'is', null),
+      )
       .innerJoin('betResults', 'betResults.betId', 's.betId')
       .where('bets.userId', '=', userId)
       .where('s.dismissedAt', 'is', null)
@@ -191,7 +198,10 @@ export class AdminRepository {
   private async usersByRole() {
     const rows = await this.dbRead
       .selectFrom('users')
-      .select((eb) => ['users.roleId as roleId', eb.fn.countAll<string>().as('total')])
+      .select((eb) => [
+        'users.roleId as roleId',
+        eb.fn.countAll<string>().as('total'),
+      ])
       .groupBy('users.roleId')
       .execute();
 
@@ -214,7 +224,10 @@ export class AdminRepository {
    * silêncio é justamente o que se quer ver marcado.
    */
   private async deliveryFilters(): Promise<(number | null)[]> {
-    const linked = this.dbRead.selectFrom('users').select('minPercentFilter').where('telegramUserId', 'is not', null);
+    const linked = this.dbRead
+      .selectFrom('users')
+      .select('minPercentFilter')
+      .where('telegramUserId', 'is not', null);
 
     const active = await linked
       .where((eb) =>
@@ -230,7 +243,9 @@ export class AdminRepository {
 
     const rows = active.length ? active : await linked.execute();
 
-    return rows.map((r) => (r.minPercentFilter === null ? null : Number(r.minPercentFilter)));
+    return rows.map((r) =>
+      r.minPercentFilter === null ? null : Number(r.minPercentFilter),
+    );
   }
 
   /** `userId` é o admin que pediu: os cards de liquidação são das apostas dele. */
@@ -271,7 +286,9 @@ export class AdminRepository {
   async listUsers() {
     return this.dbRead
       .selectFrom('users as u')
-      .leftJoin('bets as b', (join) => join.onRef('b.userId', '=', 'u.id').on('b.deletedAt', 'is', null))
+      .leftJoin('bets as b', (join) =>
+        join.onRef('b.userId', '=', 'u.id').on('b.deletedAt', 'is', null),
+      )
       .select((eb) => [
         'u.id as id',
         'u.username as username',

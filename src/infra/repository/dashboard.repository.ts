@@ -1,6 +1,12 @@
 // src/dashboard/dashboard.repository.ts
 import { Inject, Injectable } from '@nestjs/common';
-import { Kysely, sql, type Expression, type ExpressionBuilder, type SqlBool } from 'kysely';
+import {
+  Kysely,
+  sql,
+  type Expression,
+  type ExpressionBuilder,
+  type SqlBool,
+} from 'kysely';
 import type { SportId } from '../../db_types/Sports';
 import type { Database } from '../db/database.types';
 import { DATABASE_READ_CONNECTION } from '../db/db.module';
@@ -37,14 +43,18 @@ interface FilterDashboard {
 // copiadas, uma por consulta, que podiam divergir. Exige `bets as b`.
 function dashboardFilters(filters: FilterDashboard) {
   const { startDate, endDate, houseId, houseIds, sportIds, userId } = filters;
-  return (eb: ExpressionBuilder<Database & { b: Database["bets"] }, "b">) => {
-    const conditions: Expression<SqlBool>[] = [eb("b.deletedAt", "is", null)];
-    if (isNotEmpty(userId)) conditions.push(eb("b.userId", "=", userId!));
-    if (isNotEmpty(houseId)) conditions.push(eb("b.houseId", "=", houseId!));
-    if (houseIds?.length) conditions.push(eb("b.houseId", "in", houseIds as BettingHouseId[]));
-    if (sportIds?.length) conditions.push(eb("b.sportId", "in", sportIds as SportId[]));
-    if (isNotEmpty(startDate)) conditions.push(eb(betDate, ">=", startOfDay(new Date(startDate!))));
-    if (isNotEmpty(endDate)) conditions.push(eb(betDate, "<", endOfDay(new Date(endDate!))));
+  return (eb: ExpressionBuilder<Database & { b: Database['bets'] }, 'b'>) => {
+    const conditions: Expression<SqlBool>[] = [eb('b.deletedAt', 'is', null)];
+    if (isNotEmpty(userId)) conditions.push(eb('b.userId', '=', userId!));
+    if (isNotEmpty(houseId)) conditions.push(eb('b.houseId', '=', houseId!));
+    if (houseIds?.length)
+      conditions.push(eb('b.houseId', 'in', houseIds as BettingHouseId[]));
+    if (sportIds?.length)
+      conditions.push(eb('b.sportId', 'in', sportIds as SportId[]));
+    if (isNotEmpty(startDate))
+      conditions.push(eb(betDate, '>=', startOfDay(new Date(startDate!))));
+    if (isNotEmpty(endDate))
+      conditions.push(eb(betDate, '<', endOfDay(new Date(endDate!))));
     return eb.and(conditions);
   };
 }
@@ -56,118 +66,167 @@ export class DashboardRepository {
     private readonly dbRead: Kysely<Database>,
   ) {}
 
+  async findDailySummary(filters: FilterDashboard) {
+    return this.dbRead
+      .selectFrom('bets as b')
+      .where(dashboardFilters(filters))
+      .select(({ fn }) => [
+        betCalendarDateBr.as('date'),
+        fn.count('b.id').as('totalBets'),
+        fn<number>('coalesce', [fn.sum<number>('b.profit'), sql.lit(0)]).as(
+          'profitDay',
+        ),
+      ])
+      .groupBy(betCalendarDateBr)
+      .orderBy(betCalendarDateBr, 'asc')
+      .execute();
+  }
+  async findMonthlySummary(filters: FilterDashboard) {
+    return this.dbRead
+      .selectFrom('bets as b')
+      .leftJoin('betResults as br', 'br.betId', 'b.id')
+      .where(dashboardFilters(filters))
+      .select((eb) => [
+        betCalendarMonthBr.as('month'),
+        eb.fn.count('b.id').as('totalBets'),
+        eb
+          .fn<number>('coalesce', [eb.fn.sum<number>('b.profit'), sql.lit(0)])
+          .as('profitMonth'),
+        // Base do ROI do mês, igual à das métricas: só o stake já liquidado.
+        eb
+          .fn<number>('coalesce', [
+            eb.fn.sum<number>(
+              eb
+                .case()
+                .when('br.resultId', 'in', SETTLED_RESULT_IDS as any)
+                .then(eb.ref('b.stake'))
+                .else(0)
+                .end(),
+            ),
+            sql.lit(0),
+          ])
+          .as('settledStake'),
+      ])
+      .groupBy(betCalendarMonthBr)
+      .orderBy(betCalendarMonthBr, 'asc')
+      .execute();
+  }
+  // Lucro por casa no periodo. Casa sem lucro/prejuizo (so pendentes) fica de fora.
+  async findProfitByHouse(filters: FilterDashboard) {
+    return this.dbRead
+      .selectFrom('bets as b')
+      .leftJoin('bettingHouses as bh', 'bh.id', 'b.houseId')
+      .where(dashboardFilters(filters))
+      .select(({ fn }) => [
+        sql<string>`coalesce(${sql.ref('bh.name')}, 'Sem casa')`.as('house'),
+        fn.sum<string>('b.profit').as('profit'),
+      ])
+      .groupBy('bh.name')
+      .having(
+        ({ fn }) => fn('coalesce', [fn.sum('b.profit'), sql.lit(0)]),
+        '!=',
+        0,
+      )
+      .orderBy('profit', 'desc')
+      .execute();
+  }
+  async findBetDateRange(userId: UserId) {
+    return this.dbRead
+      .selectFrom('bets as b')
+      .where('b.deletedAt', 'is', null)
+      .where('b.userId', '=', userId)
+      .select((eb) => [
+        eb.fn.min(betDate).as('firstBetDate'),
+        eb.fn.max(betDate).as('lastBetDate'),
+      ])
+      .executeTakeFirst();
+  }
 
-
-async findDailySummary(filters: FilterDashboard) {
-  return this.dbRead
-    .selectFrom("bets as b")
-    .where(dashboardFilters(filters))
-    .select(({ fn }) => [
-      betCalendarDateBr.as("date"),
-      fn.count("b.id").as("totalBets"),
-      fn<number>("coalesce", [fn.sum<number>("b.profit"), sql.lit(0)]).as("profitDay"),
-    ])
-    .groupBy(betCalendarDateBr)
-    .orderBy(betCalendarDateBr, "asc")
-    .execute();
-}
-async findMonthlySummary(filters: FilterDashboard) {
-  return this.dbRead
-    .selectFrom("bets as b")
-    .leftJoin("betResults as br", "br.betId", "b.id")
-    .where(dashboardFilters(filters))
-    .select((eb) => [
-      betCalendarMonthBr.as("month"),
-      eb.fn.count("b.id").as("totalBets"),
-      eb.fn<number>("coalesce", [eb.fn.sum<number>("b.profit"), sql.lit(0)]).as("profitMonth"),
-      // Base do ROI do mês, igual à das métricas: só o stake já liquidado.
-      eb.fn<number>("coalesce", [
-        eb.fn.sum<number>(eb.case().when("br.resultId", "in", SETTLED_RESULT_IDS as any).then(eb.ref("b.stake")).else(0).end()),
-        sql.lit(0),
-      ]).as("settledStake"),
-    ])
-    .groupBy(betCalendarMonthBr)
-    .orderBy(betCalendarMonthBr, "asc")
-    .execute();
-}
-// Lucro por casa no periodo. Casa sem lucro/prejuizo (so pendentes) fica de fora.
-async findProfitByHouse(filters: FilterDashboard) {
-  return this.dbRead
-    .selectFrom("bets as b")
-    .leftJoin("bettingHouses as bh", "bh.id", "b.houseId")
-    .where(dashboardFilters(filters))
-    .select(({ fn }) => [
-      sql<string>`coalesce(${sql.ref("bh.name")}, 'Sem casa')`.as("house"),
-      fn.sum<string>("b.profit").as("profit"),
-    ])
-    .groupBy("bh.name")
-    .having(({ fn }) => fn("coalesce", [fn.sum("b.profit"), sql.lit(0)]), "!=", 0)
-    .orderBy("profit", "desc")
-    .execute();
-}
-async findBetDateRange(userId: UserId) {
-  return this.dbRead
-    .selectFrom("bets as b")
-    .where("b.deletedAt", "is", null)
-    .where("b.userId", "=", userId)
-    .select((eb) => [
-      eb.fn.min(betDate).as("firstBetDate"),
-      eb.fn.max(betDate).as("lastBetDate"),
-    ])
-    .executeTakeFirst();
-}
-
-async findDashboardMetrics(filters: FilterDashboard) {
-  return this.dbRead
-    .selectFrom("bets as b")
-    .leftJoin("betResults as br", "br.betId", "b.id")
-    .where(dashboardFilters(filters))
-    .select((eb) => [
-      eb.fn.count("b.id").as("totalBets"),
-      eb.fn<number>("sum", [eb.case().when("br.resultId", "in", SETTLED_RESULT_IDS as any).then(1).else(0).end()]).as("settledBets"),
-      eb.fn<number>("sum", [
+  async findDashboardMetrics(filters: FilterDashboard) {
+    return this.dbRead
+      .selectFrom('bets as b')
+      .leftJoin('betResults as br', 'br.betId', 'b.id')
+      .where(dashboardFilters(filters))
+      .select((eb) => [
+        eb.fn.count('b.id').as('totalBets'),
         eb
-          .case()
-          .when("br.resultId", "in", WON_RESULT_IDS as any)
-          .then(1)
-          .else(0)
-          .end(),
-      ]).as("wonBets"),
-      eb.fn<number>("sum", [
+          .fn<number>('sum', [
+            eb
+              .case()
+              .when('br.resultId', 'in', SETTLED_RESULT_IDS as any)
+              .then(1)
+              .else(0)
+              .end(),
+          ])
+          .as('settledBets'),
         eb
-          .case()
-          .when("br.resultId", "in", LOST_RESULT_IDS as any)
-          .then(1)
-          .else(0)
-          .end(),
-      ]).as("lostBets"),
-      eb.fn<number>("sum", [
+          .fn<number>('sum', [
+            eb
+              .case()
+              .when('br.resultId', 'in', WON_RESULT_IDS as any)
+              .then(1)
+              .else(0)
+              .end(),
+          ])
+          .as('wonBets'),
         eb
-          .case()
-          .when("br.resultId", "=", ResultIdEnum.PENDING as any)
-          .then(1)
-          .else(0)
-          .end(),
-      ]).as("pendingBets"),
-      eb.fn<number>("sum", [
+          .fn<number>('sum', [
+            eb
+              .case()
+              .when('br.resultId', 'in', LOST_RESULT_IDS as any)
+              .then(1)
+              .else(0)
+              .end(),
+          ])
+          .as('lostBets'),
         eb
-          .case()
-          .when("br.resultId", "=", ResultIdEnum.CANCELED as any)
-          .then(1)
-          .else(0)
-          .end(),
-      ]).as("canceledBets"),
-      eb.fn<number>("coalesce", [eb.fn.avg<number>("b.stake"), sql.lit(0)]).as("averageStake"),
-      eb.fn<number>("coalesce", [eb.fn.avg<number>("b.odd"), sql.lit(0)]).as("averageOdd"),
-      eb.fn<number>("coalesce", [eb.fn.sum<number>("b.stake"), sql.lit(0)]).as("totalStaked"),
-      // Base do ROI: so' o que ja' liquidou. Pendente ainda nao tem lucro e
-      // cancelada devolve a stake — dividir por elas encolhia o ROI.
-      eb.fn<number>("coalesce", [
-        eb.fn.sum<number>(eb.case().when("br.resultId", "in", SETTLED_RESULT_IDS as any).then(eb.ref("b.stake")).else(0).end()),
-        sql.lit(0),
-      ]).as("settledStake"),
-      eb.fn<number>("coalesce", [eb.fn.sum<number>("b.profit"), sql.lit(0)]).as("totalProfit"),
-    ])
-    .executeTakeFirst();
-}
+          .fn<number>('sum', [
+            eb
+              .case()
+              .when('br.resultId', '=', ResultIdEnum.PENDING as any)
+              .then(1)
+              .else(0)
+              .end(),
+          ])
+          .as('pendingBets'),
+        eb
+          .fn<number>('sum', [
+            eb
+              .case()
+              .when('br.resultId', '=', ResultIdEnum.CANCELED as any)
+              .then(1)
+              .else(0)
+              .end(),
+          ])
+          .as('canceledBets'),
+        eb
+          .fn<number>('coalesce', [eb.fn.avg<number>('b.stake'), sql.lit(0)])
+          .as('averageStake'),
+        eb
+          .fn<number>('coalesce', [eb.fn.avg<number>('b.odd'), sql.lit(0)])
+          .as('averageOdd'),
+        eb
+          .fn<number>('coalesce', [eb.fn.sum<number>('b.stake'), sql.lit(0)])
+          .as('totalStaked'),
+        // Base do ROI: so' o que ja' liquidou. Pendente ainda nao tem lucro e
+        // cancelada devolve a stake — dividir por elas encolhia o ROI.
+        eb
+          .fn<number>('coalesce', [
+            eb.fn.sum<number>(
+              eb
+                .case()
+                .when('br.resultId', 'in', SETTLED_RESULT_IDS as any)
+                .then(eb.ref('b.stake'))
+                .else(0)
+                .end(),
+            ),
+            sql.lit(0),
+          ])
+          .as('settledStake'),
+        eb
+          .fn<number>('coalesce', [eb.fn.sum<number>('b.profit'), sql.lit(0)])
+          .as('totalProfit'),
+      ])
+      .executeTakeFirst();
+  }
 }

@@ -6,7 +6,6 @@ import {
 import { Injectable, Logger } from '@nestjs/common';
 import { getOpenAIClient } from '../telegram/openai-client';
 
-
 const MODEL = 'gpt-5.6-luna';
 
 // A function do Vercel morre em 60s. Sem teto proprio o SDK espera 10 min, a
@@ -110,63 +109,61 @@ export class BetSlipParserService {
     deep?: boolean;
     withHouse?: boolean;
   }): Promise<ExtractedBetSlip & { casa?: string | null }> {
-    const images = [
-      { buffer: imageBuffer, mimeType },
-      ...extraImages,
-    ].map(
-      (img) =>
-        `data:${img.mimeType};base64,${img.buffer.toString('base64')}`,
+    const images = [{ buffer: imageBuffer, mimeType }, ...extraImages].map(
+      (img) => `data:${img.mimeType};base64,${img.buffer.toString('base64')}`,
     );
     const startedAt = Date.now();
 
-    const response = await getOpenAIClient().responses.create({
-      model: MODEL,
-      reasoning: { effort: deep ? 'low' : 'none' },
-      // A chave tem que casar com o prefixo real do prompt — a regra de
-      // multi-imagem muda o texto, entao cachear junto do simples so derrubaria
-      // o hit das duas variantes.
-      prompt_cache_key:
-        (withHouse ? 'bet-image-extractor-house-v3' : 'bet-image-extractor-v3') +
-        (images.length > 1 ? '-multi' : ''),
-      prompt_cache_options: { mode: 'implicit', ttl: '30m' },
-      input: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'input_text',
-              text:
-                BET_IMAGE_PROMPT +
-                (withHouse ? BET_HOUSE_RULE : '') +
-                (images.length > 1 ? BET_MULTI_IMAGE_RULE : ''),
-            },
-            ...images.map((image_url) => ({
-              type: 'input_image' as const,
-              image_url,
-              detail: deep ? ('high' as const) : ('original' as const),
-            })),
-          ],
-        },
-      ],
-      text: {
-        format: {
-          type: 'json_schema',
-          name: 'bet_image_extraction',
-          strict: true,
-          schema: (withHouse
-            ? {
-                ...BET_IMAGE_SCHEMA,
-                properties: {
-                  ...BET_IMAGE_SCHEMA.properties,
-                  casa: { type: ['string', 'null'] },
-                },
-                required: [...BET_IMAGE_SCHEMA.required, 'casa'],
-              }
-            : BET_IMAGE_SCHEMA) as unknown as Record<string, unknown>,
+    const response = await getOpenAIClient().responses.create(
+      {
+        model: MODEL,
+        reasoning: { effort: deep ? 'low' : 'none' },
+        // A chave tem que casar com o prefixo real do prompt — a regra de
+        // multi-imagem muda o texto, entao cachear junto do simples so derrubaria
+        // o hit das duas variantes.
+        prompt_cache_key:
+          (withHouse
+            ? 'bet-image-extractor-house-v3'
+            : 'bet-image-extractor-v3') + (images.length > 1 ? '-multi' : ''),
+        prompt_cache_options: { mode: 'implicit', ttl: '30m' },
+        input: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'input_text',
+                text:
+                  BET_IMAGE_PROMPT +
+                  (withHouse ? BET_HOUSE_RULE : '') +
+                  (images.length > 1 ? BET_MULTI_IMAGE_RULE : ''),
+              },
+              ...images.map((image_url) => ({
+                type: 'input_image' as const,
+                image_url,
+                detail: deep ? ('high' as const) : ('original' as const),
+              })),
+            ],
+          },
+        ],
+        text: {
+          format: {
+            type: 'json_schema',
+            name: 'bet_image_extraction',
+            strict: true,
+            schema: (withHouse
+              ? {
+                  ...BET_IMAGE_SCHEMA,
+                  properties: {
+                    ...BET_IMAGE_SCHEMA.properties,
+                    casa: { type: ['string', 'null'] },
+                  },
+                  required: [...BET_IMAGE_SCHEMA.required, 'casa'],
+                }
+              : BET_IMAGE_SCHEMA) as unknown as Record<string, unknown>,
+          },
         },
       },
-    },
-    { timeout: AI_TIMEOUT_MS, maxRetries: 0 },
+      { timeout: AI_TIMEOUT_MS, maxRetries: 0 },
     );
 
     const usage = response.usage;

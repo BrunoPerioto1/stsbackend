@@ -67,7 +67,12 @@ export class TipsGroupService {
       );
       return member.status !== 'left' && member.status !== 'kicked';
     } catch (err) {
-      this.logger.error(...errorArgs(`⚠️ Não foi possível checar membro do grupo Tips (telegramUserId=${telegramUserId})`, err));
+      this.logger.error(
+        ...errorArgs(
+          `⚠️ Não foi possível checar membro do grupo Tips (telegramUserId=${telegramUserId})`,
+          err,
+        ),
+      );
       return false;
     }
   }
@@ -86,7 +91,12 @@ export class TipsGroupService {
         { parse_mode: 'Markdown', reply_markup: pixKeyboard(userId) },
       )
       .catch((error) =>
-        this.logger.error(...errorArgs(`⚠️ Aviso de saída do grupo Tips falhou (telegramUserId=${telegramUserId})`, error)),
+        this.logger.error(
+          ...errorArgs(
+            `⚠️ Aviso de saída do grupo Tips falhou (telegramUserId=${telegramUserId})`,
+            error,
+          ),
+        ),
       );
   }
 
@@ -132,7 +142,12 @@ export class TipsGroupService {
       );
       return 'sent';
     } catch (error) {
-      this.logger.error(...errorArgs(`⚠️ Convite do grupo Tips falhou (telegramUserId=${telegramUserId})`, error));
+      this.logger.error(
+        ...errorArgs(
+          `⚠️ Convite do grupo Tips falhou (telegramUserId=${telegramUserId})`,
+          error,
+        ),
+      );
       return 'failed';
     }
   }
@@ -148,7 +163,9 @@ export class TipsGroupService {
       user = await this.usersService.findByTelegramUserId(telegramUserId);
     } catch (error) {
       // Banco fora: o pedido fica pendente e um admin decide pelo Telegram.
-      this.logger.error(...errorArgs('Erro ao conferir pedido de entrada no grupo Tips', error));
+      this.logger.error(
+        ...errorArgs('Erro ao conferir pedido de entrada no grupo Tips', error),
+      );
       return;
     }
 
@@ -164,16 +181,30 @@ export class TipsGroupService {
 
       // O Telegram só deixa o bot falar com quem pediu enquanto o pedido está
       // aberto: a explicação vai antes da recusa.
-      await this.explainRefusal(request.user_chat_id, block, user?.accessUntil, user?.id)
-        .catch((error) =>
-          this.logger.error(...errorArgs(`⚠️ Explicação da recusa no grupo Tips falhou (telegramUserId=${telegramUserId})`, error)),
-        );
+      await this.explainRefusal(
+        request.user_chat_id,
+        block,
+        user?.accessUntil,
+        user?.id,
+      ).catch((error) =>
+        this.logger.error(
+          ...errorArgs(
+            `⚠️ Explicação da recusa no grupo Tips falhou (telegramUserId=${telegramUserId})`,
+            error,
+          ),
+        ),
+      );
       await this.bot.telegram.declineChatJoinRequest(
         this.chatId,
         telegramUserId,
       );
     } catch (error) {
-      this.logger.error(...errorArgs(`⚠️ Pedido de entrada no grupo Tips não resolvido (telegramUserId=${telegramUserId})`, error));
+      this.logger.error(
+        ...errorArgs(
+          `⚠️ Pedido de entrada no grupo Tips não resolvido (telegramUserId=${telegramUserId})`,
+          error,
+        ),
+      );
     }
   }
 
