@@ -1,3 +1,4 @@
+import { applyDecorators } from '@nestjs/common';
 import { normalizeBetNumber } from '../bet-normalization';
 import {
   IsNumber,
@@ -14,6 +15,24 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import { ResultIdEnum } from './result-id.enum';
+
+// Lista de ids de aposta no corpo das ações em lote (excluir, finalizar).
+function BetIdsBody(description: string) {
+  return applyDecorators(
+    ApiProperty({
+      description,
+      example: [1, 2, 3],
+      required: true,
+      type: [Number],
+    }),
+    IsArray(),
+    ArrayNotEmpty(),
+    IsNumber({}, { each: true }),
+    Transform(({ value }: { value: unknown }) =>
+      Array.isArray(value) ? value.map((id) => Number(id)) : value,
+    ),
+  );
+}
 
 class CreateBetRequestDto {
   @ApiProperty({
@@ -207,33 +226,11 @@ export class FinalizarApostaDto {
 }
 
 export class DeleteMultipleBetsDto {
-  @ApiProperty({
-    description: 'Array de IDs das apostas a serem deletadas',
-    example: [1, 2, 3],
-    required: true,
-    type: [Number],
-  })
-  @IsArray()
-  @ArrayNotEmpty()
-  @IsNumber({}, { each: true })
-  @Transform(({ value }: { value: unknown }) =>
-    Array.isArray(value) ? value.map((id) => Number(id)) : value,
-  )
+  @BetIdsBody('Array de IDs das apostas a serem deletadas')
   betIds!: number[];
 }
 export class FinalizarMultiplasDto {
-  @ApiProperty({
-    description: 'Array de IDs das apostas a serem finalizadas',
-    example: [1, 2, 3],
-    required: true,
-    type: [Number],
-  })
-  @IsArray()
-  @ArrayNotEmpty()
-  @IsNumber({}, { each: true })
-  @Transform(({ value }: { value: unknown }) =>
-    Array.isArray(value) ? value.map((id) => Number(id)) : value,
-  )
+  @BetIdsBody('Array de IDs das apostas a serem finalizadas')
   betIds!: number[];
 
   @ApiProperty({

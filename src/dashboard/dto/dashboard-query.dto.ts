@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsISO8601, IsInt, IsPositive } from 'class-validator';
-import { Transform, Type } from 'class-transformer';
-import { toNumberArray } from '../../common/utils/dto-transform.util';
+import { Type } from 'class-transformer';
+import { IdListQuery } from '../../common/decorators/id-list-query.decorator';
 import { BettingHouseId } from '../../db_types/BettingHouse';
 
 export class DashboardQueryDto {
@@ -16,24 +16,13 @@ export class DashboardQueryDto {
   @IsPositive()
   houseId?: BettingHouseId;
 
-  @ApiPropertyOptional({
-    description: 'IDs de casa (múltipla seleção), separados por vírgula',
-    type: String,
-    example: '3,7',
-  })
-  @IsOptional()
-  @Transform(toNumberArray)
-  @IsInt({ each: true })
+  @IdListQuery('IDs de casa (múltipla seleção), separados por vírgula', '3,7')
   houseIds?: number[];
 
-  @ApiPropertyOptional({
-    description: 'IDs de esporte (múltipla seleção), separados por vírgula',
-    type: String,
-    example: '1,4',
-  })
-  @IsOptional()
-  @Transform(toNumberArray)
-  @IsInt({ each: true })
+  @IdListQuery(
+    'IDs de esporte (múltipla seleção), separados por vírgula',
+    '1,4',
+  )
   sportIds?: number[];
 
   @ApiPropertyOptional({

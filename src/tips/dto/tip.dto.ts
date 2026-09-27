@@ -10,8 +10,8 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { Type, Transform } from 'class-transformer';
-import { toNumberArray } from '../../common/utils/dto-transform.util';
+import { Type } from 'class-transformer';
+import { IdListQuery } from '../../common/decorators/id-list-query.decorator';
 
 export const TIP_STATUSES = ['pending', 'planilhada', 'caiu'] as const;
 export type TipStatus = (typeof TIP_STATUSES)[number];
@@ -33,15 +33,10 @@ export class TipFilterDto {
   @MaxLength(100)
   q?: string;
 
-  @ApiPropertyOptional({
-    description:
-      'IDs de casa (múltipla seleção), separados por vírgula. A casa da tip é casada por nome com as casas cadastradas.',
-    type: String,
-    example: '3,7',
-  })
-  @IsOptional()
-  @Transform(toNumberArray)
-  @IsInt({ each: true })
+  @IdListQuery(
+    'IDs de casa (múltipla seleção), separados por vírgula. A casa da tip é casada por nome com as casas cadastradas.',
+    '3,7',
+  )
   houseIds?: number[];
 
   @ApiPropertyOptional({ type: Number, default: 1 })

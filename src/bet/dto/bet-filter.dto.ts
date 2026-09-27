@@ -10,10 +10,8 @@ import {
   IsBoolean,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
-import {
-  toNumberArray,
-  toStringArray,
-} from '../../common/utils/dto-transform.util';
+import { IdListQuery } from '../../common/decorators/id-list-query.decorator';
+import { toStringArray } from '../../common/utils/dto-transform.util';
 
 // De onde a aposta veio: botão Planilhar de uma tip (tem tip_id), mensagem
 // avulsa pro bot, print (site ou bot), ou digitada à mão no site. O site só
@@ -56,35 +54,22 @@ export class BetFilterDto {
   @IsInt()
   resultId?: number;
 
-  @ApiPropertyOptional({
-    description: 'IDs de resultado (múltipla seleção), separados por vírgula',
-    type: String,
-    example: '1,2',
-  })
-  @IsOptional()
-  @Transform(toNumberArray)
-  @IsInt({ each: true })
+  @IdListQuery(
+    'IDs de resultado (múltipla seleção), separados por vírgula',
+    '1,2',
+  )
   resultIds?: number[];
 
-  @ApiPropertyOptional({
-    description:
-      'IDs de casa de aposta (múltipla seleção), separados por vírgula',
-    type: String,
-    example: '3,7',
-  })
-  @IsOptional()
-  @Transform(toNumberArray)
-  @IsInt({ each: true })
+  @IdListQuery(
+    'IDs de casa de aposta (múltipla seleção), separados por vírgula',
+    '3,7',
+  )
   houseIds?: number[];
 
-  @ApiPropertyOptional({
-    description: 'IDs de esporte (múltipla seleção), separados por vírgula',
-    type: String,
-    example: '1,4',
-  })
-  @IsOptional()
-  @Transform(toNumberArray)
-  @IsInt({ each: true })
+  @IdListQuery(
+    'IDs de esporte (múltipla seleção), separados por vírgula',
+    '1,4',
+  )
   sportIds?: number[];
 
   @ApiPropertyOptional({
