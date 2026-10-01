@@ -253,6 +253,56 @@ describe('tips: Planilhar do site', () => {
     betService.findBetByTip.mockResolvedValueOnce(undefined).mockResolvedValueOnce({ id: 69 });
     await expect(service.planilharTip(4, 1)).resolves.toEqual({ bet: { id: 69 }, alreadyExisted: true });
   });
+
+  // O "✏️ Editar" do bot muda odd, limite e casa na cópia entregue. O site lia
+  // o texto do canal e planilhava a odd de antes da edição.
+  const casaPorNome = (text: string) => Promise.resolve(text.includes('🏠 Betano') ? 9 : text.includes('🏠 Bet365') ? 3 : null);
+
+  it('odd e casa editadas no bot valem no Planilhar do site', async () => {
+    const editada = TEXT.replace('🏷 1.90', '🏷 2.40').replace('🏠 Bet365', '🏠 Betano');
+    const { service, betService } = setup(`${editada}${NL}${NL}🎯 Recomendação de aposta: R$ 12,34`);
+    (service as any).houseService.resolveHouseIdFromText.mockImplementation(casaPorNome);
+
+    await service.planilharTip(4, 1);
+    expect(betService.createBet.mock.calls[0][0]).toMatchObject({ odd: 2.4, houseId: 9, stake: 12.34 });
+  });
+
+  it('casa editada que não bate com nenhuma pede a casa, em vez de usar a do canal', async () => {
+    const editada = TEXT.replace('🏠 Bet365', '🏠 Casa Inventada');
+    const { service, betService } = setup(`${editada}${NL}${NL}🎯 Recomendação de aposta: R$ 12,34`);
+    (service as any).houseService.resolveHouseIdFromText.mockImplementation(casaPorNome);
+
+    await expect(service.planilharTip(4, 1)).rejects.toThrow('Não reconheci a casa');
+    expect(betService.createBet).not.toHaveBeenCalled();
+  });
+
+  it('sem entrega, segue o texto do canal', async () => {
+    const { service, betService } = setup(null);
+    await service.planilharTip(4, 1, { stake: 10 });
+    expect(betService.createBet.mock.calls[0][0]).toMatchObject({ odd: 1.9, houseId: 3 });
+  });
+});
+
+describe('tips: lista mostra a cópia editada no bot', () => {
+  it('odd, limite e casa vêm da entrega; jogo e mercado seguem do canal', async () => {
+    const row = tipRow(1, 'Bet365');
+    const entregue = row.text.replace('🏷 1.90', '🏷 2.40').replace('🏠 Bet365', '🏠 Betano');
+    const service = makeService([
+      { ...row, deliveryText: `${entregue}${NL}🚦 Limite R$ 50${NL}${NL}🎯 Recomendação de aposta: R$ 10,00` },
+    ]);
+
+    const [tip] = (await service.listForUser(1, { page: 1, perPage: 30 })).data;
+    expect(tip).toMatchObject({ odd: 2.4, limit: 50, houseId: 9, house: 'Betano', game: 'Flamengo x Vasco' });
+  });
+
+  it('limite editado corta a stake calculada quando a entrega não tem recomendação', async () => {
+    const row = tipRow(1, 'Bet365');
+    // Banca 1000 × 1% = 10, cortada pelo limite de 5 da cópia entregue.
+    const service = makeService([{ ...row, deliveryText: `${row.text}${NL}🚦 Limite R$ 5` }]);
+
+    const [tip] = (await service.listForUser(1, { page: 1, perPage: 30 })).data;
+    expect(tip.recommendedStake).toBe(5);
+  });
 });
 
 describe('tips: paginação no banco', () => {

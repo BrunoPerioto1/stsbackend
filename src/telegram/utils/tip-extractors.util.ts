@@ -167,6 +167,19 @@ export function extractPotentialProfitFromText(text: string): number | null {
   return matchMoneyLine(text, /^💰\s*Lucro potencial:\s*R?\$?\s*([\d.,]+)/im);
 }
 
+/**
+ * Campo da tip como o usuário vê: a cópia entregue no privado
+ * (tip_deliveries.text) vence o texto do canal, porque o "✏️ Editar" do bot
+ * muda odd, limite e casa nela. Campo que não aparece na cópia cai no canal.
+ */
+export function fromDelivery<T>(
+  deliveryText: string | null | undefined,
+  channelText: string,
+  extract: (text: string) => T | null,
+): T | null {
+  return (deliveryText ? extract(deliveryText) : null) ?? extract(channelText);
+}
+
 function matchMoneyLine(text: string, regex: RegExp): number | null {
   const m = text?.match(regex);
   if (!m) return null;

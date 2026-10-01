@@ -3,6 +3,8 @@ import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { assertAccess } from '../users/access';
 import { ChangePasswordDTO, LoginDTO } from './dto/login.dto';
+import type { JwtPayload } from './jwt/jwt-payload';
+import { sessionVersion } from './jwt/session-version';
 import * as bcrypt from 'bcrypt';
 
 // Cinco erros seguidos travam a conta por quinze minutos. A contagem é por
@@ -11,6 +13,11 @@ import * as bcrypt from 'bcrypt';
 // travar ninguém.
 export const MAX_LOGIN_ATTEMPTS = 5;
 export const LOCK_MINUTES = 15;
+
+// "Manter conectado". Sem ele vale o padrão do módulo (1 dia).
+const REMEMBER_SECONDS = 30 * 24 * 60 * 60;
+
+type TokenUser = { id: number; username: string; email: string; roleId: number; passwordHash: string };
 
 @Injectable()
 export class AuthService {
@@ -21,15 +28,36 @@ export class AuthService {
 
   // Único caminho pra trocar a senha, e pede a atual: com só o token, quem
   // pegasse a sessão aberta trocaria a senha e tomaria a conta.
-  async changePassword(userId: number, dto: ChangePasswordDTO) {
+  async changePassword(
+    userId: number,
+    dto: ChangePasswordDTO,
+    session?: Pick<JwtPayload, 'iat' | 'exp'>,
+  ) {
     const user = await this.usersService.findById(userId);
     if (!user) throw new UnauthorizedException('Usuário não encontrado');
 
     const isMatch = await bcrypt.compare(dto.currentPassword, user.passwordHash);
     if (!isMatch) throw new UnauthorizedException('Senha atual incorreta');
 
-    await this.usersService.setPassword(userId, dto.newPassword);
-    return { success: true };
+    const passwordHash = await this.usersService.setPassword(userId, dto.newPassword);
+    // A senha nova derruba todas as sessões, inclusive esta. Quem trocou
+    // continua logado aqui com um token novo, da mesma duração (1 ou 30 dias).
+    const lifetime = session?.iat && session.exp ? session.exp - session.iat : undefined;
+    return { success: true, access_token: this.signToken({ ...user, passwordHash }, lifetime) };
+  }
+
+  private signToken(user: TokenUser, expiresInSeconds?: number) {
+    // roleId no payload só pra UI; quem decide acesso é o AdminGuard, pelo banco.
+    // O preço é a defasagem: quem for promovido/rebaixado carrega o papel
+    // antigo até o token expirar (1d) ou relogar.
+    const payload: JwtPayload = {
+      name: user.username,
+      email: user.email,
+      userId: user.id,
+      roleId: user.roleId,
+      sv: sessionVersion(user.passwordHash),
+    };
+    return this.jwtService.sign(payload, expiresInSeconds ? { expiresIn: expiresInSeconds } : undefined);
   }
 
   async login(loginDTO: LoginDTO) {
@@ -80,19 +108,9 @@ export class AuthService {
 
     await this.usersService.registerSuccessfulLogin(user.id);
 
-    // roleId no payload só pra UI; quem decide acesso é o AdminGuard, pelo banco.
-    // O preço é a defasagem: quem for promovido/rebaixado carrega o papel
-    // antigo até o token expirar (1d) ou relogar.
-    const payload = {
-      name: user.username,
-      email: user.email,
-      userId: user.id,
-      roleId: user.roleId,
-    };
-
     return {
       // "Manter conectado" vale 30 dias; sem ele, 1 dia (o padrão do módulo).
-      access_token: this.jwtService.sign(payload, loginDTO.remember ? { expiresIn: '30d' } : undefined),
+      access_token: this.signToken(user, loginDTO.remember ? REMEMBER_SECONDS : undefined),
     };
   }
 }

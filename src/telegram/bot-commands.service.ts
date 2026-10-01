@@ -266,8 +266,13 @@ export class BotCommandsService {
     try {
       // Código de 6 dígitos: sem teto de tentativas dava pra chutar o de outra conta.
       await this.rateLimit?.consume(`vincular:tg:${telegramUserId}`, TELEGRAM_LINK_LIMIT);
-      await this.usersService.confirmTelegramLink(args[0], telegramUserId, ctx.from?.username ?? null);
+      const owner = await this.usersService.confirmTelegramLink(args[0], telegramUserId, ctx.from?.username ?? null);
       await ctx.reply('✅ Conta vinculada com sucesso!');
+      // Depois da confirmação: o convite do grupo é outra mensagem, e falhar
+      // nele não desfaz o vínculo.
+      await this.usersService
+        .rejoinTipsGroup(owner, telegramUserId)
+        .catch((error) => this.logger.error(...errorArgs('Erro ao convidar de volta pro grupo Tips', error)));
     } catch (error) {
       if (error instanceof BadRequestException) {
         await ctx.reply('❌ Erro: ' + error.message);

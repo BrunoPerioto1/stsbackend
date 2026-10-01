@@ -63,7 +63,11 @@ describe('AdminService.updateUser — grupo Tips', () => {
   const DAY = 86_400_000;
   const expired = () => new Date(Date.now() - DAY);
 
-  function setupGroup(target: object, readmit: 'sent' | 'failed' | null = 'sent') {
+  function setupGroup(
+    target: object,
+    readmit: 'sent' | 'failed' | null = 'sent',
+    leave: 'removed' | 'failed' | null = 'removed',
+  ) {
     const usersRepository = {
       findById: jest.fn().mockResolvedValue({
         id: 16,
@@ -83,6 +87,7 @@ describe('AdminService.updateUser — grupo Tips', () => {
       configured: true,
       remove: jest.fn().mockResolvedValue(undefined),
       readmit: jest.fn().mockResolvedValue(readmit),
+      leave: jest.fn().mockResolvedValue(leave),
     };
     const service = new AdminService(
       adminRepository as any,
@@ -190,6 +195,35 @@ describe('AdminService.updateUser — grupo Tips', () => {
     });
     await service.updateUser(1, 16, { unlock: true });
     expect(tipsGroup.readmit).not.toHaveBeenCalled();
+  });
+
+  it('desvincular tira do grupo antes de apagar o ID, e marca que saiu', async () => {
+    const { service, usersRepository, tipsGroup } = setupGroup({
+      accessUntil: new Date(Date.now() + DAY),
+    });
+    await service.updateUser(1, 16, { unlinkTelegram: true });
+
+    expect(tipsGroup.leave).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 16, telegramUserId: 77 }),
+      'unlinked',
+    );
+    const [, fields] = usersRepository.updateUser.mock.calls[0] as [number, Record<string, unknown>];
+    expect(fields).toMatchObject({ telegramUserId: null, telegramLinkedAt: null, telegramUsername: null });
+    expect(fields.tipsGroupRemovedAt).toBeInstanceOf(Date);
+    expect(tipsGroup.leave.mock.invocationCallOrder[0]).toBeLessThan(
+      usersRepository.updateUser.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('desvincular quem não estava no grupo (ou com o Telegram recusando) não marca', async () => {
+    for (const leave of [null, 'failed'] as const) {
+      const { service, usersRepository } = setupGroup({ accessUntil: new Date(Date.now() + DAY) }, 'sent', leave);
+      await service.updateUser(1, 16, { unlinkTelegram: true });
+
+      const [, fields] = usersRepository.updateUser.mock.calls[0] as [number, Record<string, unknown>];
+      expect(fields.telegramUserId).toBeNull();
+      expect(fields).not.toHaveProperty('tipsGroupRemovedAt');
+    }
   });
 
   it('convidar de novo: só pra quem está em dia', async () => {

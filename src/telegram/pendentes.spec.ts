@@ -63,6 +63,15 @@ const click = (data: string, ctx: ReturnType<typeof setup>['ctx']) =>
   }) as unknown as BotContext;
 
 describe('lista do /pendentes', () => {
+  it('mostra a casa e a odd da cópia entregue, que é o que o Planilhar daqui grava', async () => {
+    const editada = '🏠 Betano\n🆚 Real Madrid x Barcelona\n🏷 2.50';
+    const { pendentes } = setup([tip(1, { deliveryText: editada })]);
+    const { text } = await pendentes.buildMessage(user, 0);
+    expect(text).toContain('Betano');
+    expect(text).toContain('🏷2.50');
+    expect(text).not.toContain('Betfair');
+  });
+
   it('marca cada botão com o número da pendência a que pertence', async () => {
     const { pendentes } = setup([tip(1), tip(2)]);
     const { keyboard } = await pendentes.buildMessage(user, 0);

@@ -5,6 +5,7 @@ import { UsersRepository } from "../../infra/repository/users.repository";
 import type { UserId } from "../../db_types/Users";
 import { assertAccess } from "../../users/access";
 import type { JwtPayload } from "./jwt-payload";
+import { sessionVersion } from "./session-version";
 
 
 
@@ -32,6 +33,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // tem que cair na hora, não no dia seguinte.
     const user = await this.usersRepository.findById(payload.userId as UserId);
     if (!user) throw new UnauthorizedException();
+    // Senha trocada derruba os tokens de antes da troca. Fica antes da
+    // checagem de acesso de propósito: token que não vale mais cai no login,
+    // não na tela do PIX.
+    if (payload.sv !== sessionVersion(user.passwordHash)) throw new UnauthorizedException();
     assertAccess(user);
     return payload;
   }

@@ -10,7 +10,7 @@ import { ADMIN_ROLE_ID } from '../common/guards/admin.guard';
 import type { UpdateUser, UserId } from '../db_types/Users';
 import type { RoleId } from '../db_types/Roles';
 import { extendAccess, hasAccess } from '../users/access';
-import { TipsGroupService } from '../telegram/tips-group.service';
+import { TipsGroupService, telegramErrorText } from '../telegram/tips-group.service';
 
 type AdminHouseRow = Awaited<ReturnType<HouseRepository['findAllHousesForAdmin']>>[number];
 
@@ -219,6 +219,13 @@ export class AdminService {
     const after = { ...target, ...fields };
     if (dto.tipsGroup) this.assertTipsGroupAction(dto.tipsGroup, after);
 
+    // Desvincular tira do grupo antes de apagar o ID: depois dele o bot não
+    // sabe mais quem é a pessoa lá dentro (o grupo é só de conta vinculada).
+    if (dto.unlinkTelegram) {
+      const left = await this.tipsGroup.leave(target, 'unlinked');
+      if (left === 'removed') fields.tipsGroupRemovedAt = new Date();
+    }
+
     if (Object.keys(fields).length > 0) {
       await this.usersRepository.updateUser(targetId as UserId, fields);
     }
@@ -272,10 +279,7 @@ export class AdminService {
     } catch (error) {
       // Os motivos comuns são de configuração (bot sem "Banir usuários",
       // pessoa é admin do grupo) — a descrição do Telegram já diz qual.
-      const reason =
-        (error as { response?: { description?: string } })?.response?.description ??
-        (error instanceof Error ? error.message : 'erro desconhecido');
-      throw new BadRequestException(`O Telegram recusou a remoção: ${reason}`);
+      throw new BadRequestException(`O Telegram recusou a remoção: ${telegramErrorText(error)}`);
     }
     await this.usersRepository.updateUser(targetId as UserId, { tipsGroupRemovedAt: new Date() });
   }

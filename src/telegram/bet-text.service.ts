@@ -780,12 +780,41 @@ export class BetTextService {
           },
         );
       }
-      await ctx.reply('✅ Aposta atualizada!', {
-        reply_parameters: { message_id: originalMessageId },
-      });
+      const salvo =
+        tipId === undefined ||
+        (await this.saveEditedDelivery(ctx, tipId, originalMessageId, isMedia, novoTexto));
+      await ctx.reply(
+        salvo
+          ? '✅ Aposta atualizada!'
+          : '⚠️ Mensagem atualizada, mas não consegui guardar a edição: planilhe por esta mensagem, não pelo /pendentes nem pelo site.',
+        { reply_parameters: { message_id: originalMessageId } },
+      );
     } catch (err) {
       this.logger.error(...errorArgs('Erro ao editar aposta individual', err));
       await ctx.reply('❌ Erro ao atualizar. Tenta de novo.');
+    }
+  }
+
+  // O Planilhar do /pendentes e a tela de Tips leem a cópia entregue salva, não
+  // a mensagem: sem gravar a edição, eles planilhavam a odd e a stake de antes.
+  // Sem entidades: a mensagem editada perdeu a formatação, e os offsets antigos
+  // não batem mais com o texto.
+  private async saveEditedDelivery(
+    ctx: BotContext,
+    tipId: number,
+    messageId: number,
+    hasMedia: boolean,
+    text: string,
+  ): Promise<boolean> {
+    if (!this.tipsService) return true;
+    try {
+      const user = await this.usersService.findByTelegramUserId(senderId(ctx));
+      if (!user) return true;
+      await this.tipsService.saveDelivery({ tipId, userId: user.id, messageId, hasMedia, text, entities: null });
+      return true;
+    } catch (err) {
+      this.logger.error(...errorArgs(`Erro ao guardar a edição da tip ${tipId}`, err));
+      return false;
     }
   }
 }

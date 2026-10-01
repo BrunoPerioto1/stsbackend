@@ -5,6 +5,9 @@ export interface JwtPayload {
   email: string;
   name: string;
   roleId: number;
+  // Versão da sessão (session-version.ts). Token sem ela é de antes da regra
+  // e não vale mais.
+  sv?: string;
   iat?: number;
   exp?: number;
 }

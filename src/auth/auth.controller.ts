@@ -5,6 +5,7 @@ import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, ApiUnauthorizedRespo
 import { AuthService } from './auth.service';
 import { PasswordResetService } from './password-reset.service';
 import { ChangePasswordDTO, ForgotPasswordDTO, LoginDTO, ResetPasswordDTO } from './dto/login.dto';
+import type { JwtPayload } from './jwt/jwt-payload';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -26,10 +27,15 @@ export class AuthController {
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth('jwt')
   @Post('change-password')
-  @ApiOperation({ summary: 'Troca a senha do usuário logado' })
+  @ApiOperation({
+    summary: 'Troca a senha do usuário logado',
+    description:
+      'Derruba todas as sessões abertas. Devolve `access_token` novo, com a mesma duração da sessão atual, ' +
+      'pra quem trocou continuar logado.',
+  })
   @ApiUnauthorizedResponse({ description: 'Senha atual incorreta.' })
-  async changePassword(@User('userId') userId: number, @Body() dto: ChangePasswordDTO) {
-    return this.authService.changePassword(userId, dto);
+  async changePassword(@User() session: JwtPayload, @Body() dto: ChangePasswordDTO) {
+    return this.authService.changePassword(session.userId, dto, session);
   }
 
   @Post('forgot-password')

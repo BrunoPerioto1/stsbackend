@@ -9,6 +9,7 @@ import {
   extractLinkFromText,
   extractMarketFromText,
   extractOddFromText,
+  fromDelivery,
 } from './utils/tip-extractors.util';
 
 const KEYCAP_DIGITS = [
@@ -113,11 +114,13 @@ export class PendentesService {
         minute: '2-digit',
         timeZone: 'America/Sao_Paulo',
       });
-      const house = escapeHtml(extractHouseFromText(tip.text) ?? '?');
+      // Casa, odd e limite da cópia entregue: é ela que o Planilhar daqui grava,
+      // e o "✏️ Editar" muda esses três.
+      const house = escapeHtml(fromDelivery(tip.deliveryText, tip.text, extractHouseFromText) ?? '?');
       const game = escapeHtml(extractGameFromText(tip.text) ?? '?');
       const market = extractMarketFromText(tip.text);
-      const odd = extractOddFromText(tip.text);
-      const limit = extractLimitFromText(tip.text);
+      const odd = fromDelivery(tip.deliveryText, tip.text, extractOddFromText);
+      const limit = fromDelivery(tip.deliveryText, tip.text, extractLimitFromText);
       const link = extractLinkFromText(tip.text);
       const percentLabel =
         tip.percent !== null

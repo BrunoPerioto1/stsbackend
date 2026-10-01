@@ -5,16 +5,20 @@ import {
 } from '../telegram/telegram-bot.provider';
 import { TipsGroupService } from '../telegram/tips-group.service';
 import { PaymentClaimService } from '../users/payment-claim.service';
-import { UsersModule } from './users.module';
+import { UsersRepository } from '../infra/repository/users.repository';
 
 // O bot e a porta do grupo Tips num módulo à parte: o painel admin também
 // tira gente do grupo e manda convite, e importar o TelegramModule inteiro lá
 // levaria junto os handlers e o fan-out. O "Já paguei" mora aqui pelo mesmo
 // motivo: a tela de renovação e o botão do bot usam o mesmo aviso.
+//
+// UsersRepository próprio (o banco vem do DatabaseModule, global) em vez de
+// importar o UsersModule: é o UsersModule que importa este módulo, porque
+// desvincular e excluir conta tiram a pessoa do grupo.
 @Module({
-  imports: [UsersModule],
   providers: [
     { provide: TELEGRAM_BOT, useFactory: createTelegramBot },
+    UsersRepository,
     TipsGroupService,
     PaymentClaimService,
   ],

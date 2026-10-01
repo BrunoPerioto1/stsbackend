@@ -22,6 +22,7 @@ import {
   extractPotentialProfitFromText,
   extractRecommendedStakeFromText,
   extractSportFromText,
+  fromDelivery,
   parseBetLocal,
 } from '../telegram/utils/tip-extractors.util';
 import type {
@@ -82,20 +83,26 @@ export class TipsService {
     const existing = await this.betService.findBetByTip(tipId, userId);
     if (existing) return { bet: existing, alreadyExisted: true };
 
-    const parsed = parseBetLocal(tip.text);
+    // A cópia entregue é a que o usuário viu, e o "✏️ Editar" do bot muda odd,
+    // limite e casa nela: vale ela, como no Planilhar do /pendentes.
+    const delivery = await this.findDelivery(tipId, userId);
+    const parsed = parseBetLocal(delivery?.text ?? '') ?? parseBetLocal(tip.text);
     if (!parsed)
       throw new BadRequestException(
         'Não consegui ler jogo/mercado/odd dessa tip. Planilhe manualmente em Apostas.',
       );
 
+    // Casa editada que não bate com nenhuma cadastrada pede a casa em Editar,
+    // em vez de voltar calada pra do canal.
+    const houseText = delivery && extractHouseFromText(delivery.text) ? delivery.text : tip.text;
     const houseId =
-      overrides.houseId ?? (await this.houseService.resolveHouseIdFromText(tip.text));
+      overrides.houseId ?? (await this.houseService.resolveHouseIdFromText(houseText));
     if (!houseId)
       throw new BadRequestException(
         'Não reconheci a casa dessa tip. Escolha a casa em Editar.',
       );
 
-    const stake = overrides.stake ?? (await this.resolveStake(tip, userId));
+    const stake = overrides.stake ?? (await this.resolveStake(tip, userId, delivery?.text));
     if (stake === null)
       throw new BadRequestException(
         'Não consegui calcular a stake dessa tip. Informe o valor em Editar ou defina sua banca no Perfil.',
@@ -134,14 +141,14 @@ export class TipsService {
   // A entrega manda, igual à lista: é a "🎯 Recomendação de aposta" que o
   // usuário viu na DM. Sem entrega, refaz a conta com a banca de agora.
   private async resolveStake(
-    tip: { id: number; text: string; percent: number | null },
+    tip: { text: string; percent: number | null },
     userId: number,
+    deliveryText: string | undefined,
   ): Promise<number | null> {
-    const delivery = await this.findDelivery(tip.id, userId);
-    const delivered = extractRecommendedStakeFromText(delivery?.text ?? '');
+    const delivered = extractRecommendedStakeFromText(deliveryText ?? '');
     if (delivered !== null) return delivered;
     const banca = await this.usersService.getUserStake(userId);
-    return computeStake(tip.percent, tip.text, banca);
+    return computeStake(tip.percent, fromDelivery(deliveryText, tip.text, extractLimitFromText), banca);
   }
 
   // Mesma lista que o /pendentes do bot monta, só que estruturada em vez de
@@ -204,16 +211,18 @@ export class TipsService {
 
     type Row = (typeof pageRows)[number];
     const toItem = (row: Row): TipItemDto => {
+      // Odd, limite e casa da cópia entregue: o "✏️ Editar" do bot muda ela.
+      const odd = fromDelivery(row.deliveryText, row.text, extractOddFromText);
+      const limit = fromDelivery(row.deliveryText, row.text, extractLimitFromText);
+      const houseName = fromDelivery(row.deliveryText, row.text, extractHouseFromText);
+      const houseId = houseIdOf(houseName);
       // A entrega tem o número que o usuário já viu na DM, então ela manda.
       // Sem entrega (tip anterior ao vínculo, ou filtrada na hora do fan-out)
       // refaz a mesma conta — é o que o Planilhar usaria de qualquer forma, e
       // o campo da tela precisa abrir preenchido pra valer a pena.
       const stake =
         extractRecommendedStakeFromText(row.deliveryText ?? '') ??
-        computeStake(row.percent, row.text, banca);
-      const odd = extractOddFromText(row.text);
-      const houseName = extractHouseFromText(row.text);
-      const houseId = houseIdOf(houseName);
+        computeStake(row.percent, limit, banca);
 
       return {
         id: Number(row.id),
@@ -229,7 +238,7 @@ export class TipsService {
         market: extractMarketFromText(row.text),
         odd,
         percent: row.percent != null ? Number(row.percent) : null,
-        limit: extractLimitFromText(row.text),
+        limit,
         recommendedStake: stake,
         potentialProfit:
           extractPotentialProfitFromText(row.deliveryText ?? '') ??
@@ -367,16 +376,15 @@ export class TipsService {
 }
 
 // Mesma conta do processBetText do bot: a tip carrega só a % da banca, o
-// valor absoluto sai dela, e o 🚦 do texto corta por cima quando existe.
+// valor absoluto sai dela, e o limite (🚦) corta por cima quando existe.
 // Sem banca definida não há stake: a tela pede o valor em Editar.
 function computeStake(
   percent: number | null,
-  text: string,
+  limit: number | null,
   banca: number | null,
 ): number | null {
   if (percent === null || banca === null) return null;
   let stake = (Number(percent) / 100) * banca;
-  const limit = extractLimitFromText(text);
   if (limit !== null) stake = Math.min(stake, limit);
   return Number.isFinite(stake) && stake > 0 ? Number(stake.toFixed(2)) : null;
 }

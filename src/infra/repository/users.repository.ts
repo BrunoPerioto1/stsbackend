@@ -97,13 +97,18 @@ async findByTelegramLinkCode(code: string) {
     .executeTakeFirst();
 }
 
-// Apaga tudo que é do usuário e o usuário. bets e house_transactions são
-// ON DELETE SET NULL no banco, então sem esse delete explícito as linhas
-// sobreviveriam órfãs à conta excluída.
+// Apaga tudo que é do usuário e o usuário. Nenhuma FK pra `users` tem ON
+// DELETE CASCADE em produção (bets, house_transactions, tip_deliveries e
+// tip_dismissals — conferido no catálogo em 2026-10-01): faltando uma tabela
+// aqui, o último DELETE bate na FK e a exclusão dá 500. Era o caso de quem já
+// tinha recebido ou descartado uma tip. As filhas de `bets` (resultado,
+// pernas, sugestões) caem em cascata.
 async deleteUserAndData(userId: UserId) {
   await this.dbWrite.transaction().execute(async (trx) => {
     await trx.deleteFrom("bets").where("userId", "=", userId).execute();
     await trx.deleteFrom("houseTransactions").where("userId", "=", userId).execute();
+    await trx.deleteFrom("tipDeliveries").where("userId", "=", userId).execute();
+    await trx.deleteFrom("tipDismissals").where("userId", "=", userId).execute();
     await trx.deleteFrom("users").where("id", "=", userId).execute();
   });
 }

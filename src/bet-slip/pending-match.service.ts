@@ -8,6 +8,7 @@ import {
   extractMarketFromText,
   extractOddFromText,
   extractRecommendedStakeFromText,
+  fromDelivery,
 } from '../telegram/utils/tip-extractors.util';
 import {
   findBetMatches,
@@ -61,7 +62,9 @@ export class PendingMatchService {
         // sem entrega, % da banca (cortada pelo limite). Sem banca, stake
         // desconhecida — o scorer compara o resto.
         const percent = row.percent != null ? Number(row.percent) : null;
-        const limit = extractLimitFromText(row.text);
+        // Odd, casa e limite da cópia entregue: o "✏️ Editar" do bot muda ela,
+        // e é ela que o print vai mostrar (a odd que a casa deu de verdade).
+        const limit = fromDelivery(row.deliveryText, row.text, extractLimitFromText);
         let stake =
           extractRecommendedStakeFromText(row.deliveryText ?? '') ??
           (percent !== null && userStake !== null
@@ -76,8 +79,8 @@ export class PendingMatchService {
           tipId: Number(row.id),
           game: extractGameFromText(row.text) ?? '',
           market: extractMarketFromText(row.text) ?? '',
-          house: extractHouseFromText(row.text) ?? '',
-          odd: extractOddFromText(row.text) ?? NaN,
+          house: fromDelivery(row.deliveryText, row.text, extractHouseFromText) ?? '',
+          odd: fromDelivery(row.deliveryText, row.text, extractOddFromText) ?? NaN,
           stake,
           at: new Date(row.createdAt),
         };

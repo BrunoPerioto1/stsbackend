@@ -1,7 +1,8 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Telegraf } from 'telegraf';
 import { TELEGRAM_BOT } from './telegram-bot.provider';
-import { UsersService } from '../users/users.service';
+import { UsersRepository } from '../infra/repository/users.repository';
+import { ADMIN_ROLE_ID } from '../common/guards/admin.guard';
 import { unlinkedInstructions } from './messages.const';
 import { accessBlock, billingPayLine, pixKeyboard } from '../users/access';
 import { errorArgs } from '../common/utils/log';
@@ -23,6 +24,52 @@ const spDate = (d: Date) =>
     month: '2-digit',
   });
 
+// Dentro do grupo de verdade: "restricted" também pode ser quem já saiu.
+function insideGroup(member: { status: string; is_member?: boolean }): boolean {
+  return (
+    member.status === 'creator' ||
+    member.status === 'administrator' ||
+    member.status === 'member' ||
+    (member.status === 'restricted' && member.is_member === true)
+  );
+}
+
+/** O motivo que o Telegram deu pra recusar, ou a mensagem do erro. */
+export function telegramErrorText(error: unknown): string {
+  return (
+    (error as { response?: { description?: string } })?.response?.description ??
+    (error instanceof Error ? error.message : 'erro desconhecido')
+  );
+}
+
+/** Por que o Telegram perdeu o vínculo com a conta. */
+export type LeaveReason = 'unlinked' | 'relinked' | 'deleted';
+
+// O que a pessoa lê no privado depois de sair do grupo.
+const LEAVE_NOTICE: Record<LeaveReason, string> = {
+  unlinked:
+    '🔗 Este Telegram foi desvinculado da sua conta do SportsBet, então saiu do grupo de Tips.\n\n' +
+    'Pra voltar, vincule de novo pelo site (Perfil → Telegram): com o acesso em dia, o convite do grupo chega aqui.',
+  relinked: '🔗 Sua conta do SportsBet foi vinculada a outro Telegram, então este saiu do grupo de Tips.',
+  deleted: '🗑 Sua conta do SportsBet foi excluída, então este Telegram saiu do grupo de Tips.',
+};
+
+const LEAVE_ACTION: Record<LeaveReason, string> = {
+  unlinked: 'desvincular o Telegram',
+  relinked: 'trocar de Telegram',
+  deleted: 'excluir a conta',
+};
+
+/** O bastante pra tirar do grupo e, se falhar, o admin achar a pessoa. */
+export interface LeavingMember {
+  // BIGINT: o pg devolve como string. null = sem Telegram, nada a tirar.
+  telegramUserId: number | string | null;
+  telegramUsername?: string | null;
+  fullName?: string | null;
+  username?: string | null;
+  email?: string | null;
+}
+
 // O Telegram não esconde mensagem de quem é membro: o único jeito de quem não
 // pagou deixar de ler o grupo Tips é estar fora dele. Esta classe é a porta —
 // entra por pedido (o bot aprova só vinculado e em dia), sai pelo painel (ban,
@@ -35,9 +82,11 @@ export class TipsGroupService {
 
   private readonly chatId: number | null;
 
+  // Repositório e não UsersService: é o UsersService que usa esta classe
+  // (desvincular e excluir conta tiram a pessoa do grupo).
   constructor(
     @Inject(TELEGRAM_BOT) private readonly bot: Telegraf,
-    private readonly usersService: UsersService,
+    private readonly usersRepository: UsersRepository,
   ) {
     const chatId = Number(process.env.TIPS_GROUP_CHAT_ID);
     this.chatId = Number.isFinite(chatId) && chatId !== 0 ? chatId : null;
@@ -97,11 +146,13 @@ export class TipsGroupService {
    * o bot aprova lendo o banco.
    *
    * null = nada a fazer; 'failed' = o Telegram recusou alguma etapa (o erro
-   * vai pro log, e repetir é seguro).
+   * vai pro log, e repetir é seguro). `intro` troca a primeira linha quando o
+   * motivo não é acesso liberado (ex.: vinculou o Telegram de novo).
    */
   async readmit(
     telegramUserId: number,
     accessUntil: Date | null,
+    intro?: string,
   ): Promise<'sent' | 'failed' | null> {
     if (!this.chatId) return null;
     try {
@@ -109,12 +160,7 @@ export class TipsGroupService {
         this.chatId,
         telegramUserId,
       );
-      const inside =
-        member.status === 'creator' ||
-        member.status === 'administrator' ||
-        member.status === 'member' ||
-        (member.status === 'restricted' && member.is_member);
-      if (inside) return null;
+      if (insideGroup(member)) return null;
 
       if (member.status === 'kicked') {
         await this.bot.telegram.unbanChatMember(this.chatId, telegramUserId, {
@@ -128,12 +174,73 @@ export class TipsGroupService {
       const until = accessUntil ? ` até ${spDate(accessUntil)}` : '';
       await this.bot.telegram.sendMessage(
         telegramUserId,
-        `✅ Acesso liberado${until}.\n\nPra voltar ao grupo de Tips, entre por este link (vale 24h):\n${link.invite_link}`,
+        `${intro ?? `✅ Acesso liberado${until}.`}\n\nPra voltar ao grupo de Tips, entre por este link (vale 24h):\n${link.invite_link}`,
       );
       return 'sent';
     } catch (error) {
       this.logger.error(...errorArgs(`⚠️ Convite do grupo Tips falhou (telegramUserId=${telegramUserId})`, error));
       return 'failed';
+    }
+  }
+
+  /**
+   * Tira do grupo Tips o Telegram que perdeu o vínculo com a conta
+   * (desvinculou, trocou de Telegram ou excluiu a conta). Sem isso, quem
+   * pagava um mês desvinculava e seguia lendo as tips depois de vencer: sem o
+   * ID salvo, nem o "Tirar do grupo" do painel alcançava a pessoa.
+   *
+   * O ban é só o jeito de tirar — o unban logo depois deixa voltar pelo
+   * convite quando vincular de novo. Nunca lança: desvincular e excluir não
+   * podem travar por causa do Telegram, então a falha vai pros admins com o ID
+   * pra tirar à mão.
+   *
+   * null = nada a fazer (sem Telegram, grupo não configurado, fora do grupo,
+   * ou admin dele).
+   */
+  async leave(member: LeavingMember, reason: LeaveReason): Promise<'removed' | 'failed' | null> {
+    if (!this.chatId || member.telegramUserId == null) return null;
+    const telegramUserId = Number(member.telegramUserId);
+    try {
+      const current = await this.bot.telegram.getChatMember(this.chatId, telegramUserId);
+      // Dono e admins do grupo são da equipe, e o bot nem consegue tirar.
+      if (current.status === 'creator' || current.status === 'administrator') return null;
+      if (!insideGroup(current)) return null;
+      await this.bot.telegram.banChatMember(this.chatId, telegramUserId);
+    } catch (error) {
+      this.logger.error(...errorArgs(`⚠️ Saída do grupo Tips falhou (telegramUserId=${telegramUserId})`, error));
+      await this.alertAdmins(member, reason, error);
+      return 'failed';
+    }
+
+    // Unban que falha deixa o ban: o readmit desfaz quando a pessoa voltar.
+    await this.bot.telegram
+      .unbanChatMember(this.chatId, telegramUserId, { only_if_banned: true })
+      .catch((error: Error) =>
+        this.logger.warn(`unban depois da saída do grupo Tips falhou (telegramUserId=${telegramUserId}): ${error.message}`),
+      );
+    await this.bot.telegram
+      .sendMessage(telegramUserId, LEAVE_NOTICE[reason])
+      .catch((error: Error) =>
+        this.logger.warn(`aviso de saída do grupo Tips falhou (telegramUserId=${telegramUserId}): ${error.message}`),
+      );
+    return 'removed';
+  }
+
+  private async alertAdmins(member: LeavingMember, reason: LeaveReason, error: unknown) {
+    const who = member.fullName || member.username || member.email || 'Conta sem nome';
+    const handle = member.telegramUsername ? ` (@${member.telegramUsername})` : '';
+    const text =
+      `⚠️ Não consegui tirar ${who}${handle} do grupo de Tips ao ${LEAVE_ACTION[reason]}: ${telegramErrorText(error)}\n` +
+      `Telegram ID: ${member.telegramUserId}. Tire manualmente pelo grupo.`;
+    try {
+      const admins = await this.usersRepository.findAdminsWithTelegram(ADMIN_ROLE_ID);
+      for (const admin of admins) {
+        await this.bot.telegram
+          .sendMessage(admin.telegramUserId as number, text)
+          .catch((e: Error) => this.logger.warn(`alerta de saída do grupo Tips não chegou ao admin: ${e.message}`));
+      }
+    } catch (e) {
+      this.logger.error(...errorArgs('⚠️ Não deu pra avisar os admins da saída do grupo Tips', e));
     }
   }
 
@@ -143,9 +250,9 @@ export class TipsGroupService {
     if (!this.chatId || !this.isTipsGroup(request.chat.id)) return;
     const telegramUserId = request.from.id;
 
-    let user: Awaited<ReturnType<UsersService['findByTelegramUserId']>>;
+    let user: Awaited<ReturnType<UsersRepository['findByTelegramUserId']>>;
     try {
-      user = await this.usersService.findByTelegramUserId(telegramUserId);
+      user = await this.usersRepository.findByTelegramUserId(telegramUserId);
     } catch (error) {
       // Banco fora: o pedido fica pendente e um admin decide pelo Telegram.
       this.logger.error(...errorArgs('Erro ao conferir pedido de entrada no grupo Tips', error));
@@ -159,6 +266,12 @@ export class TipsGroupService {
           this.chatId,
           telegramUserId,
         );
+        // Voltou pelo link: o "fora do grupo" do painel deixou de valer.
+        if (user?.tipsGroupRemovedAt) {
+          await this.usersRepository
+            .updateUser(user.id, { tipsGroupRemovedAt: null })
+            .catch((error: Error) => this.logger.warn(`marca de fora do grupo não saiu (userId=${user?.id}): ${error.message}`));
+        }
         return;
       }
 

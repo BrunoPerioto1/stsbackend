@@ -1,8 +1,9 @@
 import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { UsersRepository } from '../infra/repository/users.repository';
+import { TipsGroupService } from '../telegram/tips-group.service';
 import { UserDto } from './dto/user.dto';
-import { extendAccess } from './access';
+import { extendAccess, hasAccess } from './access';
 import {
   CreateUserRequestDTO,
   MAX_PERCENT_FILTER,
@@ -34,7 +35,12 @@ function publicUser<T extends { passwordHash: string }>(row: T) {
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly usersRepository: UsersRepository) {}
+  constructor(
+    private readonly usersRepository: UsersRepository,
+    // Porta do grupo Tips: desvincular, trocar de Telegram e excluir a conta
+    // tiram a pessoa de lá. Opcional só pros testes que não passam por isso.
+    private readonly tipsGroup?: TipsGroupService,
+  ) {}
 
   async findByEmail(email: string): Promise<UserDto | null> {
     const user = await this.usersRepository.findByEmail(email);
@@ -76,6 +82,9 @@ export class UsersService {
       throw new UnauthorizedException('Senha incorreta');
     }
     await this.usersRepository.deleteUserAndData(userId as UserId);
+    // Depois de apagar: a conta some mesmo que o Telegram recuse a remoção
+    // (aí o leave passa o ID pros admins).
+    await this.tipsGroup?.leave(user, 'deleted');
   }
 
   async createUser(
@@ -189,12 +198,39 @@ export class UsersService {
     }
 
     await this.usersRepository.linkTelegram(owner.id, telegramUserId, telegramUsername);
+
+    // Vinculou outro Telegram sem desvincular antes (o código também sai com a
+    // conta já vinculada): o antigo perdeu o vínculo e não fica no grupo —
+    // senão um acesso pago punha um Telegram atrás do outro lá dentro.
+    if (owner.telegramUserId != null && Number(owner.telegramUserId) !== telegramUserId) {
+      await this.tipsGroup?.leave(owner, 'relinked');
+    }
+    return owner;
   }
 
-  async setPassword(userId: number, password: string) {
-    await this.usersRepository.updateUser(userId as UserId, {
-      passwordHash: await bcrypt.hash(password, 10),
-    });
+  /**
+   * Vinculou de novo depois de sair do grupo (desvinculou, ou foi tirado pelo
+   * painel) e está em dia: manda o convite, como o painel faz no "+30 dias".
+   * Fica fora do confirmTelegramLink pro bot confirmar o vínculo antes.
+   */
+  async rejoinTipsGroup(
+    user: { id: number; isActive: boolean | null; accessUntil: Date | null; tipsGroupRemovedAt: Date | null },
+    telegramUserId: number,
+  ): Promise<void> {
+    if (!this.tipsGroup || !user.tipsGroupRemovedAt || !hasAccess(user)) return;
+    const result = await this.tipsGroup.readmit(telegramUserId, user.accessUntil, '🔗 Telegram vinculado de novo.');
+    // Falhou: a marca fica, e o painel oferece "Convidar".
+    if (result !== 'failed') {
+      await this.usersRepository.updateUser(user.id as UserId, { tipsGroupRemovedAt: null });
+    }
+  }
+
+  // Devolve o hash novo: a troca de senha assina com ele o token que mantém
+  // logada a sessão de quem trocou.
+  async setPassword(userId: number, password: string): Promise<string> {
+    const passwordHash = await bcrypt.hash(password, 10);
+    await this.usersRepository.updateUser(userId as UserId, { passwordHash });
+    return passwordHash;
   }
 
   async vincularTelegram(userId: number, telegramUserId: number) {
@@ -202,10 +238,15 @@ export class UsersService {
   }
 
   async desvincularTelegram(userId: number) {
+    const user = await this.usersRepository.findById(userId as UserId);
+    // Antes de apagar o ID: sem ele, nem o painel acha a pessoa no grupo.
+    const left = user ? await this.tipsGroup?.leave(user, 'unlinked') : null;
     await this.usersRepository.updateUser(userId as UserId, {
       telegramUserId: null,
       telegramLinkedAt: null,
       telegramUsername: null,
+      // Vinculando de novo em dia, o convite volta sozinho (rejoinTipsGroup).
+      ...(left === 'removed' && { tipsGroupRemovedAt: new Date() }),
     });
   }
 

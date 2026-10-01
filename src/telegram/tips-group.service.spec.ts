@@ -18,14 +18,16 @@ function setup(user: object | null, member: object = { status: 'left' }) {
     declineChatJoinRequest: jest.fn().mockResolvedValue(true),
     sendMessage: jest.fn().mockResolvedValue({ message_id: 1 }),
   };
-  const usersService = {
+  const usersRepository = {
     findByTelegramUserId: jest.fn().mockResolvedValue(user),
+    findAdminsWithTelegram: jest.fn().mockResolvedValue([{ telegramUserId: 500 }]),
+    updateUser: jest.fn().mockResolvedValue(undefined),
   };
   const service = new TipsGroupService(
     { telegram } as any,
-    usersService as any,
+    usersRepository as any,
   );
-  return { service, telegram, usersService };
+  return { service, telegram, usersRepository };
 }
 
 const request = (chatId = GROUP) => ({
@@ -105,9 +107,28 @@ describe('TipsGroupService.handleJoinRequest', () => {
     expect(telegram.declineChatJoinRequest).toHaveBeenCalledWith(GROUP, 7);
   });
 
+  it('quem tinha saído do grupo e volta pelo link perde a marca de fora', async () => {
+    const { service, telegram, usersRepository } = setup({
+      id: 16,
+      isActive: true,
+      accessUntil: new Date(Date.now() + DAY),
+      tipsGroupRemovedAt: new Date(),
+    });
+    await service.handleJoinRequest(request());
+
+    expect(telegram.approveChatJoinRequest).toHaveBeenCalledWith(GROUP, 7);
+    expect(usersRepository.updateUser).toHaveBeenCalledWith(16, { tipsGroupRemovedAt: null });
+  });
+
+  it('aprovar quem nunca saiu não escreve nada', async () => {
+    const { service, usersRepository } = setup({ id: 16, isActive: true, accessUntil: null, tipsGroupRemovedAt: null });
+    await service.handleJoinRequest(request());
+    expect(usersRepository.updateUser).not.toHaveBeenCalled();
+  });
+
   it('banco fora do ar: deixa o pedido pendente pro admin decidir', async () => {
-    const { service, telegram, usersService } = setup(null);
-    usersService.findByTelegramUserId.mockRejectedValue(new Error('db'));
+    const { service, telegram, usersRepository } = setup(null);
+    usersRepository.findByTelegramUserId.mockRejectedValue(new Error('db'));
     jest.spyOn(console, 'error').mockImplementation(() => undefined);
 
     await service.handleJoinRequest(request());
@@ -116,10 +137,10 @@ describe('TipsGroupService.handleJoinRequest', () => {
   });
 
   it('pedido de outro grupo: ignora', async () => {
-    const { service, telegram, usersService } = setup(null);
+    const { service, telegram, usersRepository } = setup(null);
     await service.handleJoinRequest(request(-999));
 
-    expect(usersService.findByTelegramUserId).not.toHaveBeenCalled();
+    expect(usersRepository.findByTelegramUserId).not.toHaveBeenCalled();
     expect(telegram.declineChatJoinRequest).not.toHaveBeenCalled();
   });
 });
@@ -167,6 +188,15 @@ describe('TipsGroupService.readmit', () => {
     expect(telegram.sendMessage).toHaveBeenCalled();
   });
 
+  it('com intro, a primeira linha diz o motivo do convite', async () => {
+    const { service, telegram } = setup(null, { status: 'left' });
+    await service.readmit(7, until, '🔗 Telegram vinculado de novo.');
+    const [, text] = telegram.sendMessage.mock.calls[0] as [number, string];
+    expect(text.startsWith('🔗 Telegram vinculado de novo.')).toBe(true);
+    expect(text).not.toContain('Acesso liberado');
+    expect(text).toContain('https://t.me/+convite');
+  });
+
   it('Telegram recusa: devolve failed', async () => {
     const { service, telegram } = setup(null, { status: 'kicked' });
     telegram.unbanChatMember.mockRejectedValue(new Error('not enough rights'));
@@ -212,5 +242,105 @@ describe('TipsGroupService.remove', () => {
     jest.spyOn(console, 'error').mockImplementation(() => undefined);
 
     await expect(service.remove(7)).resolves.toBeUndefined();
+  });
+});
+
+// Desvincular, trocar de Telegram ou excluir a conta: o grupo é só de conta
+// vinculada. Antes a pessoa pagava, desvinculava e seguia lendo depois de
+// vencer — sem o ID salvo, nem o painel alcançava ela.
+describe('TipsGroupService.leave', () => {
+  const pessoa = { telegramUserId: 7, telegramUsername: 'fulano', fullName: 'Fulano' };
+
+  it('membro: tira (ban + unban, pra poder voltar) e avisa o motivo', async () => {
+    const { service, telegram } = setup(null, { status: 'member' });
+    await expect(service.leave(pessoa, 'unlinked')).resolves.toBe('removed');
+
+    expect(telegram.banChatMember).toHaveBeenCalledWith(GROUP, 7);
+    expect(telegram.unbanChatMember).toHaveBeenCalledWith(GROUP, 7, { only_if_banned: true });
+    expect(telegram.banChatMember.mock.invocationCallOrder[0]).toBeLessThan(
+      telegram.unbanChatMember.mock.invocationCallOrder[0],
+    );
+    const [to, text] = telegram.sendMessage.mock.calls[0] as [number, string];
+    expect(to).toBe(7);
+    expect(text).toContain('desvinculado');
+    expect(text).toContain('saiu do grupo de Tips');
+  });
+
+  it('cada motivo tem o seu aviso', async () => {
+    for (const [reason, trecho] of [
+      ['relinked', 'outro Telegram'],
+      ['deleted', 'excluída'],
+    ] as const) {
+      const { service, telegram } = setup(null, { status: 'member' });
+      await service.leave(pessoa, reason);
+      const [, text] = telegram.sendMessage.mock.calls[0] as [number, string];
+      expect(text).toContain(trecho);
+    }
+  });
+
+  it('ID do Telegram como string (BIGINT do pg) vira número', async () => {
+    const { service, telegram } = setup(null, { status: 'member' });
+    await service.leave({ ...pessoa, telegramUserId: '7' }, 'deleted');
+    expect(telegram.getChatMember).toHaveBeenCalledWith(GROUP, 7);
+    expect(telegram.banChatMember).toHaveBeenCalledWith(GROUP, 7);
+  });
+
+  it('fora do grupo, ou dono/admin dele: não mexe', async () => {
+    for (const member of [
+      { status: 'left' },
+      { status: 'kicked' },
+      { status: 'restricted', is_member: false },
+      { status: 'creator' },
+      { status: 'administrator' },
+    ]) {
+      const { service, telegram } = setup(null, member);
+      await expect(service.leave(pessoa, 'unlinked')).resolves.toBeNull();
+      expect(telegram.banChatMember).not.toHaveBeenCalled();
+      expect(telegram.sendMessage).not.toHaveBeenCalled();
+    }
+  });
+
+  it('membro restrito ainda está dentro: sai também', async () => {
+    const { service, telegram } = setup(null, { status: 'restricted', is_member: true });
+    await expect(service.leave(pessoa, 'unlinked')).resolves.toBe('removed');
+    expect(telegram.banChatMember).toHaveBeenCalled();
+  });
+
+  it('sem Telegram ou sem grupo configurado: nada a fazer', async () => {
+    const { service, telegram } = setup(null, { status: 'member' });
+    await expect(service.leave({ ...pessoa, telegramUserId: null }, 'deleted')).resolves.toBeNull();
+    expect(telegram.getChatMember).not.toHaveBeenCalled();
+
+    delete process.env.TIPS_GROUP_CHAT_ID;
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const semGrupo = new TipsGroupService({ telegram } as any, {} as any);
+    await expect(semGrupo.leave(pessoa, 'deleted')).resolves.toBeNull();
+    expect(telegram.getChatMember).not.toHaveBeenCalled();
+  });
+
+  it('Telegram recusa: devolve failed e passa o ID pros admins tirarem à mão', async () => {
+    const { service, telegram, usersRepository } = setup(null, { status: 'member' });
+    telegram.banChatMember.mockRejectedValue({ response: { description: 'Bad Request: not enough rights' } });
+    jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await expect(service.leave(pessoa, 'unlinked')).resolves.toBe('failed');
+
+    expect(usersRepository.findAdminsWithTelegram).toHaveBeenCalledWith(1);
+    const [to, text] = telegram.sendMessage.mock.calls[0] as [number, string];
+    expect(to).toBe(500);
+    expect(text).toContain('Fulano (@fulano)');
+    expect(text).toContain('Telegram ID: 7');
+    expect(text).toContain('not enough rights');
+    // A pessoa não ouve "você saiu" de uma remoção que não aconteceu.
+    expect(telegram.sendMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('unban que falha não desfaz a saída', async () => {
+    const { service, telegram } = setup(null, { status: 'member' });
+    telegram.unbanChatMember.mockRejectedValue(new Error('flood'));
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    await expect(service.leave(pessoa, 'deleted')).resolves.toBe('removed');
+    expect(telegram.sendMessage).toHaveBeenCalled();
   });
 });
