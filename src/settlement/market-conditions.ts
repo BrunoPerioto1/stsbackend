@@ -170,7 +170,19 @@ export function abreviacoes(text: string): string {
     .replace(/^(.+?) ht\/ft$/, '$1/$1 - intervalo/final')
     .replace(/^ml (.+?)(?= e |$)/, '$1 vence')
     .replace(/ ml\b/g, ' vence')
+    // Empate anula = handicap asiático +0 (empate devolve). Formas reais:
+    // "Goiás DNB", "DNB Bahia", "DNB - Mirassol", "Chelsea / Empate Anula".
+    .replace(/^dnb(?: -)? ([^/]+)$/, '$1 dnb')
+    .replace(/^([^/]+?) (?:\/|-) empate anula(?: aposta)?$/, '$1 dnb')
     .replace(/^(.+?) dnb$/, '$1 +0 - handicap asiatico')
+    // Margem: "Chelsea vencer por 3 ou mais gols de diferença" = handicap -2.5.
+    .replace(/^([^/]+?) (?:vencer|vence|ganhar|ganha) por (\d) ou mais(?: gols?)?(?: de diferenca)?(?: (?:\/|-) (?:resultado com handicap|handicap|margem de vitoria))?$/,
+      (_, time: string, n: string) => `${time} -${Number(n) - 0.5} - handicap`)
+    // Toque na bola é promoção de odd: premissa do usuário (2026-10-03) de que
+    // quem entra em campo toca. "Hulk tocar na bola + marcar ou dar
+    // assistência" vale como gol ou assistência; o toque sozinho vira JOGADOR_TOCA.
+    .replace(/^([^/]+?) (?:para )?tocar na bola (?:\+|e) marcar ou dar assistencia(?: - .+)?$/, '$1 - gol ou assistencia')
+    .replace(/^([^/]+?) (?:para )?tocar na bola(?: (?:\/|-) (?:player props|jogador.*))?$/, '$1 - toca na bola')
     .replace(/^(.+?) dc$/, '$1 ou empate')
     .replace(/^(.+?) nao marca$/, '$1 menos de 0.5 gols')
     .replace(/^(.+?) primeiro a marcar$/, '$1 - primeiro gol')
@@ -225,6 +237,12 @@ export function parseMarket(market: string, teams: Teams): ParseResult {
   // Conjugacao solta: o bilhete escreve "se classifica", "classificado",
   // "classificar". Listar so' o infinitivo deixava "classifica" escapar daqui e
   // cair no fallback generico, com motivo errado na tela.
+  // "Fluminense classifica", "São Paulo para avançar às semifinais -
+  // Classificação". Um time só: lista de times e combinada ("X se classifica
+  // & ...") seguem recusadas logo abaixo.
+  const avanca = /^([^/&,]+?) (?:se classifica|classifica|para (?:se )?classificar|para avancar(?: [a-z0-9 ]+?)?|para se qualificar|se qualifica)(?: - (?:classificacao|para classificar|para avancar|qualificacao|para se qualificar))?$/.exec(text);
+  const lado = avanca && teamPick(avanca[1], teams);
+  if (lado) return { ok:true, conditions:[{ normalizedMarket:'CLASSIFICA', scope:'REGULATION', side:lado }] };
   if (/\b(?:prorrogacao|extra time|penaltis|incluindo|classifica\w*)\b/.test(text)) return fail('ESCOPO_NAO_SUPORTADO','escopo além do tempo normal ou qualificação');
   if (/\b(?:nos? \d+ jogos?|nas? \d+ partidas?|cada partida|todos os jogos|todas as partidas|todos os times|todas as equipes|rodada|jogo com o gol mais rapido|multipla)\b/.test(text)) return fail('VARIOS_JOGOS','agregado/comparação entre jogos');
   const combined=compound(text,teams);

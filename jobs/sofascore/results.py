@@ -40,12 +40,20 @@ import random
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import psycopg
-from wreq import Client, Emulation, Proxy
 from psycopg.types.json import Jsonb
-from settlement_adapter import SofascoreFactsCollector, UnverifiedFactsCollector, normalize_event
+from settlement_adapter import (
+    TUDO,
+    FactsConfig,
+    SofascoreFactsCollector,
+    UnverifiedFactsCollector,
+    normalize_event,
+)
+
+if TYPE_CHECKING:
+    from wreq import Client
 
 # ---------------- config ----------------
 EMULATION = "Chrome149"
@@ -105,6 +113,10 @@ def novo_client() -> Client:
     No runner hospedado do GitHub o IP (Azure) toma 403 do Cloudflare. Sem
     PROXY_URL o workflow liga o WARP e o trafego ja' sai por ele.
     """
+    # Import aqui, e nao no topo: os testes importam este modulo sem a DLL
+    # nativa do wreq (o Windows da maquina de dev bloqueia ela).
+    from wreq import Client, Emulation, Proxy
+
     proxy = os.environ.get("PROXY_URL")
     extra = {"proxies": [Proxy.all(proxy)]} if proxy else {}
     return Client(emulation=getattr(Emulation, EMULATION), **extra)
@@ -279,6 +291,30 @@ def conecta() -> psycopg.Connection:
     )
 
 
+def carrega_config(conn: psycopg.Connection) -> dict[int, FactsConfig]:
+    """O que buscar alem do placar, por competicao (tela /admin/scanner).
+
+    Falha na leitura devolve {}, e ai' todo jogo cai no padrao (busca tudo):
+    gastar alguns requests e' melhor que deixar aposta sem dado por erro de
+    configuracao. Precedencia completa em docs/scanner.md.
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, statistics, incidents, lineups FROM scanner_tournaments")
+            return {tid: FactsConfig(*flags) for tid, *flags in cur.fetchall()}
+    except psycopg.Error as exc:
+        # Transacao abortada recusaria as queries seguintes da mesma conexao.
+        conn.rollback()
+        log(f"configuracao do scanner indisponivel, buscando tudo: {exc}")
+        return {}
+
+
+def config_do_evento(config: dict[int, FactsConfig], evento: dict) -> FactsConfig:
+    """Competicao fora da tabela (aposta antiga, competicao excluida) busca tudo."""
+    torneio = ((evento.get("tournament") or {}).get("uniqueTournament") or {}).get("id")
+    return config.get(torneio, TUDO)
+
+
 def busca_pendentes(conn: psycopg.Connection) -> list[str]:
     with conn.cursor() as cur:
         cur.execute(
@@ -300,6 +336,7 @@ async def main() -> None:
         log(f"{len(ids)} eventos com aposta pendente e jogo ja' encerrado")
         if not ids:
             return
+        config = carrega_config(conn)
 
         client = novo_client()
 
@@ -330,7 +367,8 @@ async def main() -> None:
             # fora em cima do provider.
             extras: dict = {}
             if result['score_scope'] == 'REGULATION':
-                extras = await coletor.collect(external_id, result['home'] + result['away'])
+                extras = await coletor.collect(external_id, result['home'] + result['away'],
+                                               config_do_evento(config, evento))
                 result['facts'].update(extras)
 
             linhas.append((PROVIDER, external_id, result['home'], result['away'],

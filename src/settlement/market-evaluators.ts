@@ -95,11 +95,20 @@ export function evaluateIncidents(c: Condition, ctx: EvaluationContext): Evaluat
   const goal=c.normalizedMarket==='ULTIMO_GOL' ? goals[goals.length-1] : goals[(c.ordinal??1)-1];
   return decided((goal?.side??'NONE')===c.pick,`gol selecionado: ${goal?.side??'nenhum'}`);
 }
+/** "Time X classifica": quem avançou vem pronto do coletor (agregado e pênaltis já contados). */
+export function evaluateQualification(c: Condition, ctx: EvaluationContext): Evaluation {
+  if (!ctx.qualified) return unknown('quem avançou não informado: jogo de ida, fase de liga ou dado ainda não coletado');
+  return decided(ctx.qualified===c.side,`${ctx.qualified==='HOME' ? ctx.teams.home : ctx.teams.away} avançou`);
+}
 export function evaluatePlayer(c: Condition, ctx: EvaluationContext): Evaluation {
   const feed=ctx.playerStats;
   if (!feed?.complete || !Array.isArray(feed.items)) return unknown('estatísticas completas de jogadores indisponíveis');
   const rows=feed.items.filter(p=>typeof p.name==='string' && normalize(p.name)===c.participant && p.scope===c.scope);
   if (!rows.length || new Set(rows.map(p=>p.participantId)).size!==1 || rows.some(p=>!p.participantId || p.played!==true)) return unknown('jogador ausente, homônimo ou participação não confirmada');
+  // "Tocar na bola": premissa do usuário (2026-10-03) — quem entrou em campo
+  // tocou. É mercado de promoção de odd; reserva que não entrou nem aparece
+  // aqui (sem linha = "jogador ausente" acima) e fica pra conferência manual.
+  if (c.metric==='played') return decided(true,`${rows[0].name} entrou em campo`);
   const metrics=c.metric==='goalsAssists' ? ['goals','assists'] : [c.metric!];
   let value=0;
   for (const metric of metrics) {
@@ -113,6 +122,6 @@ export function evaluatePlayer(c: Condition, ctx: EvaluationContext): Evaluation
 }
 const METRICA_PT: Record<string,string> = {
   corners:'escanteios', shots:'chutes', shotsOnTarget:'chutes a gol', fouls:'faltas', offsides:'impedimentos',
-  saves:'defesas', cards:'cartões', cardPoints:'cartões (vermelho vale 2)', yellowCards:'cartões amarelos', goals:'gols', assists:'assistências', foulsSuffered:'faltas sofridas', tackles:'desarmes', goalsAssists:'gols + assistências',
+  saves:'defesas', cards:'pts de cartão (vermelho vale 2)', cardPoints:'cartões (vermelho vale 2)', yellowCards:'cartões amarelos', goals:'gols', assists:'assistências', foulsSuffered:'faltas sofridas', tackles:'desarmes', goalsAssists:'gols + assistências',
 };
 const ESCOPO_PT: Record<Scope,string> = { REGULATION:'', FIRST_HALF:' no 1º tempo', SECOND_HALF:' no 2º tempo' };

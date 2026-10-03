@@ -17,6 +17,7 @@ REGRA QUE VALE PRA TUDO: ausência, campo inválido e formato inesperado nunca
 viram zero. Zero só é afirmado onde o snapshot é comprovadamente completo — é
 pra isso que `incidents` e `playerStats` carregam `complete`.
 """
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 
@@ -26,6 +27,28 @@ def count(value: Any) -> int | None:
 
 def block(value: Any) -> dict:
     return value if isinstance(value, dict) else {}
+
+
+def qualified_side(event: dict) -> str | None:
+    """Quem avançou no mata-mata ('HOME'/'AWAY'), pro mercado "Time X classifica".
+
+    Conferido em 2026-10-03 contra jogos reais:
+    - ida e volta: só o jogo de volta traz `aggregatedWinnerCode`, e ele já
+      conta os pênaltis (LDU 3x2 Palmeiras, agregado 3x3, pênaltis 3x4 -> 2);
+    - jogo único (copa inglesa): `cupMatchesInRound` = 1, sem agregado.
+    `winnerCode` sozinho NÃO serve: é quem ganhou o jogo, não quem avançou (a
+    LDU ganhou o jogo e caiu). Jogo de ida e fase de liga ficam None.
+    """
+    lados = {1: 'HOME', 2: 'AWAY'}
+    if event.get('aggregatedWinnerCode') in lados:
+        return lados[event['aggregatedWinnerCode']]
+    if event.get('cupMatchesInRound') == 1:
+        casa = count(block(event.get('homeScore')).get('penalties'))
+        fora = count(block(event.get('awayScore')).get('penalties'))
+        if casa is not None and fora is not None and casa != fora:
+            return 'HOME' if casa > fora else 'AWAY'
+        return lados.get(event.get('winnerCode'))
+    return None
 
 
 def normalize_event(event: dict) -> dict | None:
@@ -47,6 +70,10 @@ def normalize_event(event: dict) -> dict | None:
                 'FIRST_HALF': {'home': first[0], 'away': first[1]},
                 'SECOND_HALF': {'home': second[0], 'away': second[1]},
             }
+    if football and status == 'finished':
+        avancou = qualified_side(event)
+        if avancou:
+            facts['qualified'] = avancou
     return {
         'home': home if verified else None,
         'away': away if verified else None,
@@ -194,23 +221,20 @@ def _incident_scope(minuto: int) -> str | None:
 CARD_POINTS = {'yellow': 1, 'red': 2, 'yellowred': 2}
 
 
-def normalize_card_points(payload: Any) -> list[dict]:
-    """-> linhas 'cardPoints' por escopo (amarelo 1, vermelho 2), ou [] se não der pra provar.
-
-    A métrica tem nome próprio, e não 'cards', porque event_facts de produção
-    já guarda 'cards' na contagem antiga (amarelo + vermelho valendo 1): ler
-    aquilo com a regra nova daria número errado até o job regravar o evento.
+def _cartoes_do_tempo_normal(payload: Any) -> list[tuple[str, str, str, bool]] | None:
+    """-> (jogador, classe, escopo, é da casa) de cada cartão do tempo normal,
+    ou None quando a contagem fica ambígua. Mesmas travas pro time e pro jogador.
 
     Só é chamada com feed de incidentes completo — é o que autoriza zero.
     Cartão anulado pelo VAR (`rescinded`) não conta. Cartão sem jogador (banco,
     técnico), classe desconhecida, ou jogador com dois amarelos E expulsão por
     segundo amarelo (o provider teria registrado o segundo amarelo duas vezes)
-    deixam a contagem ambígua: nenhuma linha, e o mercado fica sem proposta.
+    deixam a contagem ambígua, e o mercado fica sem proposta.
     """
     lances = block(payload).get('incidents')
     if not isinstance(lances, list):
-        return []
-    pontos = {escopo: [0, 0] for escopo in ('REGULATION', 'FIRST_HALF', 'SECOND_HALF')}
+        return None
+    cartoes: list[tuple[str, str, str, bool]] = []
     amarelos: dict[str, int] = {}
     expulsos_por_amarelo: set[str] = set()
     for lance in lances:
@@ -222,7 +246,7 @@ def normalize_card_points(payload: Any) -> list[dict]:
         ident = block(lance.get('player')).get('id')
         minuto, lado = count(lance.get('time')), lance.get('isHome')
         if classe not in CARD_POINTS or ident in (None, '') or minuto is None or not isinstance(lado, bool):
-            return []
+            return None
         escopo = _incident_scope(minuto)
         if escopo is None:
             continue  # prorrogação não entra no tempo normal
@@ -230,13 +254,48 @@ def normalize_card_points(payload: Any) -> list[dict]:
             amarelos[str(ident)] = amarelos.get(str(ident), 0) + 1
         elif classe == 'yellowred':
             expulsos_por_amarelo.add(str(ident))
+        cartoes.append((str(ident), classe, escopo, lado))
+    if any(amarelos.get(jogador, 0) > 1 for jogador in expulsos_por_amarelo):
+        return None
+    return cartoes
+
+
+def normalize_card_points(payload: Any) -> list[dict]:
+    """-> linhas 'cardPoints' por escopo (amarelo 1, vermelho 2), ou [] se não der pra provar.
+
+    A métrica tem nome próprio, e não 'cards', porque event_facts de produção
+    já guarda 'cards' na contagem antiga (amarelo + vermelho valendo 1): ler
+    aquilo com a regra nova daria número errado até o job regravar o evento.
+    """
+    cartoes = _cartoes_do_tempo_normal(payload)
+    if cartoes is None:
+        return []
+    pontos = {escopo: [0, 0] for escopo in ('REGULATION', 'FIRST_HALF', 'SECOND_HALF')}
+    for _, classe, escopo, lado in cartoes:
         coluna = 0 if lado else 1
         for alvo in ('REGULATION', escopo):
             pontos[alvo][coluna] += CARD_POINTS[classe]
-    if any(amarelos.get(jogador, 0) > 1 for jogador in expulsos_por_amarelo):
-        return []
     return [{'scope': escopo, 'metric': 'cardPoints', 'home': casa, 'away': fora}
             for escopo, (casa, fora) in pontos.items()]
+
+
+def player_card_points(payload: Any) -> dict[str, int] | None:
+    """-> pontos de cartão por id de jogador no tempo normal (amarelo 1,
+    vermelho 2), ou None se ambíguo. Jogador fora do dicionário levou zero.
+
+    Cartão de jogador não vem no /lineups: vem nos lances, com o mesmo id de
+    jogador da escalação. É o que alimenta o mercado "cartões do jogador"
+    (CARTAO_JOGADOR, métrica 'cards' no motor, com a regra RED_COUNTS_TWO).
+    Nunca houve 'cards' de jogador em event_facts, então o nome não colide
+    com dado antigo como colidiria no time.
+    """
+    cartoes = _cartoes_do_tempo_normal(payload)
+    if cartoes is None:
+        return None
+    pontos: dict[str, int] = {}
+    for jogador, classe, _, _ in cartoes:
+        pontos[jogador] = pontos.get(jogador, 0) + CARD_POINTS[classe]
+    return pontos
 
 
 def contar_gols_contra(payload: Any) -> int:
@@ -416,15 +475,29 @@ def normalize_lineups(payload: Any, gols_esperados: int | None = None) -> dict:
             'items': [i for i in items if i['metric'] in vistas] if completo else []}
 
 
+@dataclass(frozen=True)
+class FactsConfig:
+    """Quais dos 3 GETs extras fazer. Vem de scanner_tournaments (tela
+    /admin/scanner); o padrão, tudo ligado, é o comportamento de antes da tela."""
+    statistics: bool = True
+    incidents: bool = True
+    lineups: bool = True
+
+
+TUDO = FactsConfig()
+
+
 class AdditionalFactsCollector(Protocol):
-    async def collect(self, external_id: str, gols: int | None = None) -> dict:
+    async def collect(self, external_id: str, gols: int | None = None,
+                      config: FactsConfig = TUDO) -> dict:
         """Retorna snapshots normalizados por capacidade, com completude explícita."""
         ...
 
 
 class UnverifiedFactsCollector:
     """Coleta desligada (FATOS=0): nenhuma requisição e nenhuma estatística inventada."""
-    async def collect(self, external_id: str, gols: int | None = None) -> dict:
+    async def collect(self, external_id: str, gols: int | None = None,
+                      config: FactsConfig = TUDO) -> dict:
         return {}
 
 
@@ -453,16 +526,21 @@ class SofascoreFactsCollector:
             await self._sleep()
         return dados
 
-    async def collect(self, external_id: str, gols: int | None = None) -> dict:
+    async def collect(self, external_id: str, gols: int | None = None,
+                      config: FactsConfig = TUDO) -> dict:
         facts: dict = {}
         novas: set[str] = set()
 
-        estatisticas = normalize_statistics(
-            await self._get(f'/event/{external_id}/statistics'), novas)
-        if estatisticas:
-            facts['teamStats'] = estatisticas
+        if config.statistics:
+            estatisticas = normalize_statistics(
+                await self._get(f'/event/{external_id}/statistics'), novas)
+            if estatisticas:
+                facts['teamStats'] = estatisticas
 
-        feed = await self._get(f'/event/{external_id}/incidents')
+        # Lances desligado = feed incompleto: sem incidentes, sem cardPoints e
+        # sem desconto de gol contra, então escalação com gol contra é recusada.
+        # Fica sem proposta; nunca liquida errado.
+        feed = await self._get(f'/event/{external_id}/incidents') if config.incidents else None
         incidentes = normalize_incidents(feed, novas)
         if incidentes['complete']:
             facts['incidents'] = incidentes
@@ -475,13 +553,24 @@ class SofascoreFactsCollector:
         esperados = gols
         if esperados is not None and incidentes['complete']:
             esperados -= contar_gols_contra(feed)
-        jogadores = normalize_lineups(await self._get(f'/event/{external_id}/lineups'), esperados)
-        if jogadores['complete']:
-            facts['playerStats'] = jogadores
-        elif self._log is not None and jogadores['items']:
-            # Tinha jogador com minuto em campo e ainda assim o snapshot foi
-            # recusado: ou o mapa de chaves quebrou, ou os gols não fecharam.
-            self._log(f'{external_id}: escalação recusada na reconciliação')
+        if config.lineups:
+            jogadores = normalize_lineups(await self._get(f'/event/{external_id}/lineups'), esperados)
+            if jogadores['complete']:
+                # Cartão do jogador vem dos lances: só com o feed completo, que
+                # é o que prova o zero de quem não levou cartão.
+                pontos = player_card_points(feed) if incidentes['complete'] else None
+                if pontos is not None:
+                    jogaram = {i['participantId']: i['name'] for i in jogadores['items']}
+                    jogadores['items'] += [
+                        {'scope': 'REGULATION', 'name': nome, 'participantId': pid, 'played': True,
+                         'metric': 'cards', 'value': pontos.get(pid, 0)}
+                        for pid, nome in jogaram.items()
+                    ]
+                facts['playerStats'] = jogadores
+            elif self._log is not None and jogadores['items']:
+                # Tinha jogador com minuto em campo e ainda assim o snapshot foi
+                # recusado: ou o mapa de chaves quebrou, ou os gols não fecharam.
+                self._log(f'{external_id}: escalação recusada na reconciliação')
 
         # Sem log por evento: o provider manda ~40 campos que o motor não usa
         # (passes, xG, duelos), e a primeira rodada real virou uma linha de 40

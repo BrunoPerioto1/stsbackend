@@ -278,7 +278,7 @@ export function parsePlayer(text: string, teams?: Teams): Condition | null {
     'total de chutes do jogador': ['TOTAL_CHUTES_JOGADOR','shots'], 'chutes': ['TOTAL_CHUTES_JOGADOR','shots'],
     'faltas cometidas': ['JOGADOR_FALTAS','fouls'], 'faltas sofridas': ['JOGADOR_FALTAS_SOFRIDAS','foulsSuffered'],
     'defesas do goleiro': ['JOGADOR_DEFESAS','saves'], 'total de defesas': ['JOGADOR_DEFESAS','saves'], 'defesas': ['JOGADOR_DEFESAS','saves'],
-    'desarmes': ['JOGADOR_DESARMES','tackles'], 'desarmes do jogador': ['JOGADOR_DESARMES','tackles'], 'cartoes do jogador': ['CARTAO_JOGADOR','cards'],
+    'desarmes': ['JOGADOR_DESARMES','tackles'], 'desarmes do jogador': ['JOGADOR_DESARMES','tackles'], 'toca na bola': ['JOGADOR_TOCA','played'], 'toques na bola': ['JOGADOR_TOCA','played'], 'cartoes do jogador': ['CARTAO_JOGADOR','cards'],
   };
   const def = metrics[label]; if (!def) return null;
   const m = /^(.+?)\s+((?:mais|menos|over|under|acima|abaixo)\s+.*|\d+\+)$/.exec(selection);

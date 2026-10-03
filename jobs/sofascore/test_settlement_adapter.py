@@ -1,8 +1,11 @@
 import asyncio
+import itertools
 import unittest
 from settlement_adapter import (
+    FactsConfig,
     contar_gols_contra,
     normalize_card_points,
+    player_card_points,
     SofascoreFactsCollector,
     UnverifiedFactsCollector,
     normalize_event,
@@ -50,6 +53,18 @@ class AdapterTests(unittest.TestCase):
         for value in [None, True, -1, 1.5, '2']:
             self.assertIsNone(normalize_event(event({'normaltime': value}, {'normaltime': 1}))['home'])
         self.assertIsNone(normalize_event(event({'normaltime': 2}, {'normaltime': 1}, 'Basketball'))['home'])
+
+    def test_qualified_side_uses_aggregate_or_single_match(self):
+        volta = {**event({'normaltime': 3, 'penalties': 3}, {'normaltime': 2, 'penalties': 4}),
+                 'winnerCode': 1, 'aggregatedWinnerCode': 2, 'cupMatchesInRound': 2}
+        self.assertEqual(normalize_event(volta)['facts']['qualified'], 'AWAY')  # ganhou o jogo e caiu
+        unico_penaltis = {**event({'normaltime': 1, 'penalties': 5}, {'normaltime': 1, 'penalties': 4}),
+                          'winnerCode': 1, 'cupMatchesInRound': 1}
+        self.assertEqual(normalize_event(unico_penaltis)['facts']['qualified'], 'HOME')
+        ida = {**event({'normaltime': 2}, {'normaltime': 0}), 'winnerCode': 1, 'cupMatchesInRound': 2}
+        self.assertNotIn('qualified', normalize_event(ida)['facts'])
+        liga = {**event({'normaltime': 2}, {'normaltime': 0}), 'winnerCode': 1}
+        self.assertNotIn('qualified', normalize_event(liga)['facts'])
 
     def test_zero_is_valid_but_periods_must_reconcile(self):
         r = normalize_event(event({'normaltime': 0, 'period1': 1, 'period2': 0}, {'normaltime': 0, 'period1': 0, 'period2': 0}))
@@ -232,6 +247,45 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(sorted(facts), ['incidents', 'teamStats'])
         self.assertEqual({s['metric'] for s in facts['teamStats']}, {'cardPoints'})
 
+    def test_config_decides_exactly_which_gets_happen(self):
+        # As 8 combinações da tela /admin/scanner: GET desligado não sai.
+        for flags in itertools.product((True, False), repeat=3):
+            with self.subTest(flags=flags):
+                chamadas: list[str] = []
+
+                async def fetch(path):
+                    chamadas.append(path)
+                    return None
+
+                asyncio.run(SofascoreFactsCollector(fetch).collect('1', 0, FactsConfig(*flags)))
+                esperadas = [f'/event/1/{nome}' for nome, ligado in
+                             zip(('statistics', 'incidents', 'lineups'), flags) if ligado]
+                self.assertEqual(chamadas, esperadas)
+
+    def test_incidents_off_refuses_lineups_with_own_goal(self):
+        # Regra de segurança: sem lances não há como descontar o gol contra, e
+        # a escalação (1 gol de jogador, placar 2) tem que ser recusada.
+        async def fetch(path):
+            if path.endswith('/lineups'):
+                return {'confirmed': True, 'away': {'players': []},
+                        'home': {'players': [jogador('Mbappe', 7, goals=1)]}}
+            return {'incidents': [gol(25, False, 'ownGoal'), gol(33, False)]}
+
+        facts = asyncio.run(SofascoreFactsCollector(fetch).collect(
+            '1', 2, FactsConfig(incidents=False)))
+        self.assertNotIn('playerStats', facts)
+
+    def test_incidents_off_has_no_card_points(self):
+        async def fetch(path):
+            if path.endswith('/statistics'):
+                return stats(items=[item('cornerKicks', 6, 3)])
+            return {'incidents': [gol(30), cartao(40, 'red', False, 2)]}
+
+        facts = asyncio.run(SofascoreFactsCollector(fetch).collect(
+            '1', None, FactsConfig(incidents=False)))
+        self.assertNotIn('incidents', facts)
+        self.assertEqual({s['metric'] for s in facts['teamStats']}, {'corners'})
+
 
 if __name__ == '__main__':
     unittest.main()
@@ -379,6 +433,31 @@ class CardPointsTests(unittest.TestCase):
     def test_second_yellow_registered_twice_is_ambiguous(self):
         lances = [cartao(20, 'yellow', True, 9), cartao(60, 'yellow', True, 9), cartao(60, 'yellowRed', True, 9)]
         self.assertEqual(normalize_card_points({'incidents': lances}), [])
+
+    def test_player_card_points_follow_the_house_rule(self):
+        lances = [cartao(20, 'yellow', True, 9), cartao(70, 'yellowRed', True, 9),
+                  cartao(55, 'red', False, 4), cartao(30, 'yellow', False, 5, rescinded=True),
+                  cartao(100, 'yellow', False, 6)]  # prorrogação: fora
+        self.assertEqual(player_card_points({'incidents': lances}), {'9': 3, '4': 2})
+        self.assertIsNone(player_card_points({'incidents': [cartao(20, 'yellow', True, None)]}))
+
+    def test_collector_gives_every_player_who_played_a_card_count(self):
+        async def fetch(path):
+            if path.endswith('/incidents'):
+                return {'incidents': [gol(30), cartao(40, 'red', False, 2)]}
+            if path.endswith('/lineups'):
+                return {'confirmed': True,
+                        'home': {'players': [jogador('Pedro', 7, goals=1)]},
+                        'away': {'players': [jogador('Ze', 2)]}}
+            return None
+
+        facts = asyncio.run(SofascoreFactsCollector(fetch).collect('1', 1))
+        cards = {i['name']: i['value'] for i in facts['playerStats']['items'] if i['metric'] == 'cards'}
+        # Zero do Pedro é afirmado porque o feed de lances está completo.
+        self.assertEqual(cards, {'Pedro': 0, 'Ze': 2})
+
+        sem_lances = asyncio.run(SofascoreFactsCollector(fetch).collect('1', 1, FactsConfig(incidents=False)))
+        self.assertNotIn('cards', {i['metric'] for i in sem_lances.get('playerStats', {}).get('items', [])})
 
     def test_collector_adds_card_points_only_with_complete_feed(self):
         async def completo(path):

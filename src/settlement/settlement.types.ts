@@ -1,4 +1,4 @@
-export type Capability = 'SCORE_FULL_TIME' | 'SCORE_PERIODS' | 'TEAM_STATS' | 'INCIDENTS' | 'PLAYER_STATS' | 'SPORT_SPECIFIC_STATS';
+export type Capability = 'SCORE_FULL_TIME' | 'SCORE_PERIODS' | 'TEAM_STATS' | 'INCIDENTS' | 'PLAYER_STATS' | 'QUALIFICATION' | 'SPORT_SPECIFIC_STATS';
 export type Scope = 'REGULATION' | 'FIRST_HALF' | 'SECOND_HALF';
 export type Side = 'HOME' | 'AWAY';
 export type Pick = Side | 'DRAW' | 'NONE';
@@ -30,6 +30,9 @@ export interface Facts {
   teamStats?: Stat[];
   incidents?: { complete: boolean; items: Incident[] };
   playerStats?: { complete: boolean; items: PlayerStat[] };
+  // Quem avançou no mata-mata (agregado, prorrogação e pênaltis incluídos).
+  // Ausente em jogo de ida e fase de liga. Ver qualified_side no coletor.
+  qualified?: Side;
 }
 export interface SettlementContext extends Facts {
   sport: string | null;

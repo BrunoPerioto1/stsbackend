@@ -55,6 +55,10 @@ Trocar de fonte é trocar `jobs/sofascore/collect.py`, sem tocar no backend.
 
 ## Coleta
 
+As competições ficam na tabela `scanner_tournaments`, editada na tela
+`/admin/scanner` (antes era o dict `LIGAS` do `collect.py`; ver `scanner.md`).
+O texto abaixo é o desenho original, com 26 competições.
+
 26 competições — 24 de futebol mais NBA e NFL — com IDs verificados via
 `/search/all` do próprio SofaScore. Por
 competição são 2 requests (`/seasons` + `/events/next/0`), janela de 30 dias —

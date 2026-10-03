@@ -107,10 +107,19 @@ describe('mercados por capacidades',()=>{
 });
 
 describe('escopo de classificacao', () => {
+  // Um time só vira CLASSIFICA (quem avançou vem do coletor); combinada e
+  // forma sem verbo continuam recusadas por escopo.
+  it('"Corinthians para classificar - Classificação" é o mercado CLASSIFICA', () => {
+    const r = parseMarket('Corinthians para classificar - Classificação', {
+      home: 'Corinthians',
+      away: 'Estudiantes de La Plata',
+    });
+    expect(r).toMatchObject({ ok: true, conditions: [{ normalizedMarket: 'CLASSIFICA', side: 'HOME' }] });
+  });
+
   it.each([
     'Corinthians se classifica & Corinthians mais de 0.5 gols no 1º tempo',
     'Corinthians classificado - Classificação',
-    'Corinthians para classificar - Classificação',
   ])('recusa "%s" por escopo, nao por separacao', (market) => {
     const r = parseMarket(market, {
       home: 'Corinthians',

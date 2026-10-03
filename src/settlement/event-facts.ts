@@ -16,5 +16,6 @@ export function decodeFacts(raw: unknown): Facts {
   if (Array.isArray(raw.teamStats) && raw.teamStats.every(s=>object(s) && scope(s.scope) && typeof s.metric==='string' && validCount(s.home) && validCount(s.away))) facts.teamStats=raw.teamStats as Stat[];
   if (object(raw.incidents) && raw.incidents.complete===true && Array.isArray(raw.incidents.items) && raw.incidents.items.every(i=>object(i) && scope(i.scope) && ['GOAL','PENALTY_AWARDED','RED_CARD'].includes(i.type as string) && ['HOME','AWAY'].includes(i.side as string) && validCount(i.sequence))) facts.incidents={complete:true,items:raw.incidents.items as Incident[]};
   if (object(raw.playerStats) && raw.playerStats.complete===true && Array.isArray(raw.playerStats.items) && raw.playerStats.items.every(p=>object(p) && scope(p.scope) && typeof p.name==='string' && typeof p.participantId==='string' && typeof p.played==='boolean' && typeof p.metric==='string' && validCount(p.value))) facts.playerStats={complete:true,items:raw.playerStats.items as PlayerStat[]};
+  if (raw.qualified==='HOME' || raw.qualified==='AWAY') facts.qualified=raw.qualified;
   return facts;
 }

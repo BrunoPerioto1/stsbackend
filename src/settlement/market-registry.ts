@@ -1,6 +1,6 @@
 import { Capability, MarketDefinition } from './settlement.types';
 import { parseScoreMarket, parsePeriods, parseTeamStat, parseIncidents, parsePlayer } from './market-parser';
-import { evaluateScore, evaluatePeriods, evaluateTeamStat, evaluateIncidents, evaluatePlayer, unknown } from './market-evaluators';
+import { evaluateScore, evaluatePeriods, evaluateTeamStat, evaluateIncidents, evaluatePlayer, evaluateQualification, unknown } from './market-evaluators';
 function definitions(names: string[], requiredData: Capability[], parser: MarketDefinition['parser'], evaluator: MarketDefinition['evaluator'], status: MarketDefinition['status']): MarketDefinition[] {
   return names.map(normalizedMarket=>({ normalizedMarket, aliases: ALIASES[normalizedMarket] ?? [normalizedMarket.toLowerCase().replace(/_/g,' ')], requiredData, confidence:'HIGH', unsupportedReason:'DADO_INDISPONIVEL', status,
     parser: (text,teams)=>{ const parsed=parser(text,teams); return parsed?.normalizedMarket===normalizedMarket ? parsed : null; }, evaluator }));
@@ -21,7 +21,10 @@ export const MARKET_REGISTRY: readonly MarketDefinition[] = [
   ...definitions(['TOTAL_ESCANTEIOS','TIME_TOTAL_ESCANTEIOS','EQUIPE_MAIS_ESCANTEIOS','EQUIPE_MAIS_CARTOES','EQUIPE_MAIS_CHUTES','EQUIPE_MAIS_CHUTES_A_GOL','TOTAL_CARTOES','TIME_TOTAL_CARTOES','TOTAL_CHUTES','TOTAL_CHUTES_A_GOL','FALTAS','IMPEDIMENTOS','DEFESAS'],['TEAM_STATS'],parseTeamStat,evaluateTeamStat,'PARCIAL'),
   ...definitions(['PRIMEIRO_GOL','PROXIMO_GOL','ULTIMO_GOL'],['INCIDENTS','SCORE_FULL_TIME'],parseIncidents,evaluateIncidents,'PARCIAL'),
   ...definitions(['PENALTI_NO_JOGO','CARTAO_VERMELHO'],['INCIDENTS'],parseIncidents,evaluateIncidents,'PARCIAL'),
-  ...definitions(['JOGADOR_MARCA','JOGADOR_ASSISTENCIA','JOGADOR_GOL_OU_ASSISTENCIA','JOGADOR_CHUTE_A_GOL','TOTAL_CHUTES_JOGADOR','CARTAO_JOGADOR','JOGADOR_FALTAS','JOGADOR_FALTAS_SOFRIDAS','JOGADOR_DEFESAS','JOGADOR_DESARMES'],['PLAYER_STATS'],parsePlayer,evaluatePlayer,'PARCIAL'),
+  ...definitions(['JOGADOR_MARCA','JOGADOR_ASSISTENCIA','JOGADOR_GOL_OU_ASSISTENCIA','JOGADOR_CHUTE_A_GOL','TOTAL_CHUTES_JOGADOR','CARTAO_JOGADOR','JOGADOR_FALTAS','JOGADOR_FALTAS_SOFRIDAS','JOGADOR_DEFESAS','JOGADOR_DESARMES','JOGADOR_TOCA'],['PLAYER_STATS'],parsePlayer,evaluatePlayer,'PARCIAL'),
+  // Montado direto no parseMarket (classificacao), antes da regra que recusa
+  // prorrogação/pênaltis: o mercado só lê quem avançou, nunca o placar.
+  { normalizedMarket:'CLASSIFICA', aliases:['classifica','para classificar','para avancar'], requiredData:['QUALIFICATION'], confidence:'HIGH', unsupportedReason:'DADO_INDISPONIVEL', status:'PARCIAL', parser:()=>null, evaluator:evaluateQualification },
   { normalizedMarket:'GOL_MAIS_RAPIDO', aliases:['jogo com o gol mais rapido'], requiredData:['INCIDENTS'], confidence:'HIGH', unsupportedReason:'VARIOS_JOGOS', status:'INDEFINIDO', parser:()=>null, evaluator:()=>unknown('comparação entre jogos exige todos os eventos','VARIOS_JOGOS') },
 ];
 export function requiredDataFor(c: import('./settlement.types').Condition): readonly Capability[] {

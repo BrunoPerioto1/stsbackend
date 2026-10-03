@@ -1,4 +1,5 @@
 import { ApiProperty, PartialType } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
@@ -8,6 +9,7 @@ import {
   IsOptional,
   IsString,
   Max,
+  MaxLength,
   Min,
   MinLength,
 } from 'class-validator';
@@ -125,4 +127,59 @@ export class UpdateAdminHouseDTO extends PartialType(CreateAdminHouseDTO) {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+}
+
+// ---- Scanner do SofaScore (/admin/scanner, docs/scanner.md)
+
+export class UpdateScannerFlagsDTO {
+  @ApiProperty({
+    required: false,
+    description: 'Coletor busca os próximos jogos (é o que casa aposta com jogo)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
+  @ApiProperty({
+    required: false,
+    description: 'Depois do jogo: escanteios, chutes, cartões, faltas (1 GET por jogo, só futebol)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  statistics?: boolean;
+
+  @ApiProperty({
+    required: false,
+    description: 'Depois do jogo: ordem dos gols, pênaltis, vermelhos (1 GET por jogo, só futebol)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  incidents?: boolean;
+
+  @ApiProperty({
+    required: false,
+    description: 'Depois do jogo: estatística por jogador (1 GET por jogo, só futebol)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  lineups?: boolean;
+}
+
+export class CreateScannerTournamentDTO {
+  @ApiProperty({ example: 17, description: 'Id do torneio no SofaScore: o número no fim da URL, antes do #' })
+  @IsInt()
+  @Min(1)
+  id!: number;
+
+  @ApiProperty({ example: 'Premier League' })
+  // Apara antes de validar: "   " passava no MinLength e gravava nome vazio.
+  @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MinLength(2)
+  @MaxLength(100)
+  name!: string;
+
+  @ApiProperty({ example: 1, description: 'Agrupa na tela; o esporte do jogo vem do próprio SofaScore' })
+  @IsInt()
+  sportId!: number;
 }

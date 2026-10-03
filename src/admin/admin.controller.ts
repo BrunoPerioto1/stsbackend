@@ -1,8 +1,15 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseIntPipe, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { AdminService } from './admin.service';
-import { CreateAdminHouseDTO, UpdateAdminHouseDTO, UpdateAdminUserDTO } from './dto/admin.dto';
+import {
+  CreateAdminHouseDTO,
+  CreateScannerTournamentDTO,
+  UpdateAdminHouseDTO,
+  UpdateAdminUserDTO,
+  UpdateScannerFlagsDTO,
+} from './dto/admin.dto';
+import { ScannerService } from './scanner.service';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { User } from '../common/decorators/user.decorator';
 
@@ -13,7 +20,10 @@ import { User } from '../common/decorators/user.decorator';
 @UseGuards(AuthGuard('jwt'), AdminGuard)
 @ApiBearerAuth('jwt')
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly scannerService: ScannerService,
+  ) {}
 
   @Get('overview')
   @ApiOperation({ summary: 'Saúde do pipeline: Telegram → tip → fan-out → coletor → liquidação' })
@@ -54,5 +64,42 @@ export class AdminController {
     @User('userId') requesterId: number,
   ) {
     return this.adminService.updateUser(requesterId, id, dto);
+  }
+
+  @Get('scanner')
+  @ApiOperation({ summary: 'Competições do scanner do SofaScore, o que ele busca de cada uma e a última coleta' })
+  listScanner() {
+    return this.scannerService.list();
+  }
+
+  @Get('scanner/:id/sample')
+  @ApiOperation({ summary: 'O que a competição entrega: resumo do último jogo encerrado (amostra.py)' })
+  scannerSample(@Param('id', ParseIntPipe) id: number) {
+    return this.scannerService.sample(id);
+  }
+
+  @Post('scanner')
+  @ApiOperation({ summary: 'Põe um torneio do SofaScore no scanner (id do fim da URL do torneio)' })
+  createScanner(@Body() dto: CreateScannerTournamentDTO) {
+    return this.scannerService.create(dto);
+  }
+
+  @Patch('scanner/sports/:sportId')
+  @ApiOperation({ summary: 'Aplica as flags a todas as competições atuais do esporte (não fica salvo no esporte)' })
+  updateScannerSport(@Param('sportId', ParseIntPipe) sportId: number, @Body() dto: UpdateScannerFlagsDTO) {
+    return this.scannerService.updateSport(sportId, dto);
+  }
+
+  @Patch('scanner/:id')
+  @ApiOperation({ summary: 'Liga/desliga a coleta ou um dado extra de uma competição' })
+  updateScanner(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateScannerFlagsDTO) {
+    return this.scannerService.update(id, dto);
+  }
+
+  @Delete('scanner/:id')
+  @HttpCode(204)
+  @ApiOperation({ summary: 'Tira a competição do scanner (apostas dela voltam a buscar tudo)' })
+  deleteScanner(@Param('id', ParseIntPipe) id: number) {
+    return this.scannerService.remove(id);
   }
 }
