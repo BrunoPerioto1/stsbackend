@@ -1,4 +1,5 @@
-import { Controller, Get, Param, ParseIntPipe, Query, Header } from '@nestjs/common';
+import { Controller, Get, Param, ParseIntPipe, Query, Header, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   ApiOperation,
   ApiResponse,
@@ -73,6 +74,21 @@ export class HouseController {
     @User('userId') userId: number,
   ) {
     return this.houseService.getHouseRanking(userId, startDate, endDate, minBets ? Number(minBets) : undefined);
+  }
+
+  @Get(':id/logo')
+  // Sem guard pelo mesmo motivo de /all: logo de casa e' publico e igual pra
+  // todo mundo — e o <img> do front nao manda o Bearer. O front pede com
+  // ?v=<logoVersion>, entao trocar o logo muda a URL e o cache pode ser eterno.
+  // Header na mao: com @Res() o @Header do Nest nao e' aplicado.
+  @ApiOperation({ summary: 'Avatar da casa (imagem guardada no banco)' })
+  @ApiResponse({ status: 200, description: 'Imagem do logo.' })
+  @ApiNotFoundResponse({ description: 'Casa sem logo.' })
+  async getHouseLogo(@Param('id', ParseIntPipe) id: number, @Res() res: Response) {
+    const { bytes, mime } = await this.houseService.getHouseLogo(id);
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.send(bytes);
   }
 
   @Get(':id')

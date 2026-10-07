@@ -124,6 +124,11 @@ ALTER TABLE betting_houses ADD COLUMN IF NOT EXISTS aliases TEXT[] NOT NULL DEFA
 -- Site da casa; só domínio .bet.br (autorização federal), validado na API.
 ALTER TABLE betting_houses ADD COLUMN IF NOT EXISTS website_url TEXT;
 
+-- Avatar da casa (bytes da imagem); logo_updated_at versiona a URL.
+ALTER TABLE betting_houses ADD COLUMN IF NOT EXISTS logo BYTEA;
+ALTER TABLE betting_houses ADD COLUMN IF NOT EXISTS logo_mime TEXT;
+ALTER TABLE betting_houses ADD COLUMN IF NOT EXISTS logo_updated_at TIMESTAMP;
+
 CREATE TABLE IF NOT EXISTS house_transactions (
     id SERIAL PRIMARY KEY,
     house_id INTEGER NOT NULL REFERENCES betting_houses(id) ON DELETE CASCADE,
