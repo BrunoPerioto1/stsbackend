@@ -32,6 +32,7 @@ import type {
   TipsListResponseDto,
 } from './dto/tip.dto';
 import type { NewTip, TipId, TipEntity } from '../db_types/Tips';
+import type { TipSourceId } from '../db_types/TipSources';
 import type { NewTipDelivery } from '../db_types/TipDeliveries';
 import type { UserId } from '../db_types/Users';
 
@@ -43,6 +44,9 @@ interface RecordTipData {
   isAviso: boolean;
   hasMedia: boolean;
   entities: TipEntity[] | null;
+  // Tip lida pelo modelo de uma fonte: `text` é o card, este é o original.
+  sourceId?: TipSourceId | null;
+  originalText?: string | null;
 }
 
 interface SaveDeliveryData {
@@ -320,6 +324,8 @@ export class TipsService {
       isAviso: data.isAviso,
       hasMedia: data.hasMedia,
       entities: data.entities ? JSON.stringify(data.entities) : null,
+      sourceId: data.sourceId ?? null,
+      originalText: data.originalText ?? null,
     };
     return this.tipsRepository.create(newTip);
   }

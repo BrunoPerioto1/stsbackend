@@ -5,6 +5,7 @@ import { TELEGRAM_BOT } from './telegram-bot.provider';
 import { UsersService } from '../users/users.service';
 import { TipsService } from '../tips/tips.service';
 import { TipsGroupService } from './tips-group.service';
+import { TipSourcesService } from '../tip-sources/tip-sources.service';
 import { forEachWithConcurrency } from '../common/utils/concurrency';
 import {
   extractLimitFromText,
@@ -42,6 +43,7 @@ export class TipFanoutService {
     private readonly usersService: UsersService,
     private readonly tipsService: TipsService,
     private readonly tipsGroup: TipsGroupService,
+    private readonly tipSources: TipSourcesService,
   ) {}
 
   isTipsGroup(chatId: number): boolean {
@@ -78,12 +80,20 @@ export class TipFanoutService {
   // então as entidades precisam ser realinhadas junto — senão a cópia perde
   // todo link/formatação.
   async handleTipsMessage(
-    text: string,
+    rawText: string,
     chatId: number,
     messageId: number,
     hasMedia: boolean,
-    entities?: MessageEntity[],
+    rawEntities?: MessageEntity[],
   ) {
+    // Mensagem que o modelo de uma fonte cadastrada lê vira o card padrão
+    // antes de tudo: daqui pra baixo (e no Planilhar, Editar, /pendentes) ela
+    // é uma tip como as outras. Links e negritos eram da mensagem do tipster —
+    // no card não apontam pra nada, então não vão junto.
+    const translated = await this.tipSources.translate(rawText);
+    const text = translated?.card ?? rawText;
+    const entities = translated ? undefined : rawEntities;
+
     const rawPercent = extractPercent(text);
     const isAviso = isAvisoMessage(text);
     // AVISO/SOBRECARGA só tem o que planilhar quando é uma tip de verdade
@@ -95,7 +105,7 @@ export class TipFanoutService {
     const showKeyboard = !isAviso || hasOdd;
     const percent = showKeyboard ? rawPercent : null;
     this.logger.log(
-      `📨 handleTipsMessage: percent=${percent} isAviso=${isAviso} hasMedia=${hasMedia} showKeyboard=${showKeyboard}`,
+      `📨 handleTipsMessage: percent=${percent} isAviso=${isAviso} hasMedia=${hasMedia} showKeyboard=${showKeyboard} source=${translated?.sourceId ?? 'padrão'}`,
     );
     if (rawPercent === null && !isAviso) return;
 
@@ -107,6 +117,8 @@ export class TipFanoutService {
       isAviso,
       hasMedia,
       entities: entities ?? null,
+      sourceId: translated?.sourceId ?? null,
+      originalText: translated ? rawText : null,
     });
     // Reentrega do webhook (o Telegram repete quando a resposta demora): a
     // primeira entrega já fez o fan-out, repetir mandaria a DM duas vezes.
@@ -115,16 +127,21 @@ export class TipFanoutService {
       return;
     }
 
-    const users = await this.usersService.getUsersForTipsFanout();
+    const [users, muted] = await Promise.all([
+      this.usersService.getUsersForTipsFanout(),
+      // Quem desligou a fonte no perfil não recebe a DM dela.
+      translated ? this.tipSources.mutedUserIds(translated.sourceId) : null,
+    ]);
     const limit = extractLimitFromText(text);
     const { text: baseText, entities: baseEntities } =
       stripBoilerplateParagraphs(text, entities, TIP_BOILERPLATE_PATTERNS);
 
     const destinatarios = users.filter(
       (user) =>
-        percent === null ||
-        user.minPercentFilter === null ||
-        percent >= Number(user.minPercentFilter),
+        !muted?.has(Number(user.id)) &&
+        (percent === null ||
+          user.minPercentFilter === null ||
+          percent >= Number(user.minPercentFilter)),
     );
 
     // Em paralelo, com teto: um de cada vez, a última DM chegava segundos

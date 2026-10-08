@@ -8,12 +8,13 @@ import { ScannerRepository } from '../infra/repository/scanner.repository';
 import { UsersModule } from './users.module';
 import { HouseModule } from './house.module';
 import { TelegramBotModule } from './telegram-bot.module';
+import { TipSourcesModule } from './tip-sources.module';
 
 @Module({
   // UsersModule pelo UsersRepository: mudar papel/desbloquear/desvincular é
   // UPDATE em `users`, que ele já sabe fazer. O AdminRepository só lê.
   // TelegramBotModule pela porta do grupo Tips (tirar e convidar de volta).
-  imports: [DatabaseModule, UsersModule, HouseModule, TelegramBotModule],
+  imports: [DatabaseModule, UsersModule, HouseModule, TelegramBotModule, TipSourcesModule],
   controllers: [AdminController],
   providers: [AdminService, AdminRepository, ScannerService, ScannerRepository],
 })

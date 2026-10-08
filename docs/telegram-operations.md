@@ -54,6 +54,31 @@ Configuração, uma vez:
 Quem já está no grupo sem ter vinculado o Telegram fica de fora desse controle:
 a API de bot não lista membros, então essa limpeza é manual, uma vez.
 
+## Fontes de tips: tipster com outro formato
+
+O repasse pode trazer para o grupo Tips mensagens de tipsters que não usam o
+formato padrão (🏠 🆚 ⚽️ 📌 🏷 🚦 %). Em **Admin → Fontes de tips**, cada
+tipster vira uma fonte com o modelo das mensagens dele:
+
+- **Marcar no exemplo.** Cola uma mensagem, seleciona cada trecho (Casa, Jogo,
+  Odd…) e escolhe o campo; a regra sai sozinha ("depois de `Odd:`", "linha 3",
+  "valor fixo"). O formulário ao lado mostra a regra para ajustar, e a prévia
+  vem do backend: é exatamente o que o bot vai ler.
+- **Identificador.** Texto que toda mensagem da fonte tem. Como todas chegam
+  pelo mesmo grupo, é ele que impede um modelo de ler a tip de outra fonte. A
+  tela avisa quantas das últimas 50 tips de outros formatos o modelo leria.
+- **Na entrada.** Cada mensagem do grupo passa pelos modelos ativos, em ordem de
+  cadastro. O primeiro que lê todos os campos obrigatórios troca a mensagem pelo
+  card padrão com `📣 Fonte: nome` no fim; daí em diante é uma tip como as
+  outras (fan-out, Planilhar, Editar, /pendentes). A mensagem como veio fica em
+  `tips.original_text`. Mensagem que nenhum modelo lê segue no caminho de sempre.
+- **Usuário.** No perfil, cada fonte tem liga/desliga. Desligada, não manda DM e
+  as pendentes dela somem das listas; o que já foi planilhado continua.
+
+Configuração, uma vez: aplicar
+`src/infra/db/migrations/20261008_tip_sources.sql` antes do deploy da API.
+Regras do modelo: `src/tip-sources/tip-template.ts`.
+
 ## Logs
 
 Todos os valores em milissegundos.

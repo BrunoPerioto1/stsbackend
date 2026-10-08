@@ -27,6 +27,12 @@ import {
 import { ScannerService } from './scanner.service';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { User } from '../common/decorators/user.decorator';
+import { TipSourcesService } from '../tip-sources/tip-sources.service';
+import {
+  CreateTipSourceDTO,
+  PreviewTipSourceDTO,
+  UpdateTipSourceDTO,
+} from '../tip-sources/dto/tip-source.dto';
 
 @ApiTags('admin')
 @Controller('admin')
@@ -38,6 +44,7 @@ export class AdminController {
   constructor(
     private readonly adminService: AdminService,
     private readonly scannerService: ScannerService,
+    private readonly tipSourcesService: TipSourcesService,
   ) {}
 
   @Get('overview')
@@ -131,5 +138,37 @@ export class AdminController {
   @ApiOperation({ summary: 'Tira a competição do scanner (apostas dela voltam a buscar tudo)' })
   deleteScanner(@Param('id', ParseIntPipe) id: number) {
     return this.scannerService.remove(id);
+  }
+
+  @Get('sources')
+  @ApiOperation({ summary: 'Fontes de tips com o modelo de cada uma e o que renderam na semana' })
+  listSources() {
+    return this.tipSourcesService.list();
+  }
+
+  @Post('sources/preview')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Lê uma mensagem com o modelo: campos, card do usuário e conflito com outros formatos' })
+  previewSource(@Body() dto: PreviewTipSourceDTO) {
+    return this.tipSourcesService.preview(dto);
+  }
+
+  @Post('sources')
+  @ApiOperation({ summary: 'Cadastra uma fonte de tips e o modelo das mensagens dela' })
+  createSource(@Body() dto: CreateTipSourceDTO) {
+    return this.tipSourcesService.create(dto);
+  }
+
+  @Patch('sources/:id')
+  @ApiOperation({ summary: 'Troca nome, modelo ou exemplo, ou pausa/reativa a fonte' })
+  updateSource(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateTipSourceDTO) {
+    return this.tipSourcesService.update(id, dto);
+  }
+
+  @Delete('sources/:id')
+  @HttpCode(204)
+  @ApiOperation({ summary: 'Apaga a fonte (as tips que ela leu ficam, já traduzidas)' })
+  deleteSource(@Param('id', ParseIntPipe) id: number) {
+    return this.tipSourcesService.remove(id);
   }
 }

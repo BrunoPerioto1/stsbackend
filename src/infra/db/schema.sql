@@ -415,6 +415,9 @@ CREATE TABLE IF NOT EXISTS rate_limit_hits (
     PRIMARY KEY (bucket, window_start)
 );
 
+-- Fontes de tips (tip_sources, tip_source_mutes, tips.source_id e
+-- tips.original_text): ver migrations/20261008_tip_sources.sql.
+
 -- Controle das migrations aplicadas (scripts/migrate.cjs).
 CREATE TABLE IF NOT EXISTS schema_migrations (
     name VARCHAR(200) PRIMARY KEY,

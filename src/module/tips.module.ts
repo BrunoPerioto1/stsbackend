@@ -6,9 +6,10 @@ import { TipsService } from '../tips/tips.service';
 import { BetModule } from './bet.module';
 import { HouseModule } from './house.module';
 import { UsersModule } from './users.module';
+import { TipSourcesModule } from './tip-sources.module';
 
 @Module({
-  imports: [DatabaseModule, UsersModule, BetModule, HouseModule],
+  imports: [DatabaseModule, UsersModule, BetModule, HouseModule, TipSourcesModule],
   controllers: [TipsController],
   providers: [TipsRepository, TipsService],
   exports: [TipsService],

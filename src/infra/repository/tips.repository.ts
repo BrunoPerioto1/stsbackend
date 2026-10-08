@@ -131,12 +131,32 @@ export class TipsRepository {
       .$if(minPercentFilter !== null, (qb) =>
         qb.where('t.percent', '>=', minPercentFilter as number),
       )
+      // Fonte que o usuário desligou no perfil: a tip dela some, a não ser
+      // que ele já tenha mexido (planilhou ou "caiu" é histórico). Mesma
+      // regra do listBase.
+      .where((eb) =>
+        eb.or([
+          eb('t.sourceId', 'is', null),
+          eb('b.id', 'is not', null),
+          eb('d.id', 'is not', null),
+          eb.not(
+            eb.exists(
+              eb
+                .selectFrom('tipSourceMutes as m')
+                .select('m.sourceId')
+                .whereRef('m.sourceId', '=', 't.sourceId')
+                .where('m.userId', '=', userId),
+            ),
+          ),
+        ]),
+      )
       .orderBy('t.createdAt', 'asc')
       .execute();
   }
 
   // Mesma base da findSummaryForUser (joins, janela de 48h pra tip não
-  // tocada, filtro de %), sem o SELECT: cada consulta da tela escolhe o seu.
+  // tocada, filtro de %, fonte desligada), sem o SELECT: cada consulta da
+  // tela escolhe o seu.
   private listBase(userId: UserId, minPercentFilter: number | null) {
     const untouchedSince = new Date(Date.now() - TipsRepository.UNTOUCHED_WINDOW_MS);
     return this.dbWrite
@@ -150,7 +170,23 @@ export class TipsRepository {
       .where((eb) =>
         eb.or([eb('t.createdAt', '>=', untouchedSince), eb('b.id', 'is not', null), eb('d.id', 'is not', null)]),
       )
-      .$if(minPercentFilter !== null, (qb) => qb.where('t.percent', '>=', minPercentFilter as number));
+      .$if(minPercentFilter !== null, (qb) => qb.where('t.percent', '>=', minPercentFilter as number))
+      .where((eb) =>
+        eb.or([
+          eb('t.sourceId', 'is', null),
+          eb('b.id', 'is not', null),
+          eb('d.id', 'is not', null),
+          eb.not(
+            eb.exists(
+              eb
+                .selectFrom('tipSourceMutes as m')
+                .select('m.sourceId')
+                .whereRef('m.sourceId', '=', 't.sourceId')
+                .where('m.userId', '=', userId),
+            ),
+          ),
+        ]),
+      );
   }
 
   // Status e busca no SQL. A tela de Tips carregava o histórico inteiro (toda

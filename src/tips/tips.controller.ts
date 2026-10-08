@@ -9,6 +9,7 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -24,13 +25,35 @@ import {
 import { User } from '../common/decorators/user.decorator';
 import { TipsService } from './tips.service';
 import { PlanilharTipDto, TipFilterDto, TipsListResponseDto } from './dto/tip.dto';
+import { TipSourcesService } from '../tip-sources/tip-sources.service';
+import { SetTipSourceDTO } from '../tip-sources/dto/tip-source.dto';
 
 @ApiTags('Tips')
 @Controller('tips')
 @UseGuards(AuthGuard('jwt'))
 @ApiBearerAuth()
 export class TipsController {
-  constructor(private readonly tipsService: TipsService) {}
+  constructor(
+    private readonly tipsService: TipsService,
+    private readonly tipSourcesService: TipSourcesService,
+  ) {}
+
+  @Get('sources')
+  @ApiOperation({ summary: 'Fontes de tips ativas, com o que o usuário recebe ou desligou' })
+  async sources(@User('userId') userId: number) {
+    return this.tipSourcesService.listForUser(userId);
+  }
+
+  @Put('sources/:id')
+  @ApiOperation({ summary: 'Liga ou desliga uma fonte: desligada não manda DM e some das pendentes' })
+  @ApiNotFoundResponse({ description: 'Fonte não encontrada.' })
+  async setSource(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: SetTipSourceDTO,
+    @User('userId') userId: number,
+  ) {
+    return this.tipSourcesService.setEnabled(userId, id, dto.enabled);
+  }
 
   @Get()
   @ApiOperation({

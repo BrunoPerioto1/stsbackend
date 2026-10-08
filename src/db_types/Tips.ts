@@ -1,4 +1,5 @@
 import type { ColumnType, Insertable, Selectable, Updateable } from "kysely";
+import type { TipSourceId } from "./TipSources";
 
 export type TipId = number & { __type: "TipId" };
 
@@ -18,6 +19,10 @@ export default interface TipsTable {
   isAviso: ColumnType<boolean, boolean, never>;
   hasMedia: ColumnType<boolean, boolean, never>;
   entities: ColumnType<TipEntity[] | null, string | null, never>;
+  // Fonte cujo modelo leu a tip; null = formato padrão. Com fonte, `text` é o
+  // card traduzido e `originalText` a mensagem como o tipster mandou.
+  sourceId: ColumnType<TipSourceId | null, TipSourceId | null | undefined, never>;
+  originalText: ColumnType<string | null, string | null | undefined, never>;
   createdAt: ColumnType<Date, Date | undefined, never>;
 }
 
