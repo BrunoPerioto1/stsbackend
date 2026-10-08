@@ -5,6 +5,7 @@ import { HouseRepository } from '../infra/repository/house.repository';
 import { CreateAdminHouseDTO, UpdateAdminHouseDTO, UpdateAdminUserDTO } from './dto/admin.dto';
 import { normalizeName } from '../common/utils/bet.utils';
 import { normalizeFederalHouseUrl } from '../common/utils/house-url.util';
+import { detectImageMime } from '../bet-slip/bet-slip.service';
 import type { BettingHouseId } from '../db_types/BettingHouse';
 import { ADMIN_ROLE_ID } from '../common/guards/admin.guard';
 import type { UpdateUser, UserId } from '../db_types/Users';
@@ -13,6 +14,19 @@ import { extendAccess, hasAccess } from '../users/access';
 import { TipsGroupService, telegramErrorText } from '../telegram/tips-group.service';
 
 type AdminHouseRow = Awaited<ReturnType<HouseRepository['findAllHousesForAdmin']>>[number];
+
+// O front reduz pra 128px antes de mandar; 200 KB sobra pra isso e barra
+// foto crua que alguém subir sem passar pela tela.
+export const MAX_HOUSE_LOGO_BYTES = 200 * 1024;
+
+const logoVersion = (at: Date | string | null | undefined) => (at ? new Date(at).getTime() : null);
+
+/** Linha de casa pra resposta: sem os bytes do logo, só a versão dele. */
+function toAdminHouse<T extends { logoUpdatedAt?: Date | null; logo?: unknown; logoMime?: unknown }>(row: T) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { logo, logoMime, logoUpdatedAt, ...house } = row;
+  return { ...house, logoVersion: logoVersion(logoUpdatedAt) };
+}
 
 @Injectable()
 export class AdminService {
@@ -69,7 +83,7 @@ export class AdminService {
 
   async listHouses() {
     const rows = await this.houseRepository.findAllHousesForAdmin();
-    return rows.map((house) => ({ ...house, betCount: Number(house.betCount) }));
+    return rows.map((house) => ({ ...toAdminHouse(house), betCount: Number(house.betCount) }));
   }
 
   /**
@@ -87,7 +101,7 @@ export class AdminService {
     const websiteUrl = normalizeFederalHouseUrl(dto.websiteUrl);
 
     const created = await this.houseRepository.createHouse(name, aliases, websiteUrl);
-    return { ...created, betCount: 0 };
+    return { ...toAdminHouse(created), betCount: 0 };
   }
 
   async updateHouse(id: number, dto: UpdateAdminHouseDTO) {
@@ -116,7 +130,26 @@ export class AdminService {
 
     const updated = await this.houseRepository.updateHouse(id as BettingHouseId, update);
     if (!updated) throw new NotFoundException('Casa não encontrada');
-    return { ...updated, betCount: Number(current.betCount) };
+    return { ...toAdminHouse(updated), betCount: Number(current.betCount) };
+  }
+
+  /** Troca o avatar da casa. Tipo conferido pelos bytes, não pelo mimetype. */
+  async setHouseLogo(id: number, bytes: Buffer | undefined) {
+    if (!bytes?.length) throw new BadRequestException('Envie a imagem no campo "logo".');
+    if (bytes.length > MAX_HOUSE_LOGO_BYTES) throw new BadRequestException('Imagem grande demais (máx. 200 KB).');
+    const mime = detectImageMime(bytes);
+    if (!mime) throw new BadRequestException('Formato não suportado: use PNG, JPEG ou WebP.');
+
+    const saved = await this.houseRepository.setLogo(id as BettingHouseId, { bytes, mime });
+    if (!saved) throw new NotFoundException('Casa não encontrada');
+    return { id: saved.id, logoVersion: logoVersion(saved.logoUpdatedAt) };
+  }
+
+  /** Tira o avatar: a casa volta a mostrar as iniciais. */
+  async removeHouseLogo(id: number) {
+    const saved = await this.houseRepository.setLogo(id as BettingHouseId, null);
+    if (!saved) throw new NotFoundException('Casa não encontrada');
+    return { id: saved.id, logoVersion: null };
   }
 
   private assertNameIsFree(houses: AdminHouseRow[], name: string, ignoreId: number | null = null) {

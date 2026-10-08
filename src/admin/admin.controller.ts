@@ -1,7 +1,22 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseIntPipe, Patch, Post, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Post,
+  Put,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
-import { AdminService } from './admin.service';
+import { AdminService, MAX_HOUSE_LOGO_BYTES } from './admin.service';
 import {
   CreateAdminHouseDTO,
   CreateScannerTournamentDTO,
@@ -54,6 +69,21 @@ export class AdminController {
   @ApiOperation({ summary: 'Renomeia, troca apelidos ou (des)ativa uma casa' })
   updateHouse(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateAdminHouseDTO) {
     return this.adminService.updateHouse(id, dto);
+  }
+
+  @Put('houses/:id/logo')
+  @ApiOperation({ summary: 'Troca o avatar da casa (PNG, JPEG ou WebP; o front manda já em 128px)' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ schema: { type: 'object', properties: { logo: { type: 'string', format: 'binary' } } } })
+  @UseInterceptors(FileInterceptor('logo', { limits: { fileSize: MAX_HOUSE_LOGO_BYTES, files: 1 } }))
+  setHouseLogo(@Param('id', ParseIntPipe) id: number, @UploadedFile() file: { buffer?: Buffer } | undefined) {
+    return this.adminService.setHouseLogo(id, file?.buffer);
+  }
+
+  @Delete('houses/:id/logo')
+  @ApiOperation({ summary: 'Remove o avatar da casa (volta às iniciais)' })
+  removeHouseLogo(@Param('id', ParseIntPipe) id: number) {
+    return this.adminService.removeHouseLogo(id);
   }
 
   @Patch('users/:id')
