@@ -27,10 +27,35 @@ export class HouseRepository {
   findAllHouses() {
     return this.dbRead
       .selectFrom('bettingHouses')
-      .select(['id', 'name', 'isActive as active', 'aliases'])
+      .select(['id', 'name', 'isActive as active', 'aliases', 'logoUpdatedAt'])
       .where('isActive', '=', true)
       .orderBy('name', 'asc')
       .execute();
+  }
+
+  /** Grava (ou apaga, com null) o avatar; logoUpdatedAt muda a URL da imagem. */
+  setLogo(id: BettingHouseId, logo: { bytes: Buffer; mime: string } | null) {
+    return this.dbWrite
+      .updateTable('bettingHouses')
+      .set({
+        logo: logo?.bytes ?? null,
+        logoMime: logo?.mime ?? null,
+        logoUpdatedAt: logo ? new Date() : null,
+        updatedAt: new Date(),
+      })
+      .where('id', '=', id)
+      .returning(['id', 'logoUpdatedAt'])
+      .executeTakeFirst();
+  }
+
+  /** Bytes do avatar da casa; undefined = casa sem logo gravado. */
+  findLogo(id: BettingHouseId) {
+    return this.dbRead
+      .selectFrom('bettingHouses')
+      .select(['logo', 'logoMime'])
+      .where('id', '=', id)
+      .where('logo', 'is not', null)
+      .executeTakeFirst();
   }
 
   createHouse(name: string, aliases: string[] = [], websiteUrl: string | null = null) {
@@ -56,9 +81,10 @@ export class HouseRepository {
         'h.isActive as isActive',
         'h.aliases as aliases',
         'h.websiteUrl as websiteUrl',
+        'h.logoUpdatedAt as logoUpdatedAt',
         eb.fn.count<string>('b.id').as('betCount'),
       ])
-      .groupBy(['h.id', 'h.name', 'h.isActive', 'h.aliases', 'h.websiteUrl'])
+      .groupBy(['h.id', 'h.name', 'h.isActive', 'h.aliases', 'h.websiteUrl', 'h.logoUpdatedAt'])
       .orderBy('h.name', 'asc')
       .execute();
   }

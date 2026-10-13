@@ -86,7 +86,17 @@ export class HouseService {
   }
 
   async getAllHouses(): Promise<FindAllHousesDTO[]> {
-    return this.houseRepository.findAllHouses();
+    const rows = await this.houseRepository.findAllHouses();
+    return rows.map(({ logoUpdatedAt, ...house }) => ({
+      ...house,
+      logoVersion: logoUpdatedAt ? new Date(logoUpdatedAt).getTime() : null,
+    }));
+  }
+
+  async getHouseLogo(id: number) {
+    const logo = await this.houseRepository.findLogo(id as BettingHouseId);
+    if (!logo?.logo) throw new NotFoundException(`House ${id} has no logo`);
+    return { bytes: logo.logo, mime: logo.logoMime || 'image/png' };
   }
 
   /**

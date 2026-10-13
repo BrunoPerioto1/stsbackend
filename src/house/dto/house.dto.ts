@@ -20,5 +20,12 @@ export class FindAllHousesDTO  {
   @IsOptional()
   @IsArray()
   aliases?: string[];
+
+  @ApiProperty({
+    description: "Versão do avatar (ms do logo_updated_at): vai como ?v= em /house/:id/logo. null = sem logo, usa as iniciais",
+    example: 1791331200000,
+    nullable: true,
+  })
+  logoVersion!: number | null;
 }
 
