@@ -20,7 +20,16 @@ export const DASHBOARD_KPI_IDS = [
   'averageStake',
   'averageOdd',
   'hitRate',
+  'profit',
+  'totalReturn',
+  'wonLost',
+  'canceled',
+  'streak',
+  'biggestWin',
+  'biggestLoss',
+  'maxDrawdown',
 ] as const;
+export const MAX_VISIBLE_KPIS = 8;
 export const DASHBOARD_ICON_IDS = [
   'trending-up',
   'coins',
@@ -71,17 +80,20 @@ class PerformanceColorsDTO {
 
 export class DashboardPreferencesDTO {
   @IsArray()
-  @ArrayMinSize(8)
-  @ArrayMaxSize(8)
+  // Min 2 em vez de "todos": cliente antigo ainda manda só os 8 originais, e o
+  // front completa os que faltam ao ler.
+  @ArrayMinSize(2)
+  @ArrayMaxSize(DASHBOARD_KPI_IDS.length)
   @ArrayUnique((kpi: DashboardKpiDTO) => kpi?.id)
   @ValidateBy({
     name: 'minimumVisibleKpis',
     validator: {
-      validate: (value: unknown) =>
-        Array.isArray(value) &&
-        value.filter((kpi: DashboardKpiDTO | null) => kpi?.visible === true)
-          .length >= 2,
-      defaultMessage: () => 'Selecione pelo menos 2 indicadores.',
+      validate: (value: unknown) => {
+        if (!Array.isArray(value)) return false;
+        const visible = value.filter((kpi: DashboardKpiDTO | null) => kpi?.visible === true).length;
+        return visible >= 2 && visible <= MAX_VISIBLE_KPIS;
+      },
+      defaultMessage: () => `Selecione de 2 a ${MAX_VISIBLE_KPIS} indicadores.`,
     },
   })
   @ValidateNested({ each: true })

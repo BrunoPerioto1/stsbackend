@@ -3,6 +3,27 @@ import { DashboardRepository } from '../infra/repository/dashboard.repository';
 import { DashboardQueryDto, DashboardMetricsComparisonQueryDto } from './dto/dashboard-query.dto';
 import { UserId } from '../db_types/Users';
 
+// Pelo sinal do lucro, não pelo resultado: cashout e meio-green entram como o
+// que renderam, e lucro zero (devolvida) não quebra nem soma na sequência.
+// streak > 0 = greens seguidos até a aposta mais recente; < 0 = reds.
+// maxDrawdown = maior queda do lucro acumulado a partir de um pico (R$, >= 0).
+export function sequenceMetrics(profits: number[]) {
+  let streak = 0;
+  for (let i = profits.length - 1; i >= 0; i--) {
+    const sign = Math.sign(profits[i]);
+    if (sign === 0) continue;
+    if (streak !== 0 && sign !== Math.sign(streak)) break;
+    streak += sign;
+  }
+  let cum = 0, peak = 0, maxDrawdown = 0;
+  for (const p of profits) {
+    cum += p;
+    peak = Math.max(peak, cum);
+    maxDrawdown = Math.max(maxDrawdown, peak - cum);
+  }
+  return { streak, maxDrawdown: Math.round(maxDrawdown * 100) / 100 };
+}
+
 @Injectable()
 export class DashboardService {
   constructor(private readonly dashboardRepository: DashboardRepository) {}
@@ -40,7 +61,10 @@ export class DashboardService {
   }
 
   async getDashboardMetrics(userId: UserId, filter: DashboardQueryDto) {
-    const raw = await this.dashboardRepository.findDashboardMetrics({ ...filter, userId });
+    const [raw, settled] = await Promise.all([
+      this.dashboardRepository.findDashboardMetrics({ ...filter, userId }),
+      this.dashboardRepository.findSettledProfits({ ...filter, userId }),
+    ]);
 
     if (!raw) return null;
 
@@ -69,6 +93,9 @@ export class DashboardService {
       hitRate: wonBets + Number(raw.lostBets) > 0 ? wonBets / (wonBets + Number(raw.lostBets)) : 0,
       // Mesma base do ranking de casas: lucro / stake liquidado.
       roi:     settledStake > 0 ? totalProfit / settledStake : 0,
+      biggestWin:  Math.max(Number(raw.biggestWin), 0),
+      biggestLoss: Math.min(Number(raw.biggestLoss), 0),
+      ...sequenceMetrics(settled.map((r) => Number(r.profit))),
     };
   }
 

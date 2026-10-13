@@ -167,7 +167,30 @@ async findDashboardMetrics(filters: FilterDashboard) {
         sql.lit(0),
       ]).as("settledStake"),
       eb.fn<number>("coalesce", [eb.fn.sum<number>("b.profit"), sql.lit(0)]).as("totalProfit"),
+      // Maior green / maior red de uma aposta só, entre as liquidadas.
+      eb.fn<number>("coalesce", [
+        eb.fn.max<number>(eb.case().when("br.resultId", "in", SETTLED_RESULT_IDS as any).then(eb.ref("b.profit")).end()),
+        sql.lit(0),
+      ]).as("biggestWin"),
+      eb.fn<number>("coalesce", [
+        eb.fn.min<number>(eb.case().when("br.resultId", "in", SETTLED_RESULT_IDS as any).then(eb.ref("b.profit")).end()),
+        sql.lit(0),
+      ]).as("biggestLoss"),
     ])
     .executeTakeFirst();
+}
+
+// Lucro das liquidadas em ordem cronológica: base da sequência atual e do
+// drawdown, que dependem da ordem e não saem de um agregado simples.
+async findSettledProfits(filters: FilterDashboard) {
+  return this.dbRead
+    .selectFrom("bets as b")
+    .innerJoin("betResults as br", "br.betId", "b.id")
+    .where(dashboardFilters(filters))
+    .where("br.resultId", "in", SETTLED_RESULT_IDS as any)
+    .select("b.profit")
+    .orderBy(betDate, "asc")
+    .orderBy("b.id", "asc")
+    .execute();
 }
 }
